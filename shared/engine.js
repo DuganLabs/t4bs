@@ -24,6 +24,27 @@ export function createEngine({ puzzles, sessions }) {
       return { sessionId: id, ...publicShape(p), lives: state.lives };
     },
 
+    async resumeSession(sessionId) {
+      const sess = await sessions.get(sessionId);
+      if (!sess) return { error: "no-session" };
+      const p = await puzzles.getApproved(sess.puzzleId);
+      if (!p) return { error: "puzzle-gone" };
+      const phraseWords = p.phrase.split(" ");
+      return {
+        sessionId,
+        ...publicShape(p),
+        lives: sess.lives,
+        score: sess.score,
+        tokens: sess.tokens,
+        locked: sess.locked,
+        presentGlobal: sess.presentGlobal,
+        absentByWord: sess.absentByWord,
+        wordSolved: sess.wordSolved,
+        finished: sess.finished,
+        reveal: sess.finished ? phraseWords : null,
+      };
+    },
+
     async submitGuess(sessionId, wordIndex, letters, wagers = []) {
       const sess = await sessions.get(sessionId);
       if (!sess) return { error: "no-session" };

@@ -19,6 +19,7 @@ export const api = {
   /* game */
   listPuzzles:  ()                                 => get("/puzzles"),
   startSession: (puzzleId)                         => post("/session", { puzzleId }),
+  resumeSession:(sessionId)                        => get(`/session/${encodeURIComponent(sessionId)}`),
   guess:        (sessionId, wordIndex, letters, wagers = []) =>
                                                       post("/guess",   { sessionId, wordIndex, letters, wagers }),
   cascade:      (sessionId, wordIndex, letterIndex)=> post("/cascade", { sessionId, wordIndex, letterIndex }),

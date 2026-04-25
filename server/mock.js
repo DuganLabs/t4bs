@@ -60,6 +60,11 @@ export function createMockApi() {
         const r = await engine.startSession(b.puzzleId);
         return send(res, r.error ? 400 : 200, r);
       }
+      const sessionGet = path.match(/^\/session\/([\w-]+)$/);
+      if (M === "GET" && sessionGet) {
+        const r = await engine.resumeSession(sessionGet[1]);
+        return send(res, r.error ? 404 : 200, r);
+      }
       if (M === "POST" && path === "/guess") {
         const b = await readJson(req);
         const r = await engine.submitGuess(b.sessionId, b.wordIndex, (b.letters||[]).map(c=>String(c).toUpperCase()), b.wagers||[]);

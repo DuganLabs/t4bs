@@ -3,7 +3,7 @@ import { api } from "./lib/api.js";
 import { isPasskeySupported, registerPasskey, loginPasskey, devLogin } from "./lib/auth.js";
 import { confetti } from "./lib/confetti.js";
 import { buildShareCard, copyOrShare } from "./lib/share.js";
-import { loadStats, recordResult } from "./lib/persist.js";
+import { loadStats, recordResult, saveSession, loadSession, clearSession } from "./lib/persist.js";
 
 /* ──────────────────────────────────────────────────────────────
    Server is authoritative for puzzle data, lives, score, locks.
@@ -351,10 +351,41 @@ export default function Tabs() {
   const iRefs = useRef([]);
   const tRef  = useRef(null);
 
-  /* ── lobby + me ── */
+  /* ── lobby + me + resume ── */
   useEffect(() => {
     api.listPuzzles().then(setLobby).catch(e => setError(String(e.message || e)));
     api.me().then(r => setUser(r.user)).catch(() => {});
+
+    // Resume any in-flight session (server is authoritative)
+    const saved = loadSession();
+    if (saved?.sessionId) {
+      api.resumeSession(saved.sessionId).then(s => {
+        if (s.error || s.finished) { clearSession(); return; }
+        const lm = s.words.map(() => ({}));
+        s.anchors.forEach(a => { lm[a.wi][a.li] = a.letter; });
+        // overlay greens locked from prior guesses
+        Object.entries(s.locked || {}).forEach(([wi, m]) => {
+          Object.entries(m || {}).forEach(([li, letter]) => { lm[Number(wi)][Number(li)] = letter; });
+        });
+        setSession(s);
+        setLocked(lm);
+        setPresentGlobal(s.presentGlobal || []);
+        setAbsentByWord(s.absentByWord || s.words.map(() => []));
+        setWordSolved(s.wordSolved || s.words.map(() => false));
+        setScore(s.score || 0);
+        setLives(s.lives);
+        setTokens(s.tokens || 0);
+        setReveal(null);
+        setTyped(s.words.map(() => []));
+        setWagers(s.words.map(() => []));
+        setFeedback({});
+        setActive(null);
+        setCasc(false);
+        setPhase("playing");
+        setView("playing");
+        toast$("RESUMED — pick up where you left off", "good");
+      }).catch(() => clearSession());
+    }
   }, []);
 
   /* ── start a session ── */
@@ -381,6 +412,7 @@ export default function Tabs() {
       setCascDrop(null);
       setPhase("playing");
       setView("playing");
+      saveSession({ sessionId: s.sessionId });
     } catch (e) {
       setError(String(e.message || e));
     }
@@ -406,6 +438,7 @@ export default function Tabs() {
       const next = recordResult({ won: phase === "won", score, category: session?.category });
       setStats(next);
       setResultRecorded(true);
+      clearSession();
       if (phase === "won") confetti();
       if (navigator.vibrate) navigator.vibrate(phase === "won" ? [40, 40, 80] : 200);
     }
