@@ -94,7 +94,7 @@ In the Cloudflare dashboard → Pages → t4bs → Custom domains, add `t4bs.com
 
 ```bash
 doppler login
-doppler setup -p t4bs -c prod
+doppler setup -p t4bs -c prd        # Doppler's default production config name
 doppler secrets set CLOUDFLARE_API_TOKEN=...
 doppler secrets set CLOUDFLARE_ACCOUNT_ID=...
 ```

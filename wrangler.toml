@@ -9,7 +9,7 @@ pages_build_output_dir = "dist"
 [[d1_databases]]
 binding = "DB"
 database_name = "tabs-db"
-database_id = "REPLACE_ME_WITH_OUTPUT_OF_D1_CREATE"
+database_id = "390583c4-e2b5-434b-8939-6f69d842b1af"
 
 # Public env vars (non-secret) — secrets live in Pages env or Doppler.
 [vars]
