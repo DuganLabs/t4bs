@@ -1,0 +1,21 @@
+# Reference for what should live in Doppler. Apply with:
+#   doppler setup
+#   doppler secrets set CLOUDFLARE_API_TOKEN=...
+#   doppler secrets set CLOUDFLARE_ACCOUNT_ID=...
+
+# Required secrets
+#   CLOUDFLARE_API_TOKEN
+#       Cloudflare API token with the following permissions:
+#         - Account · Cloudflare Pages · Edit
+#         - Account · D1 · Edit
+#         - Zone   · Workers Routes · Edit         (for custom domain binding)
+#         - Zone   · Zone           · Read         (to discover the t4bs.com zone)
+#       Used by:  GitHub Actions deploy + local `wrangler pages deploy`
+#
+#   CLOUDFLARE_ACCOUNT_ID
+#       Your Cloudflare account ID (visible in the Cloudflare dashboard sidebar).
+#       Used by:  wrangler
+
+# Optional / future secrets (currently this app has no runtime secrets — passkey
+# challenges are stored in D1, not signed). Add here only if/when you introduce
+# things like a Sentry DSN, an email provider key for invite codes, etc.

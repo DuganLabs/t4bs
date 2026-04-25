@@ -1,0 +1,20 @@
+name = "t4bs"
+compatibility_date = "2024-09-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "dist"
+
+# D1 database binding — `env.DB` inside Functions.
+# Create once with: wrangler d1 create tabs-db
+# Then paste the database_id here.
+[[d1_databases]]
+binding = "DB"
+database_name = "tabs-db"
+database_id = "REPLACE_ME_WITH_OUTPUT_OF_D1_CREATE"
+
+# Public env vars (non-secret) — secrets live in Pages env or Doppler.
+[vars]
+RP_NAME = "TABS"
+RP_ID = "t4bs.com"
+RP_ORIGIN = "https://t4bs.com"
+ADMIN_HANDLES = "warren"
+SESSION_TTL_DAYS = "30"

@@ -1,0 +1,7 @@
+# Local-dev env vars for `wrangler pages dev` (binds to env.X inside Functions).
+# Copy to .dev.vars (gitignored) and adjust if needed.
+RP_NAME=TABS
+RP_ID=localhost
+RP_ORIGIN=http://localhost:8788
+ADMIN_HANDLES=warren,admin
+SESSION_TTL_DAYS=30
