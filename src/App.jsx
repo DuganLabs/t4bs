@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "./lib/api.js";
 import { isPasskeySupported, registerPasskey, loginPasskey, devLogin } from "./lib/auth.js";
+import { confetti } from "./lib/confetti.js";
+import { buildShareCard, copyOrShare } from "./lib/share.js";
+import { loadStats, recordResult } from "./lib/persist.js";
 
 /* ──────────────────────────────────────────────────────────────
    Server is authoritative for puzzle data, lives, score, locks.
@@ -25,6 +28,8 @@ const CSS = `
 html,body{background:#0C0B09;overscroll-behavior:none;-webkit-tap-highlight-color:transparent;}
 html,body,#root{min-height:100dvh;}
 body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+:focus-visible{outline:2px solid #FFD700;outline-offset:2px;border-radius:4px;}
 
 .lb{
   min-height:100dvh;
@@ -63,13 +68,13 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
 .lb-uhandle{font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:#E8920A;padding:4px 8px;border:1px solid rgba(232,146,10,.4);border-radius:5px;}
 
 /* ── META ── */
-.lb-num{font-size:10px;text-transform:uppercase;letter-spacing:2.5px;color:#332F28;margin-bottom:10px;width:100%;max-width:540px;text-align:center;}
+.lb-num{font-size:10px;text-transform:uppercase;letter-spacing:2.5px;color:#7A7570;margin-bottom:10px;width:100%;max-width:540px;text-align:center;}
 .lb-sticky{background:#F5E06A;color:#1E1600;font-family:'Caveat',cursive;font-size:21px;font-weight:700;padding:10px 26px 12px;border-radius:2px;transform:rotate(-1.4deg);box-shadow:2px 4px 16px rgba(0,0,0,.55);margin-bottom:10px;text-align:center;line-height:1.2;max-width:320px;position:relative;}
 .lb-sticky::after{content:'';position:absolute;top:-8px;left:50%;transform:translateX(-50%);width:30px;height:15px;background:rgba(245,224,106,.4);border-radius:1px;}
-.lb-sub{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#5A5550;margin-bottom:18px;text-align:center;}
+.lb-sub{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#9A9590;margin-bottom:18px;text-align:center;}
 .lb-sub b{color:#E8920A;font-weight:600;}
 
-.lb-hint{width:100%;max-width:540px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#3A3530;margin-bottom:12px;min-height:14px;transition:color .4s;}
+.lb-hint{width:100%;max-width:540px;text-align:center;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#7A7570;margin-bottom:12px;min-height:14px;transition:color .4s;}
 .lb-hint.on{color:#A06020;}
 
 .lb-cbar{width:100%;max-width:540px;background:rgba(78,175,124,.08);border:1px solid rgba(78,175,124,.5);border-radius:8px;padding:10px 16px;margin-bottom:12px;text-align:center;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#4EAF7C;font-weight:600;animation:cBlink 1.2s ease infinite;}
@@ -128,7 +133,7 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
 /* ── KNOWLEDGE BANK ── */
 .lb-bank{width:100%;max-width:540px;display:flex;flex-direction:column;gap:6px;margin-bottom:12px;padding:8px 12px;background:#100F0D;border:1px solid #1F1C18;border-radius:8px;min-height:42px;}
 .lb-bank-row{display:flex;flex-wrap:wrap;align-items:center;gap:5px;}
-.lb-bank-label{font-size:9px;letter-spacing:1.3px;color:#3A3530;text-transform:uppercase;margin-right:4px;}
+.lb-bank-label{font-size:9px;letter-spacing:1.3px;color:#9A9590;text-transform:uppercase;margin-right:4px;}
 .lb-chip{font-family:'Bebas Neue',sans-serif;font-size:11px;letter-spacing:1px;padding:2px 7px 3px;border-radius:3px;animation:cIn .25s ease;}
 .lb-chip.yellow{background:rgba(212,180,69,.16);color:#D4B445;border:1px solid rgba(212,180,69,.5);}
 .lb-chip.absent{background:rgba(70,65,60,.35);color:#6A6560;border:1px solid #2C2925;text-decoration:line-through;}
@@ -144,7 +149,7 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
   display:flex;justify-content:center;
 }
 .lb-bar-inner{width:100%;max-width:540px;display:flex;align-items:center;gap:8px;}
-.lb-prompt{flex:1;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#5A5550;}
+.lb-prompt{flex:1;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#9A9590;}
 .lb-allin{
   background:#1A1815;border:1px solid #FF4D4D;border-radius:8px;color:#FF4D4D;
   font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;
@@ -185,12 +190,12 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
 .lb-card{background:#1C1916;border:1px solid #2C2926;border-radius:14px;padding:24px 22px;width:min(420px,96vw);text-align:center;box-shadow:0 28px 72px rgba(0,0,0,.7);animation:cardIn .4s cubic-bezier(.34,1.56,.64,1);max-height:92vh;overflow:auto;}
 @keyframes cardIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
 .lb-ct{font-family:'Bebas Neue',sans-serif;font-size:38px;letter-spacing:4px;line-height:1;margin-bottom:2px;}
-.lb-cs{font-size:13px;color:#5A5550;margin-bottom:18px;}
+.lb-cs{font-size:13px;color:#9A9590;margin-bottom:18px;}
 .lb-cf{font-family:'Bebas Neue',sans-serif;font-size:64px;color:#F0EDE4;line-height:1;margin-bottom:2px;}
-.lb-cfl{font-size:11px;text-transform:uppercase;letter-spacing:2px;color:#4A4742;margin-bottom:14px;}
+.lb-cfl{font-size:11px;text-transform:uppercase;letter-spacing:2px;color:#9A9590;margin-bottom:14px;}
 
 .lb-reveal{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:3px;color:#E8920A;margin-bottom:6px;line-height:1.2;}
-.lb-cred{font-size:11px;text-transform:uppercase;letter-spacing:1.8px;color:#5A5550;margin-bottom:18px;}
+.lb-cred{font-size:11px;text-transform:uppercase;letter-spacing:1.8px;color:#9A9590;margin-bottom:18px;}
 .lb-cred b{color:#7EC49A;}
 
 .lb-btn{display:block;width:100%;padding:13px;border-radius:8px;border:none;font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:2px;cursor:pointer;transition:all .15s;margin-bottom:9px;min-height:44px;}
@@ -212,17 +217,30 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
 .lb-allin-warn{font-size:11px;color:#FF6E6E;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:14px;font-weight:600;}
 
 /* ── LOBBY ── */
-.lb-lobby{width:100%;max-width:480px;display:flex;flex-direction:column;gap:8px;margin-top:6px;}
+.lb-lobby{width:100%;max-width:480px;display:flex;flex-direction:column;gap:8px;margin-top:6px;list-style:none;padding:0;}
+.lb-lobby > li{list-style:none;}
 .lb-lobby-item{
-  background:#161412;border:1.5px solid #222;border-radius:10px;
+  width:100%;background:#161412;border:1.5px solid #222;border-radius:10px;
   padding:14px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;
-  transition:border-color .2s,transform .1s;min-height:56px;
+  gap:10px;transition:border-color .2s,transform .1s,background .15s;min-height:56px;text-align:left;
+  font-family:'DM Sans',sans-serif;color:inherit;
 }
-.lb-lobby-item:hover{border-color:#E8920A;transform:translateY(-1px);}
+.lb-lobby-item:hover{border-color:#E8920A;transform:translateY(-1px);background:#1A1714;}
+.lb-lobby-item:active{transform:scale(.985);}
+.lb-lobby-cat{min-width:0;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lb-lobby-by{flex:0 0 auto;white-space:nowrap;}
 .lb-lobby-cat{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2.5px;color:#F0EDE4;}
-.lb-lobby-by{font-size:10px;letter-spacing:1.2px;color:#5A5550;text-transform:uppercase;}
+.lb-lobby-by{font-size:10px;letter-spacing:1.2px;color:#9A9590;text-transform:uppercase;}
 
-.lb-tagline{font-size:11px;color:#5A5550;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:18px;text-align:center;}
+.lb-tagline{font-size:11px;color:#9A9590;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:18px;text-align:center;}
+
+.lb-stats{display:flex;gap:8px;justify-content:center;margin-bottom:18px;width:100%;max-width:320px;}
+.lb-stat{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;background:#100F0D;border:1px solid #1F1C18;border-radius:8px;}
+.lb-stat b{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1.5px;color:#F0EDE4;font-weight:400;}
+.lb-stat span{font-size:9px;letter-spacing:1.2px;color:#9A9590;text-transform:uppercase;}
+
+.lb-lobby-skel{width:100%;min-height:56px;border-radius:10px;background:linear-gradient(90deg,#161412 0%,#1E1C18 50%,#161412 100%);background-size:200% 100%;animation:skel 1.4s ease-in-out infinite;}
+@keyframes skel{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .lb-fab{
   position:fixed;right:16px;bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:50;
   background:#E8920A;color:#1A0A00;border:none;border-radius:100px;
@@ -237,7 +255,7 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
 /* ── FORMS (submit + login) ── */
 .lb-form{display:flex;flex-direction:column;gap:12px;margin-bottom:16px;text-align:left;}
 .lb-field{display:flex;flex-direction:column;gap:5px;}
-.lb-flabel{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#5A5550;}
+.lb-flabel{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#9A9590;}
 .lb-finput{
   background:#0F0E0C;border:1.5px solid #2A2724;border-radius:6px;
   color:#F0EDE4;font-family:'DM Sans',sans-serif;font-size:15px;
@@ -245,7 +263,7 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
   transition:border-color .15s;
 }
 .lb-finput:focus{border-color:#E8920A;}
-.lb-fhint{font-size:10px;color:#6A6560;letter-spacing:.5px;}
+.lb-fhint{font-size:10px;color:#A09B95;letter-spacing:.5px;}
 .lb-ferror{font-size:11px;color:#FF6E6E;letter-spacing:.5px;background:rgba(255,77,77,.08);padding:8px 10px;border-radius:5px;border:1px solid rgba(255,77,77,.3);}
 
 /* ── PHRASE PREVIEW (in submit / moderate) ── */
@@ -268,7 +286,7 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
 }
 .lb-mod-meta{display:flex;justify-content:space-between;align-items:baseline;}
 .lb-mod-cat{font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:2px;color:#F0EDE4;}
-.lb-mod-by{font-size:10px;letter-spacing:1.2px;color:#5A5550;text-transform:uppercase;}
+.lb-mod-by{font-size:10px;letter-spacing:1.2px;color:#9A9590;text-transform:uppercase;}
 .lb-mod-phrase{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;color:#E8920A;line-height:1.2;word-break:break-word;}
 .lb-mod-actions{display:flex;gap:8px;}
 .lb-mod-btn{flex:1;padding:10px;border:none;border-radius:6px;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;cursor:pointer;min-height:42px;}
@@ -326,6 +344,9 @@ export default function Tabs() {
   const [cascDrop,  setCascDrop]  = useState(null);
   const [allInOpen, setAllInOpen] = useState(false);
   const [allInWords,setAllInWords]= useState([]);
+  const [stats,    setStats]    = useState(() => loadStats());
+  const [shareLbl, setShareLbl] = useState(null);
+  const [resultRecorded, setResultRecorded] = useState(false);
 
   const iRefs = useRef([]);
   const tRef  = useRef(null);
@@ -377,6 +398,21 @@ export default function Tabs() {
   useEffect(() => {
     if (active !== null) setTimeout(() => iRefs.current[active]?.focus(), 30);
   }, [active]);
+
+  /* ── persist + confetti when round ends ── */
+  useEffect(() => {
+    if (resultRecorded) return;
+    if (phase === "won" || phase === "lost") {
+      const next = recordResult({ won: phase === "won", score, category: session?.category });
+      setStats(next);
+      setResultRecorded(true);
+      if (phase === "won") confetti();
+      if (navigator.vibrate) navigator.vibrate(phase === "won" ? [40, 40, 80] : 200);
+    }
+  }, [phase, score, session, resultRecorded]);
+
+  /* reset record-flag when starting a new session */
+  useEffect(() => { setResultRecorded(false); setShareLbl(null); }, [session?.sessionId]);
 
   const toast$ = useCallback((text, type = "good") => {
     clearTimeout(tRef.current);
@@ -584,19 +620,39 @@ export default function Tabs() {
         <style>{CSS}</style>
         <div className="lb">
           <Header />
-          <div className="lb-sticky" style={{maxWidth:380}}>One subject. One phrase.<br/>No mercy.</div>
-          <div className="lb-tagline">Pick a round</div>
-          {error && <div className="lb-cred" style={{color:"#FF6E6E"}}>error: {error}</div>}
-          <div className="lb-lobby">
-            {(lobby || []).map(p => (
-              <div key={p.id} className="lb-lobby-item" onClick={() => start(p.id)}>
-                <span className="lb-lobby-cat">{p.category}</span>
-                <span className="lb-lobby-by">by {p.submittedBy}</span>
+          <main aria-labelledby="lb-page-title">
+            <h1 id="lb-page-title" className="sr-only">T4BS — pick a round</h1>
+            <div className="lb-sticky" style={{maxWidth:380}}>One subject. One phrase.<br/>No mercy.</div>
+            <div className="lb-tagline">Pick a round</div>
+            {(stats.played > 0) && (
+              <div className="lb-stats" aria-label="Personal stats">
+                <span className="lb-stat"><b>{stats.wins||0}</b><span>WINS</span></span>
+                <span className="lb-stat"><b>{stats.best||0}</b><span>BEST</span></span>
+                <span className="lb-stat"><b>{stats.streak>0?`🔥${stats.streak}`:"—"}</b><span>STREAK</span></span>
               </div>
-            ))}
-            {!lobby && <div className="lb-cred">loading…</div>}
-          </div>
-          <button className="lb-fab" onClick={() => user ? setView("submit") : setAuthOpen(true)}>
+            )}
+            {error && <div className="lb-cred" style={{color:"#FF6E6E"}} role="alert">error: {error}</div>}
+            <ul className="lb-lobby" aria-label="Available puzzles">
+              {lobby
+                ? lobby.map(p => (
+                    <li key={p.id}>
+                      <button
+                        type="button"
+                        className="lb-lobby-item"
+                        onClick={() => start(p.id)}
+                        aria-label={`Play ${p.category}, submitted by ${p.submittedBy}`}
+                      >
+                        <span className="lb-lobby-cat">{p.category}</span>
+                        <span className="lb-lobby-by">by {p.submittedBy}</span>
+                      </button>
+                    </li>
+                  ))
+                : Array.from({length: 6}).map((_, i) => (
+                    <li key={i}><div className="lb-lobby-skel" aria-hidden="true"/></li>
+                  ))}
+            </ul>
+          </main>
+          <button className="lb-fab" onClick={() => user ? setView("submit") : setAuthOpen(true)} aria-label="Submit a new phrase">
             + SUBMIT A PHRASE
           </button>
           {authOpen && <AuthModal onClose={()=>setAuthOpen(false)} onAuthed={(u)=>{setUser(u);setAuthOpen(false);}} />}
@@ -612,14 +668,17 @@ export default function Tabs() {
         <style>{CSS}</style>
         <div className="lb">
           <Header />
-          <div className="lb-sticky" style={{maxWidth:380}}>Submit a phrase</div>
-          <div className="lb-tagline">It enters the moderation queue</div>
-          <SubmitForm
-            onCancel={goLobby}
-            onSubmitted={() => { toast$("SUBMITTED — pending review", "great"); goLobby(); }}
-            toast$={toast$}
-          />
-          {toast && <div key={toast.id} className={`lb-toast ${toast.type}`}>{toast.text}</div>}
+          <main aria-labelledby="lb-page-title">
+            <h1 id="lb-page-title" className="sr-only">Submit a phrase</h1>
+            <div className="lb-sticky" style={{maxWidth:380}}>Submit a phrase</div>
+            <div className="lb-tagline">It enters the moderation queue</div>
+            <SubmitForm
+              onCancel={goLobby}
+              onSubmitted={() => { toast$("SUBMITTED — pending review", "great"); goLobby(); }}
+              toast$={toast$}
+            />
+          </main>
+          {toast && <div key={toast.id} className={`lb-toast ${toast.type}`} role="status" aria-live="polite">{toast.text}</div>}
         </div>
       </>
     );
@@ -632,11 +691,14 @@ export default function Tabs() {
         <style>{CSS}</style>
         <div className="lb">
           <Header />
-          <div className="lb-sticky" style={{maxWidth:380}}>Moderation queue</div>
-          <div className="lb-tagline">Approve or reject pending phrases</div>
-          <ModerateList toast$={toast$} onChange={refreshLobby} />
-          <button className="lb-btn lb-bs" style={{maxWidth:300,marginTop:14}} onClick={goLobby}>← Back</button>
-          {toast && <div key={toast.id} className={`lb-toast ${toast.type}`}>{toast.text}</div>}
+          <main aria-labelledby="lb-page-title">
+            <h1 id="lb-page-title" className="sr-only">Moderation queue</h1>
+            <div className="lb-sticky" style={{maxWidth:380}}>Moderation queue</div>
+            <div className="lb-tagline">Approve or reject pending phrases</div>
+            <ModerateList toast$={toast$} onChange={refreshLobby} />
+            <button className="lb-btn lb-bs" style={{maxWidth:300,marginTop:14}} onClick={goLobby}>← Back</button>
+          </main>
+          {toast && <div key={toast.id} className={`lb-toast ${toast.type}`} role="status" aria-live="polite">{toast.text}</div>}
         </div>
       </>
     );
@@ -648,10 +710,12 @@ export default function Tabs() {
       <style>{CSS}</style>
       <div className="lb" style={{ "--rc": THEME.tab, "--rg": THEME.glow }}>
         <Header />
-        <div className="lb-num">#{session.id} · {session.category.toLowerCase()}</div>
-        <div className="lb-sticky">{session.category}</div>
-        <div className="lb-sub">{session.words.length} words · {session.totalLetters} letters · by <b>{session.submittedBy}</b></div>
-        <div className={`lb-hint ${active !== null ? "on" : ""}`}>{hintText}</div>
+        <main aria-labelledby="lb-page-title">
+          <h1 id="lb-page-title" className="sr-only">{session.category} — round #{session.id}</h1>
+          <div className="lb-num">#{session.id} · {session.category.toLowerCase()}</div>
+          <div className="lb-sticky">{session.category}</div>
+          <div className="lb-sub">{session.words.length} words · {session.totalLetters} letters · by <b>{session.submittedBy}</b></div>
+          <div className={`lb-hint ${active !== null ? "on" : ""}`} aria-live="polite">{hintText}</div>
 
         {casc && <div className="lb-cbar">⚡ Earned reveal — pick any tile in any unsolved word</div>}
 
@@ -760,11 +824,12 @@ export default function Tabs() {
             </div>
           )}
         </div>
+        </main>
 
         {phase === "playing" && (
-          <div className="lb-bar">
+          <div className="lb-bar" role="region" aria-label="Game actions">
             <div className="lb-bar-inner">
-              <button className="lb-allin" onClick={openAllIn} disabled={casc}>ALL IN</button>
+              <button className="lb-allin" onClick={openAllIn} disabled={casc} aria-label="Shove the entire phrase: massive bonus or game over">ALL IN</button>
               <div className="lb-prompt" style={{textAlign:"right"}}>
                 {active !== null && (() => {
                   const w = wagers[active]?.length || 0;
@@ -775,17 +840,18 @@ export default function Tabs() {
                 className="lb-igo"
                 disabled={active === null || wordSolved[active] || typed[active].length < openSlots(session.words[active], locked[active]).length || casc}
                 onClick={() => submit(active)}
+                aria-label="Submit the typed word"
               >GO</button>
             </div>
           </div>
         )}
 
-        {toast && <div key={toast.id} className={`lb-toast ${toast.type}`}>{toast.text}</div>}
+        {toast && <div key={toast.id} className={`lb-toast ${toast.type}`} role="status" aria-live="polite">{toast.text}</div>}
 
         {allInOpen && (
           <div className="lb-ov" onClick={() => setAllInOpen(false)}>
-            <div className="lb-card" onClick={e => e.stopPropagation()}>
-              <div className="lb-ct" style={{color:"#FF4D4D"}}>ALL IN</div>
+            <div className="lb-card" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="lb-allin-title">
+              <div className="lb-ct" id="lb-allin-title" style={{color:"#FF4D4D"}}>ALL IN</div>
               <div className="lb-cs">Type the entire phrase. Wrong → game over.</div>
               <div className="lb-allin-warn">+{fullCount(session.words, locked) * 8} pts if correct · 0 lives if wrong</div>
               <div className="lb-allin-grid">
@@ -801,6 +867,8 @@ export default function Tabs() {
                       setAllInWords(prev => prev.map((s, i) => i !== wi ? s : v));
                     }}
                     placeholder={"_".repeat(len)}
+                    aria-label={`Word ${wi + 1} of ${session.words.length}, ${len} letters`}
+                    autoComplete="off" autoCorrect="off" spellCheck={false}
                   />
                 ))}
               </div>
@@ -811,29 +879,40 @@ export default function Tabs() {
         )}
 
         {phase === "won" && reveal && (
-          <div className="lb-ov">
+          <div className="lb-ov" role="dialog" aria-modal="true" aria-labelledby="lb-won-title">
             <div className="lb-card">
-              <div className="lb-ct" style={{color:"#E8920A"}}>Solved</div>
+              <div className="lb-ct" id="lb-won-title" style={{color:"#E8920A"}}>Solved</div>
               <div className="lb-cs">{session.category}</div>
               <div className="lb-reveal">{reveal.join(" ")}</div>
               <div className="lb-cred">submitted by <b>{session.submittedBy}</b></div>
-              <div className="lb-cf">{score}</div>
+              <div className="lb-cf" aria-label={`Final score ${score} points`}>{score}</div>
               <div className="lb-cfl">points</div>
-              <button className="lb-btn lb-bp" onClick={goLobby}>Pick another</button>
+              {stats.streak > 1 && <div style={{fontSize:11,letterSpacing:1.5,color:"#FFD700",marginBottom:14,textTransform:"uppercase"}}>🔥 {stats.streak}-win streak{stats.streak === stats.bestStreak ? " · personal best" : ""}</div>}
+              <button className="lb-btn lb-bp" onClick={async () => {
+                const text = buildShareCard({ session, locked, score, won: true });
+                const r = await copyOrShare(text);
+                setShareLbl(r === "copied" ? "✓ Copied" : r === "shared" ? "✓ Shared" : "Couldn't share");
+              }}>{shareLbl || "Share result"}</button>
+              <button className="lb-btn lb-bs" onClick={goLobby}>Pick another</button>
             </div>
           </div>
         )}
 
         {phase === "lost" && reveal && (
-          <div className="lb-ov">
+          <div className="lb-ov" role="dialog" aria-modal="true" aria-labelledby="lb-lost-title">
             <div className="lb-card">
-              <div className="lb-ct" style={{color:"#E84444"}}>House Wins</div>
+              <div className="lb-ct" id="lb-lost-title" style={{color:"#E84444"}}>House Wins</div>
               <div className="lb-cs">{session.category} · the answer was</div>
               <div className="lb-reveal">{reveal.join(" ")}</div>
               <div className="lb-cred">submitted by <b>{session.submittedBy}</b></div>
-              <div className="lb-cf">{score}</div>
+              <div className="lb-cf" aria-label={`Final score ${score} points`}>{score}</div>
               <div className="lb-cfl">final points</div>
               <button className="lb-btn lb-bp" onClick={() => start(session.id)}>Try again</button>
+              <button className="lb-btn" style={{background:"#1A1815",color:"#E8920A",border:"1px solid #E8920A"}} onClick={async () => {
+                const text = buildShareCard({ session, locked, score, won: false });
+                const r = await copyOrShare(text);
+                setShareLbl(r === "copied" ? "✓ Copied" : r === "shared" ? "✓ Shared" : "Couldn't share");
+              }}>{shareLbl || "Share result"}</button>
               <button className="lb-btn lb-bs" onClick={goLobby}>Pick another</button>
             </div>
           </div>
@@ -866,8 +945,8 @@ function AuthModal({ onClose, onAuthed }) {
 
   return (
     <div className="lb-ov" onClick={onClose}>
-      <div className="lb-card" onClick={e => e.stopPropagation()}>
-        <div className="lb-ct" style={{color:"#E8920A"}}>SIGN IN</div>
+      <div className="lb-card" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="lb-auth-title">
+        <div className="lb-ct" id="lb-auth-title" style={{color:"#E8920A"}}>SIGN IN</div>
         <div className="lb-cs">Anonymous play · login only to submit</div>
         <div className="lb-tabs">
           <button className={tab==="login"?"on":""}    onClick={()=>setTab("login")}>LOG IN</button>

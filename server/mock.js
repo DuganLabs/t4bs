@@ -47,6 +47,14 @@ export function createMockApi() {
       if (M === "GET" && path === "/puzzles")
         return send(res, 200, await engine.listPuzzles());
 
+      if (M === "GET" && path === "/health")
+        return send(res, 200, { ok: true, checks: { runtime: "ok", db_bound: false, db_query: "skip" }, ts: Date.now() });
+
+      if (M === "POST" && path === "/log") {
+        try { const b = await readJson(req); console.error("client-error", JSON.stringify(b)); } catch {}
+        return send(res, 200, { logged: true });
+      }
+
       if (M === "POST" && path === "/session") {
         const b = await readJson(req);
         const r = await engine.startSession(b.puzzleId);
