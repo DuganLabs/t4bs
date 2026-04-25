@@ -94,18 +94,22 @@ In the Cloudflare dashboard → Pages → t4bs → Custom domains, add `t4bs.com
 
 ```bash
 doppler login
-doppler setup -p t4bs -c prd        # Doppler's default production config name
-doppler secrets set CLOUDFLARE_API_TOKEN=...
+doppler setup -p t4bs -c repository
+doppler secrets set CLOUDFLARE_API_TOKEN=...   # see scopes below
 doppler secrets set CLOUDFLARE_ACCOUNT_ID=...
+doppler secrets set CLOUDFLARE_ZONE_ID=...     # the t4bs.com zone id
 ```
 
-The Cloudflare API token needs:
+The Cloudflare API token needs (Custom Token, no expiry):
 - Account → Cloudflare Pages → Edit
 - Account → D1 → Edit
+- Zone → DNS → Edit
 - Zone → Workers Routes → Edit
 - Zone → Zone → Read
+- Account Resources: Include → Dugan Labs
+- Zone Resources: Include → Specific zone → t4bs.com
 
-See `doppler-template.yaml` for the full reference.
+See `doppler-template.yaml` for the full reference. (DuganLabs convention: every project uses a single `repository` config in a `repository` environment.)
 
 ### 5. GitHub Actions
 
