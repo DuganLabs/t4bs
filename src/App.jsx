@@ -347,6 +347,7 @@ export default function Tabs() {
   const [stats,    setStats]    = useState(() => loadStats());
   const [shareLbl, setShareLbl] = useState(null);
   const [resultRecorded, setResultRecorded] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const iRefs = useRef([]);
   const tRef  = useRef(null);
@@ -633,6 +634,7 @@ export default function Tabs() {
         )}
         {view !== "playing" && (
           <div className="lb-uctrl">
+            <button className="lb-ubtn" onClick={()=>setHelpOpen(true)} aria-label="How to play">?</button>
             {user
               ? <>
                   <span className="lb-uhandle">{user.handle}</span>
@@ -689,6 +691,7 @@ export default function Tabs() {
             + SUBMIT A PHRASE
           </button>
           {authOpen && <AuthModal onClose={()=>setAuthOpen(false)} onAuthed={(u)=>{setUser(u);setAuthOpen(false);}} />}
+          {helpOpen && <HelpModal onClose={()=>setHelpOpen(false)} />}
         </div>
       </>
     );
@@ -712,6 +715,7 @@ export default function Tabs() {
             />
           </main>
           {toast && <div key={toast.id} className={`lb-toast ${toast.type}`} role="status" aria-live="polite">{toast.text}</div>}
+          {helpOpen && <HelpModal onClose={()=>setHelpOpen(false)} />}
         </div>
       </>
     );
@@ -732,6 +736,7 @@ export default function Tabs() {
             <button className="lb-btn lb-bs" style={{maxWidth:300,marginTop:14}} onClick={goLobby}>← Back</button>
           </main>
           {toast && <div key={toast.id} className={`lb-toast ${toast.type}`} role="status" aria-live="polite">{toast.text}</div>}
+          {helpOpen && <HelpModal onClose={()=>setHelpOpen(false)} />}
         </div>
       </>
     );
@@ -880,6 +885,7 @@ export default function Tabs() {
         )}
 
         {toast && <div key={toast.id} className={`lb-toast ${toast.type}`} role="status" aria-live="polite">{toast.text}</div>}
+        {helpOpen && <HelpModal onClose={()=>setHelpOpen(false)} />}
 
         {allInOpen && (
           <div className="lb-ov" onClick={() => setAllInOpen(false)}>
@@ -952,6 +958,26 @@ export default function Tabs() {
         )}
       </div>
     </>
+  );
+}
+
+/* ─── HELP MODAL ────────────────────────────────────────────── */
+function HelpModal({ onClose }) {
+  return (
+    <div className="lb-ov" onClick={onClose}>
+      <div className="lb-card" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="lb-help-title">
+        <div className="lb-ct" id="lb-help-title" style={{color:"#E8920A",fontSize:32}}>HOW TO PLAY</div>
+        <div className="lb-cs">One subject. One phrase. No mercy.</div>
+        <div style={{textAlign:"left",fontSize:13,lineHeight:1.5,color:"#C0BBB5",margin:"8px 0 18px"}}>
+          <p style={{marginBottom:10}}><b style={{color:"#F0EDE4"}}>1 · Type into tiles.</b> Pick a word, type its letters into the tiles. Press Enter or tap GO.</p>
+          <p style={{marginBottom:10}}><b style={{color:"#4EAF7C"}}>2 · Greens lock in.</b> Letters in the right spot stay revealed across attempts. Letters known to be in the phrase pile up below.</p>
+          <p style={{marginBottom:10}}><b style={{color:"#FFD700"}}>3 · Stake tiles 2×.</b> Tap any tile you've typed before submitting — right pays double, wrong costs double.</p>
+          <p style={{marginBottom:10}}><b style={{color:"#4EAF7C"}}>4 · Cold solves earn ⚡.</b> Solve a word with no wrong attempts → tap any unrevealed tile in any unsolved word for a free letter.</p>
+          <p style={{marginBottom:0}}><b style={{color:"#FF4D4D"}}>5 · ALL IN.</b> Shove the whole phrase. Right = +8 × every unrevealed tile. Wrong = game over.</p>
+        </div>
+        <button className="lb-btn lb-bp" onClick={onClose}>Got it</button>
+      </div>
+    </div>
   );
 }
 
