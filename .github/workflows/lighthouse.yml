@@ -1,0 +1,22 @@
+name: lighthouse
+
+# Gate quality on every PR. Calls the org reusable workflow.
+# Thresholds set to 90 (PR baseline) — we aim for 100s but allow PR-time
+# variance from cold edge caches. Production has stricter SEO via /robots.txt
+# + sitemap.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  audit:
+    uses: DuganLabs/.github/.github/workflows/lighthouse.yml@v2
+    with:
+      url: https://t4bs.com
+      perf-min: 90
+      a11y-min: 95
+      best-practices-min: 95
+      seo-min: 95
+      device: mobile
