@@ -29,12 +29,14 @@ export function buildGrid({ session, locked, posFeedback }) {
   }).join("\n");
 }
 
-/* Compose the full text-body the user shares. URL is included so OG
-   crawlers (iMessage, Discord, Twitter) render the dynamic card. */
-export function buildShareText({ session, score, won, grid, url }) {
+/* Compose the share-text body. The URL is NOT embedded here — it's passed
+   to navigator.share separately, which is what iOS / Android use to render
+   a single OG preview. Embedding the URL in text caused recipients to see
+   both a text block AND a duplicated link → two OG cards. */
+export function buildShareText({ session, score, won, grid }) {
   const verdict = won ? "Solved" : "Busted";
-  const head = `T4BS · ${session.category} · ${score}pts · ${verdict}`;
-  return `${head}\n\n${grid}\n\n${url || "t4bs.com"}`;
+  const head = `Tabs · ${session.category} · ${score}pts · ${verdict}`;
+  return `${head}\n\n${grid}`;
 }
 
 /* Mint a server-side share card record so we can return a /s/{id} URL whose
@@ -44,6 +46,7 @@ export async function mintShareUrl({ session, score, won, grid }) {
   try {
     const r = await api.mintShareCard({
       sessionId: session.sessionId || session.id,
+      puzzleId: session.puzzleId ?? session.id ?? null,
       category: session.category,
       score,
       won,
@@ -55,24 +58,28 @@ export async function mintShareUrl({ session, score, won, grid }) {
   }
 }
 
-/* Native share sheet → clipboard fallback. Accepts {text, url}. */
+/* Native share sheet → clipboard fallback.
+   - With a URL: navigator.share gets `{text, url}` — most platforms render
+     a single rich card (the URL's OG meta) and append the text below.
+   - Clipboard fallback writes "text\n\nurl" so the recipient gets both. */
 export async function copyOrShare({ text, url }) {
   if (typeof navigator !== "undefined" && navigator.share) {
     try {
-      // Pass url separately so iOS share sheet handles it as a link.
       await navigator.share(url ? { text, url } : { text });
       return "shared";
     } catch { /* fall through to clipboard */ }
   }
   if (typeof navigator !== "undefined" && navigator.clipboard) {
-    try { await navigator.clipboard.writeText(text); return "copied"; }
-    catch {}
+    try {
+      const payload = url ? `${text}\n\n${url}` : text;
+      await navigator.clipboard.writeText(payload);
+      return "copied";
+    } catch {}
   }
   return "failed";
 }
 
-/* Legacy convenience: build text-only share (used as fallback if mint fails
-   before showing share sheet). Kept signature-compatible with old callers. */
+/* Legacy convenience kept signature-compatible with old callers. */
 export function buildShareCard({ session, locked, posFeedback, score, won }) {
   const grid = buildGrid({ session, locked, posFeedback });
   return buildShareText({ session, score, won, grid });

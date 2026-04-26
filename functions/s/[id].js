@@ -27,10 +27,16 @@ export const onRequestGet = async ({ request, env, params }) => {
 
   const origin = env.PUBLIC_ORIGIN || env.RP_ORIGIN || "https://t4bs.com";
   const verdict = card.won ? "Solved" : "Busted";
-  const title = `Tabs — ${verdict} ${card.category} for ${card.score}pts`;
-  const description = `${verdict} a Tabs round on "${card.category}" for ${card.score} points. Pick a category. Solve the phrase.`;
+  const title = `Tabs — Try this ${card.category} puzzle`;
+  const description = card.won
+    ? `Someone just solved "${card.category}" for ${card.score} points on Tabs. Think you can match it?`
+    : `Someone just played "${card.category}" on Tabs. Your turn — solve the hidden phrase.`;
   const ogImage = `${origin}/og/score/${id}.png`;
   const shareUrl = `${origin}/s/${id}`;
+  // If the share card has a puzzle_id, recipients land directly on that
+  // puzzle. If not (legacy cards minted before migration 0002), fall back
+  // to the lobby.
+  const playUrl = card.puzzleId ? `/?play=${card.puzzleId}` : "/";
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -48,16 +54,16 @@ export const onRequestGet = async ({ request, env, params }) => {
   <meta property="og:image" content="${esc(ogImage)}" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="T4BS score card: ${esc(verdict)} ${esc(card.category)} for ${card.score}pts" />
+  <meta property="og:image:alt" content="Tabs — try this ${esc(card.category)} puzzle (last player got ${card.score}pts)" />
   <meta property="og:url" content="${esc(shareUrl)}" />
-  <meta property="og:site_name" content="T4BS" />
+  <meta property="og:site_name" content="Tabs" />
 
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${esc(title)}" />
   <meta name="twitter:description" content="${esc(description)}" />
   <meta name="twitter:image" content="${esc(ogImage)}" />
-  <meta name="twitter:image:alt" content="T4BS score card" />
+  <meta name="twitter:image:alt" content="Tabs — try this ${esc(card.category)} puzzle" />
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <style>
@@ -69,14 +75,15 @@ export const onRequestGet = async ({ request, env, params }) => {
   </style>
   <script>
     // Instant redirect for human visitors. Crawlers do not run JS.
-    window.location.replace("/");
+    // Recipients land directly on the same puzzle the original player took.
+    window.location.replace(${JSON.stringify(playUrl)});
   </script>
 </head>
 <body>
   <div class="wrap">
-    <h1>T4BS</h1>
-    <p>${esc(verdict)} ${esc(card.category)} for ${card.score}pts</p>
-    <p><a href="/">Play Tabs</a></p>
+    <h1>Tabs</h1>
+    <p>${esc(card.category)} — your turn</p>
+    <p><a href="${esc(playUrl)}">Play this puzzle</a></p>
   </div>
 </body>
 </html>`;

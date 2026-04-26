@@ -3,7 +3,9 @@
 import { d1ShareCards } from "../../_shared/d1.js";
 import { renderPng, scoreCardScene, pngHeaders } from "../../_shared/og.js";
 
-const KV_PREFIX = "og:score:";
+// v2: pip-based redesign (brand orange, non-Wordle). Bump invalidates
+// any cached PNG using the old green/yellow tile palette.
+const KV_PREFIX = "og:score:v2:";
 
 export const onRequestGet = async ({ request, env, params }) => {
   const idParam = String(params.id || "");

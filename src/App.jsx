@@ -429,6 +429,20 @@ export default function Tabs() {
     api.listPuzzles().then(setLobby).catch(e => setError(String(e.message || e)));
     api.me().then(r => setUser(r.user)).catch(() => {});
 
+    // Shared puzzle deep-link: /?play=<puzzleId> jumps the recipient
+    // straight into the same puzzle the original player took. We also
+    // strip the param off the URL after kicking off so a manual refresh
+    // doesn't keep re-starting the session.
+    const url = new URL(window.location.href);
+    const playParam = url.searchParams.get("play");
+    const playId = playParam ? Number(playParam) : NaN;
+    if (Number.isFinite(playId) && playId > 0) {
+      url.searchParams.delete("play");
+      window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
+      start(playId);
+      return;  // skip session-resume on this load
+    }
+
     // Resume any in-flight session (server is authoritative)
     const saved = loadSession();
     if (saved?.sessionId) {
@@ -1113,7 +1127,7 @@ export default function Tabs() {
                 setShareLbl("…");
                 const grid = buildGrid({ session, locked, posFeedback });
                 const url  = await mintShareUrl({ session, score, won: true, grid });
-                const text = buildShareText({ session, score, won: true, grid, url });
+                const text = buildShareText({ session, score, won: true, grid });
                 const r = await copyOrShare({ text, url });
                 setShareLbl(r === "copied" ? "✓ Copied" : r === "shared" ? "✓ Shared" : "Couldn't share");
               }}>{shareLbl || "Share result"}</button>
@@ -1136,7 +1150,7 @@ export default function Tabs() {
                 setShareLbl("…");
                 const grid = buildGrid({ session, locked, posFeedback });
                 const url  = await mintShareUrl({ session, score, won: false, grid });
-                const text = buildShareText({ session, score, won: false, grid, url });
+                const text = buildShareText({ session, score, won: false, grid });
                 const r = await copyOrShare({ text, url });
                 setShareLbl(r === "copied" ? "✓ Copied" : r === "shared" ? "✓ Shared" : "Couldn't share");
               }}>{shareLbl || "Share result"}</button>

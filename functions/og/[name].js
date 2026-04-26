@@ -4,9 +4,10 @@
 
 import { renderPng, defaultCardScene, pngHeaders } from "../_shared/og.js";
 
-// v2: new tagline ("Pick a category. Solve the phrase.") replaces
-// the old "Five-letter battle of bullshit" copy.
-const CACHE_KEY = "og:default:v2";
+// v3: replaced wordle-style tile row with brand-orange pip variants
+// (filled / hollow ring / dim dot). New design language across both
+// default and per-score cards.
+const CACHE_KEY = "og:default:v3";
 
 export const onRequestGet = async ({ env, params }) => {
   const raw = String(params.name || "");

@@ -109,22 +109,39 @@ function parseGrid(gridString) {
   return rows;
 }
 
-function tileGrid(rows, { tileSize = 44, gap = 7 } = {}) {
+/* Per-position pip rendering. Brand-aligned, zero Wordle palette.
+   - solid:  filled brand-orange dot   (player knew this letter cold)
+   - hint:   brand-orange hollow ring  (letter present, position unknown)
+   - miss:   small dim dot             (letter absent at this position)
+   - blank:  dim outlined ring         (position never tested)
+   The result reads as a progress trail of dots, not a tile grid. */
+function pipForState(state, size) {
+  const r = size; // diameter
+  switch (state) {
+    case "green":
+      return { width: r, height: r, borderRadius: 9999, backgroundColor: COLORS.accent };
+    case "yellow":
+      return { width: r, height: r, borderRadius: 9999, backgroundColor: "transparent",
+               border: `3px solid ${COLORS.accent}` };
+    case "absent": {
+      const small = Math.round(r * 0.36);
+      return { width: small, height: small, borderRadius: 9999, backgroundColor: "#3A332B",
+               margin: `${(r - small) / 2}px` };
+    }
+    case "empty":
+    default:
+      return { width: r, height: r, borderRadius: 9999, backgroundColor: "transparent",
+               border: `2px solid #2A2521` };
+  }
+}
+
+function tileGrid(rows, { dotSize = 36, rowGap = 14, pipGap = 12 } = {}) {
   return box(
-    { flexDirection: "column", gap },
-    rows.map((row, ri) =>
+    { flexDirection: "column", gap: rowGap, alignItems: "flex-start" },
+    rows.map((row) =>
       box(
-        { flexDirection: "row", gap },
-        row.map((state, ci) =>
-          box(
-            {
-              width: tileSize, height: tileSize, borderRadius: 7,
-              backgroundColor: COLORS[state] || COLORS.empty,
-              border: state === "empty" ? `1px solid ${COLORS.absent}` : "none",
-            },
-            []
-          )
-        )
+        { flexDirection: "row", gap: pipGap, alignItems: "center", justifyContent: "flex-start" },
+        row.map((state) => box(pipForState(state, dotSize), []))
       )
     )
   );
@@ -159,11 +176,11 @@ export function scoreCardScene({ category, score, won, grid }) {
         ),
       ]),
 
-      // Middle: tile grid (left) + score (right), aligned to baseline
+      // Middle: pip grid (left) + score (right), aligned to baseline
       box(
         { flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: "100%" },
         [
-          tileGrid(rows, { tileSize: 52, gap: 8 }),
+          tileGrid(rows, { dotSize: 36, rowGap: 14, pipGap: 12 }),
           box({ flexDirection: "row", alignItems: "baseline", gap: 14 }, [
             txt({ fontSize: 200, fontWeight: 800, color: COLORS.fg, letterSpacing: -8, lineHeight: 1 }, String(score)),
             txt({ fontSize: 60, fontWeight: 700, color: COLORS.accent, lineHeight: 1 }, "pts"),
@@ -196,14 +213,10 @@ export function defaultCardScene() {
         { fontSize: 56, fontWeight: 700, color: COLORS.fg, marginTop: 12, lineHeight: 1.15, maxWidth: 1040 },
         "One subject. One phrase. Stake the letters you're sure about."
       ),
-      box({ flexDirection: "row", alignItems: "center", marginTop: 64, gap: 16 }, [
-        // Decorative tile row
-        ...["green","yellow","absent","empty","green","yellow"].map(state =>
-          box(
-            { width: 80, height: 80, borderRadius: 12, backgroundColor: COLORS[state] || COLORS.empty,
-              border: state === "empty" ? `1px solid ${COLORS.absent}` : "none" },
-            []
-          )
+      // Decorative pip row — non-Wordle: brand-orange filled / hollow / dim.
+      box({ flexDirection: "row", alignItems: "center", marginTop: 64, gap: 18 }, [
+        ...["green","yellow","empty","green","absent","yellow"].map(state =>
+          box(pipForState(state, 64), [])
         ),
       ]),
       box(

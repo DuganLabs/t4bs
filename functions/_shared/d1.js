@@ -114,16 +114,26 @@ export function d1Users(DB) {
 
 export function d1ShareCards(DB) {
   return {
-    async create({ id, sessionId, userId, category, score, won, grid }) {
+    async create({ id, sessionId, userId, puzzleId, category, score, won, grid }) {
       await DB.prepare(
-        `INSERT INTO share_cards (id, session_id, user_id, category, score, won, grid)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`
-      ).bind(id, sessionId || null, userId || null, category, score, won ? 1 : 0, grid).run();
+        `INSERT INTO share_cards (id, session_id, user_id, puzzle_id, category, score, won, grid)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
+      ).bind(
+        id,
+        sessionId || null,
+        userId || null,
+        Number.isFinite(puzzleId) ? puzzleId : null,
+        category,
+        score,
+        won ? 1 : 0,
+        grid
+      ).run();
       return { id };
     },
     async get(id) {
       const r = await DB.prepare(
-        `SELECT id, session_id AS sessionId, user_id AS userId, category, score, won, grid, created_at AS createdAt
+        `SELECT id, session_id AS sessionId, user_id AS userId, puzzle_id AS puzzleId,
+                category, score, won, grid, created_at AS createdAt
            FROM share_cards WHERE id=?1`
       ).bind(id).first();
       if (!r) return null;
