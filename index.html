@@ -38,9 +38,58 @@
     <link rel="canonical" href="https://t4bs.com/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
+
+    <!-- Font hosting: preconnect cuts ~150ms of TLS+DNS off first-paint.
+         The actual @import lives in App.css-in-JS; this only warms the
+         connection so the import resolves faster. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600&family=Caveat:wght@700&display=swap"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600&family=Caveat:wght@700&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600&family=Caveat:wght@700&display=swap"
+      />
+    </noscript>
+
+    <!-- Structured data — Game schema. Helps rich-result eligibility and
+         confirms canonical name + URL to crawlers. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Game",
+        "name": "Tabs",
+        "alternateName": "T4BS",
+        "url": "https://t4bs.com/",
+        "image": "https://t4bs.com/og/default.png",
+        "description": "Pick a category. Solve the hidden phrase. Stake the letters you're sure about.",
+        "genre": "Word puzzle",
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Any",
+        "author": { "@type": "Organization", "name": "The Synonym Toast Bunch" },
+        "publisher": { "@type": "Organization", "name": "BaseNative", "url": "https://basenative.dev" },
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div style="padding:24px;font-family:system-ui,sans-serif;color:#F0EDE4;background:#0C0B09;text-align:center">
+        <h1 style="font-size:24px;letter-spacing:4px;margin-bottom:8px">TABS</h1>
+        <p>This game needs JavaScript. Enable it and reload to play.</p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

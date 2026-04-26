@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Crawler-facing share landings render OG tags server-side
+Sitemap: https://t4bs.com/sitemap.xml
