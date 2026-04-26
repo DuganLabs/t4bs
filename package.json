@@ -21,7 +21,7 @@
     "@basenative/persist": "^1.0.0",
     "@basenative/share": "^1.0.0",
     "@resvg/resvg-wasm": "^2.6.2",
-    "@simplewebauthn/browser": "^11.0.0",
+    "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^11.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
