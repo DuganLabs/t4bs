@@ -35,8 +35,9 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
   min-height:100dvh;
   background:radial-gradient(ellipse 110% 55% at 50% 0%,#1c1810 0%,#0C0B09 60%);
   display:flex;flex-direction:column;align-items:center;
-  padding:max(env(safe-area-inset-top,0px),16px) 14px calc(96px + env(safe-area-inset-bottom,0px));
+  padding:max(env(safe-area-inset-top,0px),16px) 14px calc(40px + env(safe-area-inset-bottom,0px));
 }
+.lb.is-playing{padding-bottom:calc(232px + env(safe-area-inset-bottom,0px));}
 
 /* ── HEADER ── */
 .lb-hd{position:sticky;top:0;z-index:30;width:100%;max-width:540px;display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding:6px 0;background:rgba(12,11,9,.78);backdrop-filter:blur(8px);}
@@ -139,35 +140,49 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
 .lb-chip.absent{background:rgba(70,65,60,.35);color:#6A6560;border:1px solid #2C2925;text-decoration:line-through;}
 @keyframes cIn{0%{opacity:0;transform:translateY(-3px) scale(.85)}100%{opacity:1;transform:translateY(0) scale(1)}}
 
-/* ── ACTION BAR — sticky-bottom on mobile, with safe-area ── */
-.lb-bar{
-  position:fixed;left:0;right:0;
-  bottom:0;
-  z-index:30;
-  background:linear-gradient(to top,#0C0B09 70%,rgba(12,11,9,0));
-  padding:14px 14px calc(14px + env(safe-area-inset-bottom,0px));
-  display:flex;justify-content:center;
+/* ── ON-SCREEN KEYBOARD ── */
+.lb-kb{
+  position:fixed;left:0;right:0;bottom:0;z-index:30;
+  background:#0C0B09;border-top:1px solid #1F1C18;
+  padding:8px 6px calc(10px + env(safe-area-inset-bottom,0px));
 }
-.lb-bar-inner{width:100%;max-width:540px;display:flex;align-items:center;gap:8px;}
-.lb-prompt{flex:1;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#9A9590;}
-.lb-allin{
-  background:#1A1815;border:1px solid #FF4D4D;border-radius:8px;color:#FF4D4D;
-  font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;
-  padding:10px 14px;cursor:pointer;flex-shrink:0;min-height:44px;transition:all .15s;
+.lb-kb-actions{display:flex;align-items:center;gap:8px;max-width:540px;margin:0 auto 8px;padding:0 4px;}
+.lb-kb-allin{
+  background:#1A1815;border:1px solid #FF4D4D;border-radius:6px;color:#FF4D4D;
+  font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:1.5px;
+  padding:7px 14px;cursor:pointer;min-height:34px;transition:all .15s;flex-shrink:0;
 }
-.lb-allin:hover{background:#FF4D4D;color:#1A0A0A;box-shadow:0 0 18px rgba(255,77,77,.45);}
-.lb-allin:active{transform:scale(.94);}
-.lb-igo{
-  background:var(--rc,#E8920A);border:none;border-radius:8px;color:#111;
-  font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:1px;
-  padding:10px 24px;cursor:pointer;flex-shrink:0;min-height:44px;
-  transition:filter .15s,transform .1s,opacity .2s;
-}
-.lb-igo:hover{filter:brightness(1.14);}
-.lb-igo:active{transform:scale(.93);}
-.lb-igo:disabled{opacity:.35;cursor:not-allowed;}
+.lb-kb-allin:hover{background:#FF4D4D;color:#1A0A0A;box-shadow:0 0 18px rgba(255,77,77,.45);}
+.lb-kb-allin:active{transform:scale(.94);}
+.lb-kb-allin:disabled{opacity:.35;cursor:not-allowed;}
+.lb-kb-stake{flex:1;text-align:right;font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:1.5px;color:#FFD700;min-height:18px;}
 
-.lb-hidden{position:absolute;top:0;left:0;width:1px;height:1px;opacity:0;border:none;background:transparent;color:transparent;font-size:16px;caret-color:transparent;padding:0;}
+.lb-kb-rows{display:flex;flex-direction:column;gap:6px;max-width:540px;margin:0 auto;}
+.lb-kb-row{display:flex;gap:4px;justify-content:center;}
+.lb-key{
+  flex:1;min-width:0;max-width:42px;height:48px;
+  background:#3A3530;border:none;border-radius:5px;color:#F0EDE4;
+  font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:.5px;
+  cursor:pointer;transition:background .15s,transform .08s,box-shadow .15s;
+  -webkit-tap-highlight-color:rgba(255,255,255,.1);
+}
+.lb-key:hover:not(:disabled){background:#4A4540;}
+.lb-key:active:not(:disabled){transform:scale(.92);background:#5A5550;}
+.lb-key:disabled{opacity:.55;cursor:not-allowed;}
+.lb-key.k-green  {background:#4EAF7C;color:#0A1F12;}
+.lb-key.k-present{background:#D4B445;color:#1F1700;}
+.lb-key.k-absent {background:#1E1C18;color:#5A5550;}
+.lb-key.lb-key-wide{flex:1.5;max-width:62px;font-size:13px;}
+.lb-key.lb-key-go{background:var(--rc,#E8920A);color:#111;box-shadow:0 0 14px rgba(var(--rg,232,146,10),.35);}
+.lb-key.lb-key-go:hover:not(:disabled){filter:brightness(1.1);}
+.lb-key.lb-key-dim{background:#2A2724;color:#6A6560;}
+.lb-key.lb-key-bs {font-size:18px;}
+
+@media (max-width: 380px){
+  .lb-key{height:44px;font-size:15px;}
+  .lb-key.lb-key-wide{font-size:11px;}
+  .lb-kb-allin{font-size:11px;padding:6px 10px;}
+}
 
 /* ── TOAST ── */
 .lb-toast{
@@ -457,30 +472,64 @@ export default function Tabs() {
     });
   }, []);
 
-  /* ── typing handler (smart-skip locked positions) ── */
-  const onInputChange = (wi) => (e) => {
+  /* ── typing primitives — used by both the on-screen keyboard and physical keys ── */
+  const typeLetter = (letter) => {
+    if (active === null) return;
+    const wi = active;
     if (phase !== "playing" || casc || allInOpen || wordSolved[wi]) return;
-    const wordLen = session.words[wi];
-    const lm = locked[wi];
-    const v  = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
-    const slots = openSlots(wordLen, lm);
-    const result = [];
-    let ti = 0;
-    for (let pos = 0; pos < wordLen && result.length < slots.length; pos++) {
-      if (lm[pos] !== undefined) {
-        if (ti < v.length && v[ti] === lm[pos]) ti++;
-      } else if (ti < v.length) {
-        result.push(v[ti]); ti++;
-      }
-    }
-    setTyped(prev => prev.map((t, i) => i !== wi ? t : result));
-    setWagers(prev => prev.map((w, i) => i !== wi ? w : w.filter(slotIdx => slotIdx < result.length)));
+    const slots = openSlots(session.words[wi], locked[wi]);
+    if (typed[wi].length >= slots.length) return;
+    setTyped(prev => prev.map((t, i) => i !== wi ? t : [...t, letter]));
+  };
+  const backspace = () => {
+    if (active === null) return;
+    const wi = active;
+    if (phase !== "playing" || casc || allInOpen || wordSolved[wi]) return;
+    setTyped(prev => prev.map((t, i) => i !== wi ? t : t.slice(0, -1)));
+    setWagers(prev => prev.map((w, i) => i !== wi ? w : w.filter(s => s < (typed[wi].length - 1))));
+  };
+  const enter = () => {
+    if (active === null) return;
+    submit(active);
   };
 
-  const onInputKey = (wi) => (e) => {
-    if (e.key === "Enter") { e.preventDefault(); submit(wi); }
-    else if (e.key === "Escape") { e.preventDefault(); setActive(null); }
-  };
+  /* ── Physical keyboard listener (desktop) ── */
+  useEffect(() => {
+    if (phase !== "playing" || casc || allInOpen || active === null) return;
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // ignore when focus is in an input/textarea (e.g. all-in modal)
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key === "Enter") { e.preventDefault(); enter(); }
+      else if (e.key === "Backspace") { e.preventDefault(); backspace(); }
+      else if (/^[a-zA-Z]$/.test(e.key)) { e.preventDefault(); typeLetter(e.key.toUpperCase()); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [phase, casc, allInOpen, active, typed, locked, session, wordSolved]);
+
+  /* ── Letter status for the on-screen keyboard (cross-phrase intel) ── */
+  const keyStatus = (() => {
+    if (!session) return {};
+    const status = {};
+    // Greens: any letter currently locked in (anchors + green-locked from prior guesses)
+    locked.forEach((lm, wi) => {
+      Object.values(lm || {}).forEach(L => { status[L] = "green"; });
+    });
+    // Present: letters known to be in the phrase but not locked yet
+    presentGlobal.forEach(L => { if (status[L] !== "green") status[L] = "present"; });
+    // Absent: letters ruled out in EVERY word the player has tried
+    const triedSets = absentByWord.map(s => new Set(s || []));
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").forEach(L => {
+      if (status[L]) return;
+      const triedWordCount = triedSets.filter(s => s.size > 0).length;
+      if (triedWordCount === 0) return;
+      const allRuledOut = triedSets.every(s => s.size === 0 || s.has(L));
+      if (allRuledOut) status[L] = "absent";
+    });
+    return status;
+  })();
 
   const toggleWager = (wi, slotIdx) => {
     if (phase !== "playing" || casc || wi !== active) return;
@@ -746,7 +795,7 @@ export default function Tabs() {
   return (
     <>
       <style>{CSS}</style>
-      <div className="lb" style={{ "--rc": THEME.tab, "--rg": THEME.glow }}>
+      <div className={`lb is-playing`} style={{ "--rc": THEME.tab, "--rg": THEME.glow }}>
         <Header />
         <main aria-labelledby="lb-page-title">
           <h1 id="lb-page-title" className="sr-only">{session.category} — round #{session.id}</h1>
@@ -781,21 +830,6 @@ export default function Tabs() {
                   if (!wordSolved[wi]) setActive(wi);
                 }}
               >
-                {!wordSolved[wi] && (
-                  <input
-                    ref={el => iRefs.current[wi] = el}
-                    className="lb-hidden"
-                    type="text"
-                    autoComplete="off" autoCorrect="off" spellCheck={false}
-                    autoCapitalize="characters"
-                    inputMode="text"
-                    value={typed[wi]?.join("") || ""}
-                    onChange={onInputChange(wi)}
-                    onKeyDown={onInputKey(wi)}
-                    onClick={e => e.stopPropagation()}
-                    aria-label={`Word ${wi + 1}`}
-                  />
-                )}
                 {Array.from({length: wordLen}).map((_, li) => {
                   const lockedLetter = lm[li];
                   const isAnchor = session.anchors.some(a => a.wi === wi && a.li === li);
@@ -865,23 +899,16 @@ export default function Tabs() {
         </main>
 
         {phase === "playing" && (
-          <div className="lb-bar" role="region" aria-label="Game actions">
-            <div className="lb-bar-inner">
-              <button className="lb-allin" onClick={openAllIn} disabled={casc} aria-label="Shove the entire phrase: massive bonus or game over">ALL IN</button>
-              <div className="lb-prompt" style={{textAlign:"right"}}>
-                {active !== null && (() => {
-                  const w = wagers[active]?.length || 0;
-                  return w > 0 ? `${w} tile${w===1?"":"s"} staked 2×` : "";
-                })()}
-              </div>
-              <button
-                className="lb-igo"
-                disabled={active === null || wordSolved[active] || typed[active].length < openSlots(session.words[active], locked[active]).length || casc}
-                onClick={() => submit(active)}
-                aria-label="Submit the typed word"
-              >GO</button>
-            </div>
-          </div>
+          <Keyboard
+            keyStatus={keyStatus}
+            onKey={typeLetter}
+            onBackspace={backspace}
+            onEnter={enter}
+            onAllIn={openAllIn}
+            disabled={casc || allInOpen}
+            canSubmit={active !== null && !wordSolved[active] && typed[active]?.length >= openSlots(session.words[active], locked[active]).length}
+            wagerCount={active !== null ? (wagers[active]?.length || 0) : 0}
+          />
         )}
 
         {toast && <div key={toast.id} className={`lb-toast ${toast.type}`} role="status" aria-live="polite">{toast.text}</div>}
@@ -958,6 +985,68 @@ export default function Tabs() {
         )}
       </div>
     </>
+  );
+}
+
+/* ─── ON-SCREEN KEYBOARD ────────────────────────────────────── */
+const KEY_ROWS = [
+  ["Q","W","E","R","T","Y","U","I","O","P"],
+  ["A","S","D","F","G","H","J","K","L"],
+  ["ENT","Z","X","C","V","B","N","M","BS"],
+];
+
+function Keyboard({ keyStatus, onKey, onBackspace, onEnter, onAllIn, disabled, canSubmit, wagerCount }) {
+  const handleClick = (k) => {
+    if (disabled) return;
+    if (k === "ENT") { if (canSubmit) onEnter(); return; }
+    if (k === "BS")  { onBackspace(); return; }
+    onKey(k);
+  };
+
+  return (
+    <div className="lb-kb" role="region" aria-label="Keyboard">
+      <div className="lb-kb-actions">
+        <button
+          type="button"
+          className="lb-kb-allin"
+          onClick={onAllIn}
+          disabled={disabled}
+          aria-label="Shove the entire phrase: massive bonus or game over"
+        >ALL IN</button>
+        <span className="lb-kb-stake" aria-live="polite">
+          {wagerCount > 0 ? `${wagerCount}× STAKED` : ""}
+        </span>
+      </div>
+      <div className="lb-kb-rows">
+        {KEY_ROWS.map((row, ri) => (
+          <div key={ri} className="lb-kb-row">
+            {row.map(k => {
+              const isAction = k === "ENT" || k === "BS";
+              const status = !isAction ? keyStatus[k] : null;
+              const cls = ["lb-key"];
+              if (isAction) cls.push("lb-key-wide");
+              if (k === "ENT") cls.push("lb-key-enter", canSubmit ? "lb-key-go" : "lb-key-dim");
+              if (k === "BS")  cls.push("lb-key-bs");
+              if (status === "green")   cls.push("k-green");
+              if (status === "present") cls.push("k-present");
+              if (status === "absent")  cls.push("k-absent");
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  className={cls.join(" ")}
+                  onClick={() => handleClick(k)}
+                  disabled={disabled || (k === "ENT" && !canSubmit)}
+                  aria-label={k === "ENT" ? (canSubmit ? "Submit word" : "Submit word (fill all tiles first)") : k === "BS" ? "Backspace" : `Type ${k}`}
+                >
+                  {k === "BS" ? "⌫" : k === "ENT" ? (canSubmit ? "GO" : "ENT") : k}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
