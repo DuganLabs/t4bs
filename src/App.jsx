@@ -106,7 +106,6 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
   user-select:none;flex-shrink:0;transform-origin:center center;
   transition:background .25s,border-color .2s;position:relative;
 }
-.lb-tile.anchor{box-shadow:0 2px 5px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.6);}
 .lb-tile.locked-green{background:#4EAF7C;color:#0A1F12;box-shadow:0 2px 5px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.35);}
 .lb-tile.solved-tile{background:#4EAF7C;color:#0A1F12;box-shadow:0 2px 5px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.4);}
 .lb-tile.empty{background:#161412;border:1.5px solid #2A2724;color:#F0EDE4;}
@@ -175,8 +174,16 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
 .lb-key.lb-key-wide{flex:1.5;max-width:62px;font-size:13px;}
 .lb-key.lb-key-go{background:var(--rc,#E8920A);color:#111;box-shadow:0 0 14px rgba(var(--rg,232,146,10),.35);}
 .lb-key.lb-key-go:hover:not(:disabled){filter:brightness(1.1);}
+.lb-key.lb-key-shove{background:#FF4D4D;color:#1A0A0A;box-shadow:0 0 18px rgba(255,77,77,.55);animation:shovePulse 1s ease infinite;}
+@keyframes shovePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
 .lb-key.lb-key-dim{background:#2A2724;color:#6A6560;}
 .lb-key.lb-key-bs {font-size:18px;}
+
+.lb-kb.allin{background:linear-gradient(180deg,rgba(255,77,77,.06) 0%,#0C0B09 30%);border-top-color:rgba(255,77,77,.4);}
+.lb-kb-allin.on{background:#FF4D4D;color:#1A0A0A;}
+.lb-cbar.lb-cbar-allin{background:rgba(255,77,77,.08);border-color:rgba(255,77,77,.5);color:#FF6E6E;animation:cBlink 1.2s ease infinite;}
+.lb-tile.allin-typed{box-shadow:0 0 0 1.5px #FF6E6E,0 0 12px rgba(255,77,77,.35);}
+.lb-word.allin::before{content:'';position:absolute;left:-6px;right:-6px;top:-6px;bottom:-6px;border:1.5px dashed rgba(255,110,110,.55);border-radius:8px;pointer-events:none;}
 
 @media (max-width: 380px){
   .lb-key{height:44px;font-size:15px;}
@@ -220,16 +227,7 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
 .lb-bs{background:#1C1916;color:#F0EDE4;border:1px solid #2C2926;}
 .lb-bs:hover{background:#242018;}
 
-/* ── ALL-IN MODAL ── */
-.lb-allin-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 14px;margin:18px 0 22px;}
-.lb-allin-input{
-  background:#0F0E0C;border:1.5px solid #3A3530;border-radius:5px;
-  font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:6px;
-  color:#F0EDE4;text-align:center;padding:8px 4px 8px 10px;
-  text-transform:uppercase;outline:none;min-height:44px;
-}
-.lb-allin-input:focus{border-color:#FF4D4D;box-shadow:0 0 14px rgba(255,77,77,.3);}
-.lb-allin-warn{font-size:11px;color:#FF6E6E;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:14px;font-weight:600;}
+/* (all-in modal CSS removed — all-in is now an inline mode of the play screen) */
 
 /* ── LOBBY ── */
 .lb-lobby{width:100%;max-width:480px;display:flex;flex-direction:column;gap:8px;margin-top:6px;list-style:none;padding:0;}
@@ -290,8 +288,7 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
   background:#1E1C18;border:1px solid #2A2724;color:#F0EDE4;cursor:pointer;
   transition:all .12s;
 }
-.lb-ptile.anchor{background:#FFF3E0;color:#5C2A00;border-color:#E8920A;}
-.lb-ptile:hover{transform:translateY(-1px);}
+.lb-ptile{cursor:default;}
 
 /* ── MODERATION QUEUE ── */
 .lb-mod-list{width:100%;max-width:540px;display:flex;flex-direction:column;gap:12px;}
@@ -357,12 +354,12 @@ export default function Tabs() {
   const [toast,     setToast]     = useState(null);
   const [casc,      setCasc]      = useState(false);
   const [cascDrop,  setCascDrop]  = useState(null);
-  const [allInOpen, setAllInOpen] = useState(false);
-  const [allInWords,setAllInWords]= useState([]);
   const [stats,    setStats]    = useState(() => loadStats());
   const [shareLbl, setShareLbl] = useState(null);
   const [resultRecorded, setResultRecorded] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [posFeedback, setPosFeedback] = useState([]); // [wi][li] -> 'green' | 'yellow' | 'absent' | null
+  const [allInMode,  setAllInMode]  = useState(false);
 
   const iRefs = useRef([]);
   const tRef  = useRef(null);
@@ -395,6 +392,12 @@ export default function Tabs() {
         setTyped(s.words.map(() => []));
         setWagers(s.words.map(() => []));
         setFeedback({});
+        setPosFeedback(s.words.map((len, wi) => {
+          const arr = Array(len).fill(null);
+          Object.keys(s.locked?.[wi] || {}).forEach(li => { arr[Number(li)] = "green"; });
+          return arr;
+        }));
+        setAllInMode(false);
         setActive(null);
         setCasc(false);
         setPhase("playing");
@@ -423,6 +426,8 @@ export default function Tabs() {
       setTyped(s.words.map(() => []));
       setWagers(s.words.map(() => []));
       setFeedback({});
+      setPosFeedback(s.words.map(len => Array(len).fill(null)));
+      setAllInMode(false);
       setActive(null);
       setCasc(false);
       setCascDrop(null);
@@ -436,12 +441,12 @@ export default function Tabs() {
 
   /* ── auto-pick first unsolved word ── */
   useEffect(() => {
-    if (phase !== "playing" || casc || allInOpen) return;
+    if (phase !== "playing" || casc ) return;
     if (active === null || wordSolved[active]) {
       const next = wordSolved.findIndex(s => !s);
       if (next !== -1) setActive(next);
     }
-  }, [wordSolved, casc, phase, allInOpen]);
+  }, [wordSolved, casc, phase]);
 
   useEffect(() => {
     if (active !== null) setTimeout(() => iRefs.current[active]?.focus(), 30);
@@ -473,29 +478,59 @@ export default function Tabs() {
   }, []);
 
   /* ── typing primitives — used by both the on-screen keyboard and physical keys ── */
+  const findGlobalNextSlot = useCallback(() => {
+    if (!session) return null;
+    for (let wi = 0; wi < session.words.length; wi++) {
+      if (wordSolved[wi]) continue;
+      const slots = openSlots(session.words[wi], locked[wi]);
+      if (typed[wi].length < slots.length) return { wi, slotIdx: typed[wi].length };
+    }
+    return null;
+  }, [session, wordSolved, locked, typed]);
+
   const typeLetter = (letter) => {
+    if (phase !== "playing" || casc) return;
+    if (allInMode) {
+      const next = findGlobalNextSlot();
+      if (!next) return;
+      setTyped(prev => prev.map((t, i) => i !== next.wi ? t : [...t, letter]));
+      return;
+    }
     if (active === null) return;
     const wi = active;
-    if (phase !== "playing" || casc || allInOpen || wordSolved[wi]) return;
+    if (wordSolved[wi]) return;
     const slots = openSlots(session.words[wi], locked[wi]);
     if (typed[wi].length >= slots.length) return;
     setTyped(prev => prev.map((t, i) => i !== wi ? t : [...t, letter]));
   };
   const backspace = () => {
+    if (phase !== "playing" || casc) return;
+    if (allInMode) {
+      // Find the last word that has any typed letters and pop one
+      for (let wi = session.words.length - 1; wi >= 0; wi--) {
+        if ((typed[wi]?.length || 0) > 0) {
+          setTyped(prev => prev.map((t, i) => i !== wi ? t : t.slice(0, -1)));
+          setWagers(prev => prev.map((w, i) => i !== wi ? w : w.filter(s => s < (typed[wi].length - 1))));
+          return;
+        }
+      }
+      return;
+    }
     if (active === null) return;
     const wi = active;
-    if (phase !== "playing" || casc || allInOpen || wordSolved[wi]) return;
+    if (wordSolved[wi]) return;
     setTyped(prev => prev.map((t, i) => i !== wi ? t : t.slice(0, -1)));
     setWagers(prev => prev.map((w, i) => i !== wi ? w : w.filter(s => s < (typed[wi].length - 1))));
   };
   const enter = () => {
+    if (allInMode) { submitAllIn(); return; }
     if (active === null) return;
     submit(active);
   };
 
   /* ── Physical keyboard listener (desktop) ── */
   useEffect(() => {
-    if (phase !== "playing" || casc || allInOpen || active === null) return;
+    if (phase !== "playing" || casc  || active === null) return;
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       // ignore when focus is in an input/textarea (e.g. all-in modal)
@@ -507,7 +542,7 @@ export default function Tabs() {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [phase, casc, allInOpen, active, typed, locked, session, wordSolved]);
+  }, [phase, casc, active, typed, locked, session, wordSolved]);
 
   /* ── Letter status for the on-screen keyboard (cross-phrase intel) ── */
   const keyStatus = (() => {
@@ -542,7 +577,7 @@ export default function Tabs() {
 
   /* ── submit ── */
   const submit = useCallback(async (wi) => {
-    if (phase !== "playing" || casc || allInOpen || wordSolved[wi]) return;
+    if (phase !== "playing" || casc  || wordSolved[wi]) return;
     const wordLen = session.words[wi];
     const lm = locked[wi];
     const slots = openSlots(wordLen, lm);
@@ -562,6 +597,16 @@ export default function Tabs() {
       setLocked(prev => prev.map((m, i) => i !== wi ? m : { ...result.locked }));
       setPresentGlobal(result.presentGlobal);
       setAbsentByWord(prev => prev.map((s, i) => i !== wi ? s : result.absentByWord));
+      // Fold per-position feedback into running history (green > yellow > absent > null)
+      setPosFeedback(prev => {
+        const RANK = { green: 3, yellow: 2, absent: 1 };
+        const next = prev.map(row => row.slice());
+        result.feedback.forEach((status, idx) => {
+          const cur = next[wi]?.[idx];
+          if ((RANK[status] || 0) > (RANK[cur] || 0)) next[wi][idx] = status;
+        });
+        return next;
+      });
       setScore(result.score);
       setLives(result.lives);
       setTokens(result.tokens);
@@ -588,7 +633,7 @@ export default function Tabs() {
     } catch (e) {
       toast$(`error: ${String(e.message || e)}`, "bad");
     }
-  }, [session, locked, typed, wagers, phase, casc, allInOpen, wordSolved, toast$]);
+  }, [session, locked, typed, wagers, phase, casc, wordSolved, toast$]);
 
   const pickCascade = async (wi, li) => {
     if (!casc || tokens <= 0 || wordSolved[wi]) return;
@@ -609,19 +654,36 @@ export default function Tabs() {
   };
 
   const openAllIn = () => {
-    setAllInWords(session.words.map(() => ""));
-    setAllInOpen(true);
+    if (allInMode) { setAllInMode(false); return; }
+    // Reset typed buffer so the cursor starts at the first unknown across the phrase
+    setTyped(session.words.map(() => []));
+    setWagers(session.words.map(() => []));
+    setActive(null);
+    setAllInMode(true);
   };
   const submitAllIn = async () => {
-    if (!session) return;
-    const guesses = allInWords.map((s, wi) => (s || "").toUpperCase().slice(0, session.words[wi]));
+    if (!session || !allInMode) return;
+    // Assemble each word's full guess from locked + typed
+    const guesses = session.words.map((len, wi) => {
+      const lm = locked[wi];
+      const slots = openSlots(len, lm);
+      let s = "";
+      for (let i = 0; i < len; i++) {
+        if (lm[i] !== undefined) s += lm[i];
+        else {
+          const idx = slots.indexOf(i);
+          s += typed[wi][idx] || "";
+        }
+      }
+      return s;
+    });
     if (guesses.some((g, i) => g.length !== session.words[i])) {
-      toast$("FILL ALL WORDS", "bad");
+      toast$("FINISH TYPING THE PHRASE", "bad");
       return;
     }
     try {
       const result = await api.allIn(session.sessionId, guesses);
-      setAllInOpen(false);
+      setAllInMode(false);
       setScore(result.score);
       setLives(result.lives);
       if (result.correct) {
@@ -631,6 +693,8 @@ export default function Tabs() {
           for (let i = 0; i < len; i++) m[i] = result.reveal[wi][i];
           return m;
         }));
+        // mark every position green in posFeedback for share
+        setPosFeedback(session.words.map(len => Array(len).fill("green")));
         toast$(`ALL-IN CORRECT  +${result.scoreDelta}pts`, "great");
       } else {
         toast$("ALL-IN BUSTED — GAME OVER", "bad");
@@ -805,12 +869,27 @@ export default function Tabs() {
           <div className={`lb-hint ${active !== null ? "on" : ""}`} aria-live="polite">{hintText}</div>
 
         {casc && <div className="lb-cbar">⚡ Earned reveal — pick any tile in any unsolved word</div>}
+        {allInMode && !casc && (
+          <div className="lb-cbar lb-cbar-allin" role="status" aria-live="polite">
+            ALL IN — type the rest of the phrase · SHOVE to commit · +{fullCount(session.words, locked) * 8} pts if right · 0 lives if wrong
+          </div>
+        )}
 
         <div className="lb-phrase">
-          {session.words.map((wordLen, wi) => {
+          {(() => {
+            // Global next-slot for all-in cursor
+            let allInNext = null;
+            if (allInMode) {
+              for (let wi = 0; wi < session.words.length; wi++) {
+                if (wordSolved[wi]) continue;
+                const ss = openSlots(session.words[wi], locked[wi]);
+                if (typed[wi].length < ss.length) { allInNext = { wi, slotIdx: typed[wi].length }; break; }
+              }
+            }
+            return session.words.map((wordLen, wi) => {
             const lm     = locked[wi];
             const slots  = openSlots(wordLen, lm);
-            const isAct  = active === wi && !wordSolved[wi] && !casc && !allInOpen;
+            const isAct  = !allInMode && active === wi && !wordSolved[wi] && !casc;
             const cascOn = casc && !wordSolved[wi];
             const fbW    = feedback[wi];
             const wagerSet = new Set(wagers[wi]);
@@ -821,21 +900,23 @@ export default function Tabs() {
                 className={[
                   "lb-word",
                   isAct           ? "active"  : "",
+                  allInMode && !wordSolved[wi] ? "allin" : "",
                   wordSolved[wi]  ? "solved"  : "",
                   shaking === wi  ? "shake"   : "",
                   cascOn          ? "casc-on" : "",
                 ].filter(Boolean).join(" ")}
                 onClick={() => {
-                  if (casc) return;
+                  if (casc || allInMode) return;
                   if (!wordSolved[wi]) setActive(wi);
                 }}
               >
                 {Array.from({length: wordLen}).map((_, li) => {
                   const lockedLetter = lm[li];
-                  const isAnchor = session.anchors.some(a => a.wi === wi && a.li === li);
                   const slotIdx  = slots.indexOf(li);
                   const typedLetter = slotIdx >= 0 ? typed[wi][slotIdx] : null;
-                  const isCursor = isAct && slotIdx === typed[wi].length;
+                  const isCursor = allInMode
+                    ? (allInNext?.wi === wi && allInNext?.slotIdx === slotIdx)
+                    : (isAct && slotIdx === typed[wi].length);
                   const fbForTile = fbW?.find(f => f.idx === li);
                   const isCascDrop = cascDrop === `${wi}-${li}`;
                   const isCascPick = casc && lockedLetter === undefined && !wordSolved[wi];
@@ -847,10 +928,9 @@ export default function Tabs() {
                   if (wordSolved[wi]) { cls.push("solved-tile"); display = lockedLetter; }
                   else if (lockedLetter !== undefined) {
                     display = lockedLetter;
-                    if (isAnchor) cls.push("anchor");
-                    else cls.push("locked-green");
+                    cls.push("locked-green");
                   }
-                  else if (typedLetter) { cls.push("typed"); display = typedLetter; }
+                  else if (typedLetter) { cls.push(allInMode ? "typed allin-typed" : "typed"); display = typedLetter; }
                   else { cls.push("empty"); if (isCursor) cls.push("cursor"); }
 
                   if (fbForTile) { cls.push("fb-flip", `fb-${fbForTile.status}`); display = fbForTile.letter; }
@@ -858,8 +938,7 @@ export default function Tabs() {
                   if (isCascPick) cls.push("casc-pick");
                   if (isCascDrop) cls.push("casc-drop");
 
-                  const style = (lockedLetter !== undefined && isAnchor && !wordSolved[wi] && !fbForTile)
-                    ? { background: THEME.tile, color: THEME.letter } : {};
+                  const style = {};
 
                   return (
                     <div
@@ -869,8 +948,8 @@ export default function Tabs() {
                       onClick={(e) => {
                         e.stopPropagation();
                         if (isCascPick) { pickCascade(wi, li); return; }
-                        if (isAct && typedLetter) { toggleWager(wi, slotIdx); return; }
-                        if (!wordSolved[wi] && !casc) setActive(wi);
+                        if ((isAct || allInMode) && typedLetter) { toggleWager(wi, slotIdx); return; }
+                        if (!wordSolved[wi] && !casc && !allInMode) setActive(wi);
                       }}
                     >
                       {display}
@@ -879,7 +958,8 @@ export default function Tabs() {
                 })}
               </div>
             );
-          })}
+          });
+          })()}
         </div>
 
         <div className="lb-bank">
@@ -898,51 +978,33 @@ export default function Tabs() {
         </div>
         </main>
 
-        {phase === "playing" && (
-          <Keyboard
-            keyStatus={keyStatus}
-            onKey={typeLetter}
-            onBackspace={backspace}
-            onEnter={enter}
-            onAllIn={openAllIn}
-            disabled={casc || allInOpen}
-            canSubmit={active !== null && !wordSolved[active] && typed[active]?.length >= openSlots(session.words[active], locked[active]).length}
-            wagerCount={active !== null ? (wagers[active]?.length || 0) : 0}
-          />
-        )}
+        {phase === "playing" && (() => {
+          const allInReady = allInMode && session.words.every((len, wi) => {
+            const need = openSlots(len, locked[wi]).length;
+            return (typed[wi]?.length || 0) >= need;
+          });
+          const wagerCount = allInMode
+            ? wagers.reduce((acc, w) => acc + (w?.length || 0), 0)
+            : (active !== null ? (wagers[active]?.length || 0) : 0);
+          return (
+            <Keyboard
+              keyStatus={keyStatus}
+              onKey={typeLetter}
+              onBackspace={backspace}
+              onEnter={enter}
+              onAllIn={openAllIn}
+              disabled={casc}
+              canSubmit={!allInMode && active !== null && !wordSolved[active] && typed[active]?.length >= openSlots(session.words[active], locked[active]).length}
+              wagerCount={wagerCount}
+              allInMode={allInMode}
+              allInReady={allInReady}
+            />
+          );
+        })()}
 
         {toast && <div key={toast.id} className={`lb-toast ${toast.type}`} role="status" aria-live="polite">{toast.text}</div>}
         {helpOpen && <HelpModal onClose={()=>setHelpOpen(false)} />}
 
-        {allInOpen && (
-          <div className="lb-ov" onClick={() => setAllInOpen(false)}>
-            <div className="lb-card" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="lb-allin-title">
-              <div className="lb-ct" id="lb-allin-title" style={{color:"#FF4D4D"}}>ALL IN</div>
-              <div className="lb-cs">Type the entire phrase. Wrong → game over.</div>
-              <div className="lb-allin-warn">+{fullCount(session.words, locked) * 8} pts if correct · 0 lives if wrong</div>
-              <div className="lb-allin-grid">
-                {session.words.map((len, wi) => (
-                  <input
-                    key={wi}
-                    className="lb-allin-input"
-                    style={{width: `${Math.max(64, len * 22)}px`}}
-                    maxLength={len}
-                    value={allInWords[wi] || ""}
-                    onChange={e => {
-                      const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, len);
-                      setAllInWords(prev => prev.map((s, i) => i !== wi ? s : v));
-                    }}
-                    placeholder={"_".repeat(len)}
-                    aria-label={`Word ${wi + 1} of ${session.words.length}, ${len} letters`}
-                    autoComplete="off" autoCorrect="off" spellCheck={false}
-                  />
-                ))}
-              </div>
-              <button className="lb-btn" style={{background:"#FF4D4D",color:"#1A0000"}} onClick={submitAllIn}>SHOVE IT ALL IN</button>
-              <button className="lb-btn lb-bs" onClick={() => setAllInOpen(false)}>Fold</button>
-            </div>
-          </div>
-        )}
 
         {phase === "won" && reveal && (
           <div className="lb-ov" role="dialog" aria-modal="true" aria-labelledby="lb-won-title">
@@ -955,7 +1017,7 @@ export default function Tabs() {
               <div className="lb-cfl">points</div>
               {stats.streak > 1 && <div style={{fontSize:11,letterSpacing:1.5,color:"#FFD700",marginBottom:14,textTransform:"uppercase"}}>🔥 {stats.streak}-win streak{stats.streak === stats.bestStreak ? " · personal best" : ""}</div>}
               <button className="lb-btn lb-bp" onClick={async () => {
-                const text = buildShareCard({ session, locked, score, won: true });
+                const text = buildShareCard({ session, locked, posFeedback, score, won: true });
                 const r = await copyOrShare(text);
                 setShareLbl(r === "copied" ? "✓ Copied" : r === "shared" ? "✓ Shared" : "Couldn't share");
               }}>{shareLbl || "Share result"}</button>
@@ -975,7 +1037,7 @@ export default function Tabs() {
               <div className="lb-cfl">final points</div>
               <button className="lb-btn lb-bp" onClick={() => start(session.id)}>Try again</button>
               <button className="lb-btn" style={{background:"#1A1815",color:"#E8920A",border:"1px solid #E8920A"}} onClick={async () => {
-                const text = buildShareCard({ session, locked, score, won: false });
+                const text = buildShareCard({ session, locked, posFeedback, score, won: false });
                 const r = await copyOrShare(text);
                 setShareLbl(r === "copied" ? "✓ Copied" : r === "shared" ? "✓ Shared" : "Couldn't share");
               }}>{shareLbl || "Share result"}</button>
@@ -995,26 +1057,34 @@ const KEY_ROWS = [
   ["ENT","Z","X","C","V","B","N","M","BS"],
 ];
 
-function Keyboard({ keyStatus, onKey, onBackspace, onEnter, onAllIn, disabled, canSubmit, wagerCount }) {
+function Keyboard({ keyStatus, onKey, onBackspace, onEnter, onAllIn, disabled, canSubmit, wagerCount, allInMode, allInReady }) {
   const handleClick = (k) => {
     if (disabled) return;
-    if (k === "ENT") { if (canSubmit) onEnter(); return; }
+    if (k === "ENT") {
+      if (allInMode) { if (allInReady) onEnter(); return; }
+      if (canSubmit) onEnter();
+      return;
+    }
     if (k === "BS")  { onBackspace(); return; }
     onKey(k);
   };
 
+  const allInLabel = allInMode ? "FOLD" : "ALL IN";
+  const enterLabel = allInMode ? (allInReady ? "SHOVE" : "ALL IN") : (canSubmit ? "GO" : "ENT");
+  const enterEnabled = allInMode ? allInReady : canSubmit;
+
   return (
-    <div className="lb-kb" role="region" aria-label="Keyboard">
+    <div className={`lb-kb${allInMode ? " allin" : ""}`} role="region" aria-label="Keyboard">
       <div className="lb-kb-actions">
         <button
           type="button"
-          className="lb-kb-allin"
+          className={`lb-kb-allin${allInMode ? " on" : ""}`}
           onClick={onAllIn}
-          disabled={disabled}
-          aria-label="Shove the entire phrase: massive bonus or game over"
-        >ALL IN</button>
+          disabled={disabled && !allInMode}
+          aria-label={allInMode ? "Fold and resume normal play" : "Enter all-in mode: type the rest of the phrase to shove"}
+        >{allInLabel}</button>
         <span className="lb-kb-stake" aria-live="polite">
-          {wagerCount > 0 ? `${wagerCount}× STAKED` : ""}
+          {wagerCount > 0 ? `${wagerCount}× STAKED` : (allInMode ? "TYPE THE REST" : "")}
         </span>
       </div>
       <div className="lb-kb-rows">
@@ -1025,7 +1095,11 @@ function Keyboard({ keyStatus, onKey, onBackspace, onEnter, onAllIn, disabled, c
               const status = !isAction ? keyStatus[k] : null;
               const cls = ["lb-key"];
               if (isAction) cls.push("lb-key-wide");
-              if (k === "ENT") cls.push("lb-key-enter", canSubmit ? "lb-key-go" : "lb-key-dim");
+              if (k === "ENT") {
+                cls.push("lb-key-enter");
+                if (enterEnabled) cls.push(allInMode ? "lb-key-shove" : "lb-key-go");
+                else cls.push("lb-key-dim");
+              }
               if (k === "BS")  cls.push("lb-key-bs");
               if (status === "green")   cls.push("k-green");
               if (status === "present") cls.push("k-present");
@@ -1036,10 +1110,10 @@ function Keyboard({ keyStatus, onKey, onBackspace, onEnter, onAllIn, disabled, c
                   type="button"
                   className={cls.join(" ")}
                   onClick={() => handleClick(k)}
-                  disabled={disabled || (k === "ENT" && !canSubmit)}
-                  aria-label={k === "ENT" ? (canSubmit ? "Submit word" : "Submit word (fill all tiles first)") : k === "BS" ? "Backspace" : `Type ${k}`}
+                  disabled={(disabled && !allInMode) || (k === "ENT" && !enterEnabled)}
+                  aria-label={k === "ENT" ? (allInMode ? (allInReady ? "Shove the phrase" : "Finish typing all tiles to shove") : (canSubmit ? "Submit word" : "Fill all tiles to submit")) : k === "BS" ? "Backspace" : `Type ${k}`}
                 >
-                  {k === "BS" ? "⌫" : k === "ENT" ? (canSubmit ? "GO" : "ENT") : k}
+                  {k === "BS" ? "⌫" : k === "ENT" ? enterLabel : k}
                 </button>
               );
             })}
@@ -1134,7 +1208,6 @@ function AuthModal({ onClose, onAuthed }) {
 function SubmitForm({ onCancel, onSubmitted, toast$ }) {
   const [category, setCategory] = useState("");
   const [phrase,   setPhrase]   = useState("");
-  const [anchors,  setAnchors]  = useState([]); // [{wi,li}]
   const [busy,     setBusy]     = useState(false);
   const [err,      setErr]      = useState(null);
 
@@ -1142,19 +1215,10 @@ function SubmitForm({ onCancel, onSubmitted, toast$ }) {
   const words = cleanPhrase ? cleanPhrase.split(" ") : [];
   const totalLetters = words.reduce((a,w)=>a+w.length,0);
 
-  const toggleAnchor = (wi, li) => {
-    setAnchors(prev => {
-      const exists = prev.some(a => a.wi===wi && a.li===li);
-      if (exists) return prev.filter(a => !(a.wi===wi && a.li===li));
-      if (prev.length >= Math.max(2, words.length)) return prev;
-      return [...prev, { wi, li }];
-    });
-  };
-
   const submit = async () => {
     setBusy(true); setErr(null);
     try {
-      await api.submit({ category: category.trim(), phrase: cleanPhrase, anchors });
+      await api.submit({ category: category.trim(), phrase: cleanPhrase, anchors: [] });
       onSubmitted();
     } catch (e) {
       setErr(String(e.data?.detail || e.message || e));
@@ -1167,14 +1231,14 @@ function SubmitForm({ onCancel, onSubmitted, toast$ }) {
     <div style={{width:"100%",maxWidth:480}}>
       <div className="lb-form">
         <div className="lb-field">
-          <label className="lb-flabel">Category</label>
-          <input className="lb-finput" value={category}
+          <label className="lb-flabel" htmlFor="lb-cat">Category</label>
+          <input id="lb-cat" className="lb-finput" value={category}
             onChange={e=>setCategory(e.target.value)}
             placeholder="e.g. MOVIE QUOTES" maxLength={30} />
         </div>
         <div className="lb-field">
-          <label className="lb-flabel">Phrase</label>
-          <input className="lb-finput" value={phrase}
+          <label className="lb-flabel" htmlFor="lb-phrase">Phrase</label>
+          <input id="lb-phrase" className="lb-finput" value={phrase}
             onChange={e=>setPhrase(e.target.value)}
             autoCapitalize="characters" autoCorrect="off" spellCheck={false}
             placeholder="2–10 words · letters only" />
@@ -1182,23 +1246,17 @@ function SubmitForm({ onCancel, onSubmitted, toast$ }) {
         </div>
         {words.length > 0 && (
           <div className="lb-field">
-            <label className="lb-flabel">Tap up to {Math.max(2, words.length)} tiles to mark as free anchors</label>
-            <div className="lb-preview">
+            <label className="lb-flabel">Preview</label>
+            <div className="lb-preview" aria-hidden="true">
               {words.map((w,wi) => (
                 <div className="lb-pword" key={wi}>
-                  {w.split("").map((ch,li) => {
-                    const isAnchor = anchors.some(a=>a.wi===wi&&a.li===li);
-                    return (
-                      <div key={li}
-                        className={`lb-ptile${isAnchor?" anchor":""}`}
-                        onClick={()=>toggleAnchor(wi,li)}>
-                        {isAnchor ? ch : ""}
-                      </div>
-                    );
-                  })}
+                  {w.split("").map((_,li) => (
+                    <div key={li} className="lb-ptile" />
+                  ))}
                 </div>
               ))}
             </div>
+            <span className="lb-fhint">No starting hints. Players solve it cold.</span>
           </div>
         )}
         {err && <div className="lb-ferror">{err}</div>}

@@ -2,16 +2,16 @@
    here (server-only) and never imported by anything in /src. */
 
 const PUZZLES_DEV = [
-  { id:1,  category:"MOVIE QUOTES",    phrase:"MAY THE FORCE BE WITH YOU", anchors:[{wi:0,li:0},{wi:2,li:2}], submittedBy:"house" },
-  { id:2,  category:"FAMOUS SPEECHES", phrase:"I HAVE A DREAM",            anchors:[{wi:1,li:0},{wi:3,li:0}], submittedBy:"house" },
-  { id:3,  category:"BEATLES SONGS",   phrase:"HERE COMES THE SUN",        anchors:[{wi:0,li:0},{wi:3,li:1}], submittedBy:"house" },
-  { id:4,  category:"SHAKESPEARE",     phrase:"TO BE OR NOT TO BE",        anchors:[{wi:1,li:0},{wi:5,li:0}], submittedBy:"house" },
-  { id:5,  category:"PROVERBS",        phrase:"PRACTICE MAKES PERFECT",    anchors:[{wi:0,li:0},{wi:1,li:0}], submittedBy:"house" },
-  { id:6,  category:"FILM TITLES",     phrase:"GONE WITH THE WIND",        anchors:[{wi:0,li:0},{wi:3,li:0}], submittedBy:"house" },
-  { id:7,  category:"ROCK ANTHEMS",    phrase:"BORN IN THE USA",           anchors:[{wi:0,li:0},{wi:3,li:0}], submittedBy:"house" },
-  { id:8,  category:"MOTIVATIONAL",    phrase:"NEVER GIVE UP",             anchors:[{wi:0,li:0},{wi:2,li:0}], submittedBy:"house" },
-  { id:9,  category:"FAIRY TALES",     phrase:"ONCE UPON A TIME",          anchors:[{wi:0,li:0},{wi:3,li:0}], submittedBy:"house" },
-  { id:10, category:"CARPE DIEM",      phrase:"SEIZE THE DAY",             anchors:[{wi:0,li:0},{wi:2,li:0}], submittedBy:"house" },
+  { id:1,  category:"MOVIE QUOTES",    phrase:"MAY THE FORCE BE WITH YOU", anchors:[], submittedBy:"house" },
+  { id:2,  category:"FAMOUS SPEECHES", phrase:"I HAVE A DREAM",            anchors:[], submittedBy:"house" },
+  { id:3,  category:"BEATLES SONGS",   phrase:"HERE COMES THE SUN",        anchors:[], submittedBy:"house" },
+  { id:4,  category:"SHAKESPEARE",     phrase:"TO BE OR NOT TO BE",        anchors:[], submittedBy:"house" },
+  { id:5,  category:"PROVERBS",        phrase:"PRACTICE MAKES PERFECT",    anchors:[], submittedBy:"house" },
+  { id:6,  category:"FILM TITLES",     phrase:"GONE WITH THE WIND",        anchors:[], submittedBy:"house" },
+  { id:7,  category:"ROCK ANTHEMS",    phrase:"BORN IN THE USA",           anchors:[], submittedBy:"house" },
+  { id:8,  category:"MOTIVATIONAL",    phrase:"NEVER GIVE UP",             anchors:[], submittedBy:"house" },
+  { id:9,  category:"FAIRY TALES",     phrase:"ONCE UPON A TIME",          anchors:[], submittedBy:"house" },
+  { id:10, category:"CARPE DIEM",      phrase:"SEIZE THE DAY",             anchors:[], submittedBy:"house" },
 ];
 
 export function memoryPuzzles() {

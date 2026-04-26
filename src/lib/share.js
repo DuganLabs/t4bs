@@ -1,22 +1,30 @@
-/* Build a wordle-style emoji grid summarizing the round, suitable for Twitter/etc. */
+/* Build a wordle-style emoji grid summarizing the round.
 
-export function buildShareCard({ session, locked, score, won }) {
+   Per-tile glyph reflects the player's hard-won knowledge:
+     🟩 = locked correctly (or anchor)
+     🟨 = ever guessed yellow at this position (in phrase, wrong spot)
+     ⬛ = ever guessed absent at this position
+     ⬜ = never tested
+*/
+
+const TILE = { green: "🟩", yellow: "🟨", absent: "⬛" };
+
+export function buildShareCard({ session, locked, posFeedback, score, won }) {
   const lines = session.words.map((len, wi) => {
     let row = "";
     for (let li = 0; li < len; li++) {
-      const isAnchor = session.anchors.some(a => a.wi === wi && a.li === li);
       const isLocked = locked[wi]?.[li] !== undefined;
-      if (isAnchor) row += "⬜";
-      else if (isLocked && won) row += "🟩";
-      else if (isLocked) row += "🟨";
-      else row += "⬛";
+      const fb = posFeedback?.[wi]?.[li];
+      if (isLocked || fb === "green") row += TILE.green;
+      else if (fb === "yellow")       row += TILE.yellow;
+      else if (fb === "absent")       row += TILE.absent;
+      else                            row += "⬜";
     }
     return row;
   }).join("\n");
 
-  const header = `T4BS · ${session.category}`;
-  const verdict = won ? `Solved · ${score} pts` : `Busted · ${score} pts`;
-  return `${header}\n${verdict}\n\n${lines}\n\nt4bs.com`;
+  const verdict = won ? "Solved" : "Busted";
+  return `T4BS · ${session.category} · ${score}pts · ${verdict}\n\n${lines}\n\nt4bs.com`;
 }
 
 export async function copyOrShare(text) {
