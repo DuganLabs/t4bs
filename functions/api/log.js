@@ -22,7 +22,6 @@ export const onRequestPost = async ({ request }) => {
     country: cf.country,
     ts: Date.now(),
   };
-  // eslint-disable-next-line no-console
   console.error("client-error", JSON.stringify(entry));
   return json({ logged: true });
 };

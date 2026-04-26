@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@basenative/tsconfig/worker",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": ["functions/**/*"],
+  "exclude": ["node_modules", "dist", ".wrangler"]
+}

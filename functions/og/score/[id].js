@@ -7,7 +7,7 @@ import { renderPng, scoreCardScene, pngHeaders } from "../../_shared/og.js";
 // any cached PNG using the old green/yellow tile palette.
 const KV_PREFIX = "og:score:v2:";
 
-export const onRequestGet = async ({ request, env, params }) => {
+export const onRequestGet = async ({ request: _request, env, params }) => {
   const idParam = String(params.id || "");
   // Strip optional .png so /og/score/abc.png and /og/score/abc both work.
   const id = idParam.replace(/\.png$/i, "");

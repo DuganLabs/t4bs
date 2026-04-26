@@ -18,7 +18,7 @@ const esc = (s) => String(s)
   .replace(/"/g, "&quot;")
   .replace(/'/g, "&#39;");
 
-export const onRequestGet = async ({ request, env, params }) => {
+export const onRequestGet = async ({ request: _request, env, params }) => {
   const id = String(params.id || "");
   if (!/^[a-z0-9]{4,16}$/i.test(id)) return new Response("bad id", { status: 400 });
 
@@ -26,7 +26,6 @@ export const onRequestGet = async ({ request, env, params }) => {
   if (!card) return new Response("not found", { status: 404 });
 
   const origin = env.PUBLIC_ORIGIN || env.RP_ORIGIN || "https://t4bs.com";
-  const verdict = card.won ? "Solved" : "Busted";
   const title = `Tabs — Try this ${card.category} puzzle`;
   const description = card.won
     ? `Someone just solved "${card.category}" for ${card.score} points on Tabs. Think you can match it?`
