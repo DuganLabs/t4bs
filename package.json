@@ -17,6 +17,9 @@
     "db:migrate:remote": "for f in migrations/*.sql; do wrangler d1 execute tabs-db --remote --file=\"$f\"; done"
   },
   "dependencies": {
+    "@basenative/og-image": "^0.2.0",
+    "@basenative/persist": "^1.0.0",
+    "@basenative/share": "^1.0.0",
     "@resvg/resvg-wasm": "^2.6.2",
     "@simplewebauthn/browser": "^11.0.0",
     "@simplewebauthn/server": "^11.0.0",
@@ -25,8 +28,8 @@
     "satori": "^0.10.14"
   },
   "devDependencies": {
-    "@basenative/eslint-config": "file:../basenative/packages/eslint-config",
-    "@basenative/tsconfig": "file:../basenative/packages/tsconfig",
+    "@basenative/eslint-config": "^0.2.0",
+    "@basenative/tsconfig": "^0.2.0",
     "@cloudflare/workers-types": "^4.20240821.1",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
