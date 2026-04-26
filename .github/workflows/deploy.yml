@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
   deployments: write
+  packages: read   # to install @basenative/* from GitHub Packages
 
 jobs:
   deploy:
@@ -61,7 +62,12 @@ jobs:
       - uses: actions/setup-node@v6
         with: { node-version: 20, cache: npm }
       - uses: dopplerhq/cli-action@v4
-      - run: npm ci
+      - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+          npm ci
       - name: Apply D1 schema (idempotent)
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
