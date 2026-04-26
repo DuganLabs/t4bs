@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { api } from "./lib/api.js";
 import { isPasskeySupported, registerPasskey, loginPasskey, devLogin } from "./lib/auth.js";
 import { confetti } from "./lib/confetti.js";
@@ -57,16 +57,22 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
 .lb-life.dead{background:#1E1C18;border:1px solid #2E2C28;transform:scale(.75);}
 
 .lb-uctrl{display:flex;align-items:center;gap:6px;}
-.lb-ubtn{
+/* All header buttons + the user-handle chip share these metrics so the row
+   stays even-height regardless of which buttons are visible. */
+.lb-ubtn,.lb-uhandle{
+  display:inline-flex;align-items:center;justify-content:center;
   background:transparent;border:1px solid #2E2C28;color:#9A9590;
   font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:1.5px;
-  padding:7px 11px;border-radius:6px;cursor:pointer;min-height:34px;
-  transition:all .15s;
+  padding:0 11px;border-radius:6px;height:34px;min-width:42px;
+  transition:border-color .15s,color .15s,background .15s;
 }
+.lb-ubtn{cursor:pointer;}
 .lb-ubtn:hover{border-color:#E8920A;color:#E8920A;}
 .lb-ubtn.primary{background:#E8920A;color:#1A0A00;border-color:#E8920A;}
 .lb-ubtn.primary:hover{background:#FFA830;}
-.lb-uhandle{font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:#E8920A;padding:4px 8px;border:1px solid rgba(232,146,10,.4);border-radius:5px;}
+/* The handle chip is non-interactive but visually consistent with buttons.
+   Subtle accent ring marks "you". */
+.lb-uhandle{color:#E8920A;border-color:rgba(232,146,10,.4);font-size:12px;cursor:default;}
 
 /* ── META ── */
 .lb-num{font-size:10px;text-transform:uppercase;letter-spacing:2.5px;color:#7A7570;margin-bottom:10px;width:100%;max-width:540px;text-align:center;}
@@ -279,16 +285,19 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
 .lb-fhint{font-size:10px;color:#A09B95;letter-spacing:.5px;}
 .lb-ferror{font-size:11px;color:#FF6E6E;letter-spacing:.5px;background:rgba(255,77,77,.08);padding:8px 10px;border-radius:5px;border:1px solid rgba(255,77,77,.3);}
 
-/* ── PHRASE PREVIEW (in submit / moderate) ── */
-.lb-preview{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 16px;margin:12px 0;padding:14px 8px;background:#100F0D;border-radius:8px;border:1px solid #1F1C18;}
+/* ── PHRASE PREVIEW (in submit / moderate)
+   The preview block always renders at a fixed min-height so typing a phrase
+   doesn't push the submit button. Empty state shows a hint string instead
+   of tiles. */
+.lb-preview{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px 16px;margin:12px 0;padding:14px 8px;background:#100F0D;border-radius:8px;border:1px solid #1F1C18;min-height:74px;}
+.lb-preview.empty{color:#5A554F;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;}
 .lb-pword{display:flex;gap:3px;}
 .lb-ptile{
   width:30px;height:34px;border-radius:4px;display:flex;align-items:center;justify-content:center;
   font-family:'Bebas Neue',sans-serif;font-size:18px;
-  background:#1E1C18;border:1px solid #2A2724;color:#F0EDE4;cursor:pointer;
+  background:#1E1C18;border:1px solid #2A2724;color:#F0EDE4;cursor:default;
   transition:all .12s;
 }
-.lb-ptile{cursor:default;}
 
 /* ── MODERATION QUEUE ── */
 .lb-mod-list{width:100%;max-width:540px;display:flex;flex-direction:column;gap:12px;}
@@ -393,6 +402,27 @@ export default function Tabs() {
 
   const iRefs = useRef([]);
   const tRef  = useRef(null);
+
+  /* Lobby is fetched flat ({id, category, submittedBy}). Group by category
+     so multiple submissions for the same subject collapse into one card —
+     tap picks one at random. Stable order: alphabetical by category. */
+  const lobbyGroups = useMemo(() => {
+    if (!lobby) return null;
+    const map = new Map();
+    for (const p of lobby) {
+      const key = p.category;
+      if (!map.has(key)) map.set(key, { category: p.category, puzzles: [] });
+      map.get(key).puzzles.push(p);
+    }
+    return [...map.values()].sort((a, b) => a.category.localeCompare(b.category));
+  }, [lobby]);
+
+  /* Existing categories list — feeds the submit form's combobox so users
+     can add to a known category instead of risking duplicates. */
+  const existingCategories = useMemo(
+    () => lobbyGroups ? lobbyGroups.map(g => g.category) : [],
+    [lobbyGroups]
+  );
 
   /* ── lobby + me + resume ── */
   useEffect(() => {
@@ -812,20 +842,29 @@ export default function Tabs() {
             )}
             {error && <div className="lb-cred" style={{color:"#FF6E6E"}} role="alert">error: {error}</div>}
             <ul className="lb-lobby" aria-label="Available puzzles">
-              {lobby
-                ? lobby.map(p => (
-                    <li key={p.id}>
-                      <button
-                        type="button"
-                        className="lb-lobby-item"
-                        onClick={() => start(p.id)}
-                        aria-label={`Play ${p.category}, submitted by ${p.submittedBy}`}
-                      >
-                        <span className="lb-lobby-cat">{p.category}</span>
-                        <span className="lb-lobby-by">by {p.submittedBy}</span>
-                      </button>
-                    </li>
-                  ))
+              {lobbyGroups
+                ? lobbyGroups.map(g => {
+                    const credit = g.puzzles.length === 1
+                      ? `by ${g.puzzles[0].submittedBy}`
+                      : `${g.puzzles.length} puzzles`;
+                    const pickRandom = () => {
+                      const pick = g.puzzles[Math.floor(Math.random() * g.puzzles.length)];
+                      start(pick.id);
+                    };
+                    return (
+                      <li key={g.category}>
+                        <button
+                          type="button"
+                          className="lb-lobby-item"
+                          onClick={pickRandom}
+                          aria-label={`Play ${g.category} — ${credit}`}
+                        >
+                          <span className="lb-lobby-cat">{g.category}</span>
+                          <span className="lb-lobby-by">{credit}</span>
+                        </button>
+                      </li>
+                    );
+                  })
                 : Array.from({length: 6}).map((_, i) => (
                     <li key={i}><div className="lb-lobby-skel" aria-hidden="true"/></li>
                   ))}
@@ -856,6 +895,7 @@ export default function Tabs() {
               onCancel={goLobby}
               onSubmitted={() => { toast$("SUBMITTED — pending review", "great"); goLobby(); }}
               toast$={toast$}
+              existingCategories={existingCategories}
             />
           </main>
           {toast && <div key={toast.id} className={`lb-toast ${toast.type}`} role="status" aria-live="polite">{toast.text}</div>}
@@ -1263,7 +1303,7 @@ function AuthModal({ onClose, onAuthed }) {
 }
 
 /* ─── SUBMIT FORM ───────────────────────────────────────────── */
-function SubmitForm({ onCancel, onSubmitted, toast$ }) {
+function SubmitForm({ onCancel, onSubmitted, toast$, existingCategories = [] }) {
   const [category, setCategory] = useState("");
   const [phrase,   setPhrase]   = useState("");
   const [busy,     setBusy]     = useState(false);
@@ -1290,9 +1330,25 @@ function SubmitForm({ onCancel, onSubmitted, toast$ }) {
       <div className="lb-form">
         <div className="lb-field">
           <label className="lb-flabel" htmlFor="lb-cat">Category</label>
-          <input id="lb-cat" className="lb-finput" value={category}
-            onChange={e=>setCategory(e.target.value)}
-            placeholder="e.g. MOVIE QUOTES" maxLength={30} />
+          <input
+            id="lb-cat"
+            className="lb-finput"
+            value={category}
+            onChange={e=>setCategory(e.target.value.toUpperCase())}
+            placeholder="Pick or add a category"
+            maxLength={30}
+            list="lb-cat-list"
+            autoComplete="off"
+            autoCapitalize="characters"
+          />
+          <datalist id="lb-cat-list">
+            {existingCategories.map(c => <option key={c} value={c} />)}
+          </datalist>
+          <span className="lb-fhint">
+            {existingCategories.length > 0
+              ? `Tap to pick from ${existingCategories.length} existing categories, or type a new one.`
+              : "Type a category name. New categories show up here once approved."}
+          </span>
         </div>
         <div className="lb-field">
           <label className="lb-flabel" htmlFor="lb-phrase">Phrase</label>
@@ -1302,21 +1358,21 @@ function SubmitForm({ onCancel, onSubmitted, toast$ }) {
             placeholder="2–10 words · letters only" />
           <span className="lb-fhint">{words.length} word{words.length===1?"":"s"} · {totalLetters} letters · max 36</span>
         </div>
-        {words.length > 0 && (
-          <div className="lb-field">
-            <label className="lb-flabel">Preview</label>
-            <div className="lb-preview" aria-hidden="true">
-              {words.map((w,wi) => (
-                <div className="lb-pword" key={wi}>
-                  {w.split("").map((_,li) => (
-                    <div key={li} className="lb-ptile" />
-                  ))}
-                </div>
-              ))}
-            </div>
-            <span className="lb-fhint">No starting hints. Players solve it cold.</span>
+        <div className="lb-field">
+          <label className="lb-flabel">Preview</label>
+          <div className={`lb-preview${words.length === 0 ? " empty" : ""}`} aria-hidden="true">
+            {words.length === 0
+              ? "Tiles preview as you type"
+              : words.map((w,wi) => (
+                  <div className="lb-pword" key={wi}>
+                    {w.split("").map((_,li) => (
+                      <div key={li} className="lb-ptile" />
+                    ))}
+                  </div>
+                ))}
           </div>
-        )}
+          <span className="lb-fhint">{words.length === 0 ? "Type a phrase above to see how it'll render." : "No starting hints. Players solve it cold."}</span>
+        </div>
         {err && <div className="lb-ferror">{err}</div>}
       </div>
       <button className="lb-btn lb-bp" disabled={busy || !category || !phrase} onClick={submit}>

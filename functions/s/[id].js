@@ -27,8 +27,8 @@ export const onRequestGet = async ({ request, env, params }) => {
 
   const origin = env.PUBLIC_ORIGIN || env.RP_ORIGIN || "https://t4bs.com";
   const verdict = card.won ? "Solved" : "Busted";
-  const title = `T4BS — ${verdict} ${card.category} for ${card.score}pts`;
-  const description = `${verdict} a t4bs round on "${card.category}" for ${card.score} points. Five-letter battle of bullshit.`;
+  const title = `Tabs — ${verdict} ${card.category} for ${card.score}pts`;
+  const description = `${verdict} a Tabs round on "${card.category}" for ${card.score} points. Pick a category. Solve the phrase.`;
   const ogImage = `${origin}/og/score/${id}.png`;
   const shareUrl = `${origin}/s/${id}`;
 
@@ -76,7 +76,7 @@ export const onRequestGet = async ({ request, env, params }) => {
   <div class="wrap">
     <h1>T4BS</h1>
     <p>${esc(verdict)} ${esc(card.category)} for ${card.score}pts</p>
-    <p><a href="/">Play t4bs</a></p>
+    <p><a href="/">Play Tabs</a></p>
   </div>
 </body>
 </html>`;

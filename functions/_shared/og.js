@@ -209,7 +209,7 @@ export function defaultCardScene() {
       box(
         { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: "auto" },
         [
-          txt({ fontSize: 32, fontWeight: 600, color: COLORS.muted }, "Five-letter battle of bullshit"),
+          txt({ fontSize: 32, fontWeight: 600, color: COLORS.muted }, "Pick a category. Solve the phrase."),
           txt({ fontSize: 32, fontWeight: 700, color: COLORS.accent }, "t4bs.com"),
         ]
       ),

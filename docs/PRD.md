@@ -8,12 +8,14 @@
 
 ## 1. Overview
 
-**T4BS** is a five-letter battle of bullshit. The player gets a single category, a hidden multi-word phrase, and four lives. They type letters into the tiles, *stake* the ones they're sure about (2× wager), and gamble on a final ALL IN guess for the kill. Every guess is server-authoritative — the answer never crosses the wire until the round is over.
+**Tabs** (visual mark `T4BS`, secret meaning *Time For BS*) is a quick category puzzle. The player gets a single category, a hidden multi-word phrase, and four lives. They type letters into the tiles, *stake* the ones they're sure about (2× wager), and gamble on a final ALL IN guess for the kill. Every guess is server-authoritative — the answer never crosses the wire until the round is over.
 
-The game is the public flagship for **BaseNative** (DuganLabs's open-source shared runtime + abstractions library). When BaseNative ships a new primitive — auth, OG image rendering, virtual keyboard, admin tooling — t4bs is where it gets shown off in production.
+The game is the public flagship for **BaseNative** (DuganLabs's open-source shared runtime + abstractions library). When BaseNative ships a new primitive — auth, OG image rendering, virtual keyboard, admin tooling — Tabs is where it gets shown off in production.
+
+Made by **The Synonym Toast Bunch** (the group; the game's domain is `t4bs.com` because Synonym Toast Bunch is too long).
 
 ### One-line pitch
-"Wordle with stakes — bluff letters you don't know, double down on the ones you do."
+"Pick one, solve it. Stake what you know, gamble on what you don't."
 
 ---
 
