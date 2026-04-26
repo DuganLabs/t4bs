@@ -788,9 +788,10 @@ export default function Tabs() {
     <header className="lb-hd">
       <div className="lb-logo" onClick={goLobby}>
         <div className="lb-logo-box">
-          <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-            <circle cx="7" cy="6" r="3.5" fill="#1A0A00"/>
-            <rect x="5.5" y="10" width="3" height="2" rx=".5" fill="#1A0A00"/>
+          {/* Mini Tabs mark — T + accent dot (matches favicon). */}
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path d="M2.5 3.5h7M6 3.5v8" stroke="#1A0A00" strokeWidth="1.6" strokeLinecap="round"/>
+            <circle cx="10.5" cy="10" r="1.4" fill="#1A0A00"/>
           </svg>
         </div>
         T4BS
