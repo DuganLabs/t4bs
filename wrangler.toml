@@ -11,10 +11,20 @@ binding = "DB"
 database_name = "tabs-db"
 database_id = "390583c4-e2b5-434b-8939-6f69d842b1af"
 
+# KV cache for rendered OG images.
+# Create once with: wrangler kv:namespace create OG_CACHE
+# Then paste the namespace id below.
+[[kv_namespaces]]
+binding = "OG_CACHE"
+id = "2ff81a1e263a42d69cfa92584eedfa65"
+
 # Public env vars (non-secret) — secrets live in Pages env or Doppler.
+# ADMIN_HANDLES seeds the admin role at login: any handle in this list whose
+# DB role is below 'admin' is upgraded on successful auth. Keep it minimal.
 [vars]
 RP_NAME = "TABS"
 RP_ID = "t4bs.com"
 RP_ORIGIN = "https://t4bs.com"
-ADMIN_HANDLES = "warren"
+PUBLIC_ORIGIN = "https://t4bs.com"
+ADMIN_HANDLES = "wmd"
 SESSION_TTL_DAYS = "30"

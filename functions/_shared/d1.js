@@ -73,14 +73,61 @@ export function d1Submissions(DB) {
 export function d1Users(DB) {
   return {
     async getByHandle(handle) {
-      return await DB.prepare("SELECT id, handle FROM users WHERE handle=?1").bind(handle).first();
+      return await DB.prepare(
+        "SELECT id, handle, role FROM users WHERE handle=?1"
+      ).bind(handle).first();
     },
     async getById(id) {
-      return await DB.prepare("SELECT id, handle FROM users WHERE id=?1").bind(id).first();
+      return await DB.prepare(
+        "SELECT id, handle, role FROM users WHERE id=?1"
+      ).bind(id).first();
     },
     async create({ id, handle }) {
       await DB.prepare("INSERT INTO users (id, handle) VALUES (?1, ?2)").bind(id, handle).run();
-      return { id, handle };
+      return { id, handle, role: "user" };
+    },
+    async setRole(id, role, changedBy) {
+      await DB.prepare(
+        "UPDATE users SET role=?1, role_changed_at=unixepoch(), role_changed_by=?2 WHERE id=?3"
+      ).bind(role, changedBy || null, id).run();
+    },
+    async search(q, limit = 25) {
+      const r = await DB.prepare(
+        `SELECT id, handle, role FROM users
+           WHERE handle LIKE ?1 COLLATE NOCASE
+           ORDER BY handle COLLATE NOCASE
+           LIMIT ?2`
+      ).bind(`%${q}%`, limit).all();
+      return r.results || [];
+    },
+    async listByRoles(roles, limit = 100) {
+      const placeholders = roles.map((_, i) => `?${i + 1}`).join(",");
+      const r = await DB.prepare(
+        `SELECT id, handle, role, role_changed_at, role_changed_by
+           FROM users WHERE role IN (${placeholders})
+           ORDER BY handle COLLATE NOCASE LIMIT ?${roles.length + 1}`
+      ).bind(...roles, limit).all();
+      return r.results || [];
+    },
+  };
+}
+
+export function d1ShareCards(DB) {
+  return {
+    async create({ id, sessionId, userId, category, score, won, grid }) {
+      await DB.prepare(
+        `INSERT INTO share_cards (id, session_id, user_id, category, score, won, grid)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`
+      ).bind(id, sessionId || null, userId || null, category, score, won ? 1 : 0, grid).run();
+      return { id };
+    },
+    async get(id) {
+      const r = await DB.prepare(
+        `SELECT id, session_id AS sessionId, user_id AS userId, category, score, won, grid, created_at AS createdAt
+           FROM share_cards WHERE id=?1`
+      ).bind(id).first();
+      if (!r) return null;
+      return { ...r, won: !!r.won };
     },
   };
 }
@@ -141,13 +188,13 @@ export function d1UserSessions(DB) {
     },
     async getUser(token) {
       const r = await DB.prepare(
-        `SELECT u.id AS id, u.handle AS handle, s.expires_at AS expiresAt
+        `SELECT u.id AS id, u.handle AS handle, u.role AS role, s.expires_at AS expiresAt
          FROM user_sessions s JOIN users u ON u.id = s.user_id
          WHERE s.id = ?1`
       ).bind(token).first();
       if (!r) return null;
       if (r.expiresAt < Math.floor(Date.now()/1000)) return null;
-      return { id: r.id, handle: r.handle };
+      return { id: r.id, handle: r.handle, role: r.role || "user" };
     },
     async destroy(token) {
       await DB.prepare("DELETE FROM user_sessions WHERE id=?1").bind(token).run();

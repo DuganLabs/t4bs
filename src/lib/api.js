@@ -38,4 +38,11 @@ export const api = {
   submit:       (puzzle)                           => post("/submit", puzzle),
   modPending:   ()                                 => get("/moderate/pending"),
   modDecide:    (id, status)                       => post("/moderate/decide", { id, status }),
+
+  /* admin */
+  modUsers:     (q = "")                           => get(`/moderate/users${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  modPromote:   (userId, role)                     => post("/moderate/promote", { userId, role }),
+
+  /* share cards */
+  mintShareCard: (body)                            => post("/share-cards", body),
 };

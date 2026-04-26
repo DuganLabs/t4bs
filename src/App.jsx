@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "./lib/api.js";
 import { isPasskeySupported, registerPasskey, loginPasskey, devLogin } from "./lib/auth.js";
 import { confetti } from "./lib/confetti.js";
-import { buildShareCard, copyOrShare } from "./lib/share.js";
+import { buildGrid, buildShareText, mintShareUrl, copyOrShare } from "./lib/share.js";
 import { loadStats, recordResult, saveSession, loadSession, clearSession } from "./lib/persist.js";
 
 /* ──────────────────────────────────────────────────────────────
@@ -305,6 +305,36 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
 .lb-mod-btn.ok{background:#4EAF7C;color:#0A1F12;}
 .lb-mod-btn.no{background:#2C2925;color:#FF6E6E;border:1px solid rgba(255,77,77,.3);}
 
+/* ── ADMIN: MODS ── */
+.lb-adm{width:100%;max-width:540px;display:flex;flex-direction:column;gap:14px;}
+.lb-adm-search{
+  width:100%;padding:12px 14px;border-radius:8px;background:#100F0D;color:#F0EDE4;
+  border:1.5px solid #2A2724;font-size:15px;letter-spacing:.5px;outline:none;min-height:44px;
+}
+.lb-adm-search:focus{border-color:#E8920A;box-shadow:0 0 0 3px rgba(232,146,10,.15);}
+.lb-adm-section{font-size:11px;letter-spacing:1.5px;color:#988570;text-transform:uppercase;margin-top:6px;}
+.lb-adm-row{
+  display:flex;align-items:center;gap:10px;padding:10px 12px;
+  background:#161412;border:1.5px solid #222;border-radius:8px;min-height:52px;
+}
+.lb-adm-handle{flex:1;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:1.5px;color:#F0EDE4;}
+.lb-adm-role{
+  font-size:10px;letter-spacing:1.2px;text-transform:uppercase;padding:3px 8px;border-radius:999px;
+  background:#1E1C18;color:#988570;border:1px solid #2A2724;
+}
+.lb-adm-role.admin{background:rgba(232,146,10,.12);color:#E8920A;border-color:rgba(232,146,10,.4);}
+.lb-adm-role.moderator{background:rgba(78,175,124,.12);color:#4EAF7C;border-color:rgba(78,175,124,.4);}
+.lb-adm-actions{display:flex;gap:6px;flex-wrap:wrap;}
+.lb-adm-btn{
+  border:none;border-radius:6px;padding:7px 10px;cursor:pointer;
+  font-family:'Bebas Neue',sans-serif;font-size:11px;letter-spacing:1.2px;min-height:32px;
+  background:#1E1C18;color:#988570;border:1px solid #2A2724;
+}
+.lb-adm-btn:hover{color:#F0EDE4;border-color:#E8920A;}
+.lb-adm-btn.danger:hover{color:#FF6E6E;border-color:#FF6E6E;}
+.lb-adm-btn.primary{background:#E8920A;color:#0A0907;border:none;}
+.lb-adm-btn:disabled{opacity:.45;cursor:default;}
+
 /* ── TABS (auth modal segmented control) ── */
 .lb-tabs{display:flex;gap:6px;margin-bottom:16px;background:#100F0D;padding:4px;border-radius:8px;}
 .lb-tabs button{
@@ -327,8 +357,8 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
 /* ─── COMPONENT ─────────────────────────────────────────────── */
 export default function Tabs() {
   // App-level: view + auth + lobby
-  const [view,    setView]    = useState("lobby");   // lobby | playing | submit | moderate
-  const [user,    setUser]    = useState(null);      // { handle, isAdmin } | null
+  const [view,    setView]    = useState("lobby");   // lobby | playing | submit | moderate | admin
+  const [user,    setUser]    = useState(null);      // { handle, role, isAdmin, isModerator } | null
   const [authOpen,setAuthOpen]= useState(false);
   const [lobby,   setLobby]   = useState(null);
   const [error,   setError]   = useState(null);
@@ -751,7 +781,8 @@ export default function Tabs() {
             {user
               ? <>
                   <span className="lb-uhandle">{user.handle}</span>
-                  {user.isAdmin && <button className="lb-ubtn" onClick={()=>setView("moderate")}>MOD</button>}
+                  {(user.isModerator || user.isAdmin) && <button className="lb-ubtn" onClick={()=>setView("moderate")}>MOD</button>}
+                  {user.isAdmin && <button className="lb-ubtn" onClick={()=>setView("admin")}>ADM</button>}
                   <button className="lb-ubtn" onClick={onLogout}>OUT</button>
                 </>
               : <button className="lb-ubtn primary" onClick={()=>setAuthOpen(true)}>LOG IN</button>}
@@ -846,6 +877,27 @@ export default function Tabs() {
             <div className="lb-sticky" style={{maxWidth:380}}>Moderation queue</div>
             <div className="lb-tagline">Approve or reject pending phrases</div>
             <ModerateList toast$={toast$} onChange={refreshLobby} />
+            <button className="lb-btn lb-bs" style={{maxWidth:300,marginTop:14}} onClick={goLobby}>← Back</button>
+          </main>
+          {toast && <div key={toast.id} className={`lb-toast ${toast.type}`} role="status" aria-live="polite">{toast.text}</div>}
+          {helpOpen && <HelpModal onClose={()=>setHelpOpen(false)} />}
+        </div>
+      </>
+    );
+  }
+
+  /* ─── ADMIN (mod management) ─── */
+  if (view === "admin") {
+    return (
+      <>
+        <style>{CSS}</style>
+        <div className="lb">
+          <Header />
+          <main aria-labelledby="lb-page-title">
+            <h1 id="lb-page-title" className="sr-only">Moderator administration</h1>
+            <div className="lb-sticky" style={{maxWidth:380}}>Moderators</div>
+            <div className="lb-tagline">Promote or demote · admins only</div>
+            <AdminMods toast$={toast$} currentHandle={user?.handle} />
             <button className="lb-btn lb-bs" style={{maxWidth:300,marginTop:14}} onClick={goLobby}>← Back</button>
           </main>
           {toast && <div key={toast.id} className={`lb-toast ${toast.type}`} role="status" aria-live="polite">{toast.text}</div>}
@@ -1017,8 +1069,11 @@ export default function Tabs() {
               <div className="lb-cfl">points</div>
               {stats.streak > 1 && <div style={{fontSize:11,letterSpacing:1.5,color:"#FFD700",marginBottom:14,textTransform:"uppercase"}}>🔥 {stats.streak}-win streak{stats.streak === stats.bestStreak ? " · personal best" : ""}</div>}
               <button className="lb-btn lb-bp" onClick={async () => {
-                const text = buildShareCard({ session, locked, posFeedback, score, won: true });
-                const r = await copyOrShare(text);
+                setShareLbl("…");
+                const grid = buildGrid({ session, locked, posFeedback });
+                const url  = await mintShareUrl({ session, score, won: true, grid });
+                const text = buildShareText({ session, score, won: true, grid, url });
+                const r = await copyOrShare({ text, url });
                 setShareLbl(r === "copied" ? "✓ Copied" : r === "shared" ? "✓ Shared" : "Couldn't share");
               }}>{shareLbl || "Share result"}</button>
               <button className="lb-btn lb-bs" onClick={goLobby}>Pick another</button>
@@ -1037,8 +1092,11 @@ export default function Tabs() {
               <div className="lb-cfl">final points</div>
               <button className="lb-btn lb-bp" onClick={() => start(session.id)}>Try again</button>
               <button className="lb-btn" style={{background:"#1A1815",color:"#E8920A",border:"1px solid #E8920A"}} onClick={async () => {
-                const text = buildShareCard({ session, locked, posFeedback, score, won: false });
-                const r = await copyOrShare(text);
+                setShareLbl("…");
+                const grid = buildGrid({ session, locked, posFeedback });
+                const url  = await mintShareUrl({ session, score, won: false, grid });
+                const text = buildShareText({ session, score, won: false, grid, url });
+                const r = await copyOrShare({ text, url });
                 setShareLbl(r === "copied" ? "✓ Copied" : r === "shared" ? "✓ Shared" : "Couldn't share");
               }}>{shareLbl || "Share result"}</button>
               <button className="lb-btn lb-bs" onClick={goLobby}>Pick another</button>
@@ -1307,6 +1365,108 @@ function ModerateList({ toast$, onChange }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/* ─── ADMIN MODS (promote / demote) ──────────────────────────── */
+function AdminMods({ toast$, currentHandle }) {
+  const [elevated, setElevated] = useState(null);    // current mods + admins
+  const [q,        setQ]        = useState("");
+  const [results,  setResults]  = useState(null);    // search hits or null
+  const [busy,     setBusy]     = useState(null);    // userId currently being mutated
+  const [err,      setErr]      = useState(null);
+
+  const loadElevated = useCallback(() => {
+    api.modUsers("").then(setElevated).catch(e => setErr(String(e.message || e)));
+  }, []);
+
+  useEffect(() => { loadElevated(); }, [loadElevated]);
+
+  // Debounced search
+  useEffect(() => {
+    const term = q.trim();
+    if (!term) { setResults(null); return; }
+    const t = setTimeout(() => {
+      api.modUsers(term).then(setResults).catch(e => setErr(String(e.message || e)));
+    }, 200);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const setRole = async (u, role) => {
+    if (u.handle === currentHandle && role !== "admin") {
+      if (!confirm("Demote yourself? You'll lose admin access immediately.")) return;
+    }
+    setBusy(u.id);
+    try {
+      await api.modPromote(u.id, role);
+      toast$(role === "user" ? "DEMOTED" : role.toUpperCase(), role === "user" ? "bad" : "great");
+      loadElevated();
+      if (results) {
+        const term = q.trim();
+        if (term) api.modUsers(term).then(setResults).catch(()=>{});
+      }
+    } catch (e) {
+      toast$(String(e.message || e), "bad");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const Row = ({ u }) => (
+    <div className="lb-adm-row">
+      <span className="lb-adm-handle">{u.handle}</span>
+      <span className={`lb-adm-role ${u.role}`}>{u.role}</span>
+      <div className="lb-adm-actions">
+        {u.role !== "moderator" && (
+          <button className="lb-adm-btn primary" disabled={busy === u.id} onClick={() => setRole(u, "moderator")}>
+            {u.role === "admin" ? "→ MOD" : "MAKE MOD"}
+          </button>
+        )}
+        {u.role !== "admin" && (
+          <button className="lb-adm-btn" disabled={busy === u.id} onClick={() => setRole(u, "admin")}>
+            MAKE ADMIN
+          </button>
+        )}
+        {u.role !== "user" && (
+          <button className="lb-adm-btn danger" disabled={busy === u.id} onClick={() => setRole(u, "user")}>
+            REMOVE
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="lb-adm">
+      <input
+        className="lb-adm-search"
+        type="search"
+        placeholder="Search users by handle…"
+        value={q}
+        onChange={e => setQ(e.target.value)}
+        autoCorrect="off"
+        autoCapitalize="off"
+        aria-label="Search users by handle"
+      />
+
+      {err && <div className="lb-ferror">{err}</div>}
+
+      {results && (
+        <>
+          <div className="lb-adm-section">Search results</div>
+          {results.length === 0
+            ? <div className="lb-cred">no matches.</div>
+            : results.map(u => <Row key={u.id} u={u} />)}
+        </>
+      )}
+
+      <div className="lb-adm-section">{results ? "Current moderators & admins" : "Moderators & admins"}</div>
+      {!elevated
+        ? <div className="lb-cred">loading…</div>
+        : elevated.length === 0
+          ? <div className="lb-cred">none yet — search above to promote someone.</div>
+          : elevated.map(u => <Row key={u.id} u={u} />)}
     </div>
   );
 }

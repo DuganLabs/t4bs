@@ -10,13 +10,17 @@
     "cf:dev": "wrangler pages dev dist --d1=DB --compatibility-date=2024-09-01 --port=8788",
     "cf:deploy": "wrangler pages deploy dist --project-name=t4bs",
     "db:apply:local": "wrangler d1 execute tabs-db --local --file=./schema.sql && wrangler d1 execute tabs-db --local --file=./seed.sql",
-    "db:apply:remote": "wrangler d1 execute tabs-db --remote --file=./schema.sql && wrangler d1 execute tabs-db --remote --file=./seed.sql"
+    "db:apply:remote": "wrangler d1 execute tabs-db --remote --file=./schema.sql && wrangler d1 execute tabs-db --remote --file=./seed.sql",
+    "db:migrate:local": "for f in migrations/*.sql; do wrangler d1 execute tabs-db --local --file=\"$f\"; done",
+    "db:migrate:remote": "for f in migrations/*.sql; do wrangler d1 execute tabs-db --remote --file=\"$f\"; done"
   },
   "dependencies": {
+    "@resvg/resvg-wasm": "^2.6.2",
     "@simplewebauthn/browser": "^11.0.0",
     "@simplewebauthn/server": "^11.0.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "satori": "^0.10.14"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",

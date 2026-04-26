@@ -1,6 +1,7 @@
 import { verifyAuthenticationResponse } from "@simplewebauthn/server";
-import { json, error, readJson, setCookie, SESSION_COOKIE } from "../../_shared/util.js";
+import { json, error, readJson, setCookie, SESSION_COOKIE, seedAdminRole } from "../../_shared/util.js";
 import { rp, stores, b64uToBytes } from "../../_shared/webauthn.js";
+import { d1Users } from "../../_shared/d1.js";
 
 const SESSION_TTL_DAYS = 30;
 
@@ -48,6 +49,10 @@ export const onRequestPost = async ({ request, env }) => {
 
   const sessId = crypto.randomUUID();
   await userSessions.create({ id: sessId, userId: cred.userId, ttlSeconds: SESSION_TTL_DAYS * 86400 });
+
+  // Seed admin role for handles in ADMIN_HANDLES on first login post-deploy.
+  const u = await d1Users(env.DB).getById(cred.userId);
+  await seedAdminRole(env, u);
 
   return json({ ok: true }, 200, {
     "Set-Cookie": setCookie(SESSION_COOKIE, sessId, { maxAgeSeconds: SESSION_TTL_DAYS * 86400 }),

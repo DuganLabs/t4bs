@@ -1,8 +1,8 @@
-import { json, error, readJson, requireAdmin } from "../../_shared/util.js";
+import { json, error, readJson, requireModerator } from "../../_shared/util.js";
 import { d1Submissions } from "../../_shared/d1.js";
 
 export const onRequestPost = async ({ request, env }) => {
-  const auth = await requireAdmin(request, env);
+  const auth = await requireModerator(request, env);
   if (auth.error) return auth.error;
   const body = await readJson(request);
   if (!["approved","rejected"].includes(body.status)) return error("bad-status", 400);

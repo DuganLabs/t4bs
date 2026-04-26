@@ -45,10 +45,29 @@ export async function currentUser(request, env) {
   return await sessions.getUser(tok);
 }
 
-export function isAdmin(env, user) {
-  if (!user) return false;
-  const list = (env.ADMIN_HANDLES || "").split(",").map(s => s.trim().toLowerCase());
-  return list.includes(user.handle.toLowerCase());
+/* ─── Roles ─────────────────────────────────────────────────────
+   user.role ∈ {'user','moderator','admin'}
+   admin implies moderator. ADMIN_HANDLES is a seed list — when one of
+   those handles authenticates and their DB role is below 'admin',
+   `seedAdminRole` upgrades them. Set in [vars] in wrangler.toml. */
+
+export function getRole(user)        { return user?.role || "user"; }
+export function isAdmin(user)        { return getRole(user) === "admin"; }
+export function isModerator(user)    { const r = getRole(user); return r === "admin" || r === "moderator"; }
+
+export function adminHandles(env) {
+  return (env.ADMIN_HANDLES || "")
+    .split(",")
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export async function seedAdminRole(env, user) {
+  if (!user) return user;
+  if (user.role === "admin") return user;
+  if (!adminHandles(env).includes(user.handle.toLowerCase())) return user;
+  await d1Users(env.DB).setRole(user.id, "admin", "seed:ADMIN_HANDLES");
+  return { ...user, role: "admin" };
 }
 
 export async function requireUser(request, env) {
@@ -57,9 +76,16 @@ export async function requireUser(request, env) {
   return { user: u };
 }
 
+export async function requireModerator(request, env) {
+  const r = await requireUser(request, env);
+  if (r.error) return r;
+  if (!isModerator(r.user)) return { error: error("moderator-only", 403) };
+  return r;
+}
+
 export async function requireAdmin(request, env) {
   const r = await requireUser(request, env);
   if (r.error) return r;
-  if (!isAdmin(env, r.user)) return { error: error("admin-only", 403) };
+  if (!isAdmin(r.user)) return { error: error("admin-only", 403) };
   return r;
 }
