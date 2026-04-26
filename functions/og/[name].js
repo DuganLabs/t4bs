@@ -4,7 +4,9 @@
 
 import { renderPng, defaultCardScene, pngHeaders } from "../_shared/og.js";
 
-const CACHE_KEY = "og:default:v1";
+// v2: new tagline ("Pick a category. Solve the phrase.") replaces
+// the old "Five-letter battle of bullshit" copy.
+const CACHE_KEY = "og:default:v2";
 
 export const onRequestGet = async ({ env, params }) => {
   const raw = String(params.name || "");
