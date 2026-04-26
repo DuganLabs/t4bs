@@ -22,8 +22,10 @@ const fullCount = (words, locked) =>
 const isDev = () => !!(import.meta && import.meta.env && import.meta.env.DEV);
 
 /* ── CSS ─────────────────────────────────────────────────────── */
+/* Fonts are loaded in index.html with preload + media=print swap so they
+   don't render-block first paint. Don't @import here — it would refetch
+   and stall TTI. */
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600&family=Caveat:wght@700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html,body{background:#0C0B09;overscroll-behavior:none;-webkit-tap-highlight-color:transparent;}
 html,body,#root{min-height:100dvh;}
@@ -290,7 +292,7 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
    doesn't push the submit button. Empty state shows a hint string instead
    of tiles. */
 .lb-preview{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px 16px;margin:12px 0;padding:14px 8px;background:#100F0D;border-radius:8px;border:1px solid #1F1C18;min-height:74px;}
-.lb-preview.empty{color:#5A554F;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;}
+.lb-preview.empty{color:#988570;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;}
 .lb-pword{display:flex;gap:3px;}
 .lb-ptile{
   width:30px;height:34px;border-radius:4px;display:flex;align-items:center;justify-content:center;
@@ -360,6 +362,22 @@ body{font-family:'DM Sans',sans-serif;color:#F0EDE4;}
   .lb-igo{padding:9px 18px;font-size:15px;}
   .lb-logo{font-size:20px;letter-spacing:3px;}
   .lb-score{font-size:17px;min-width:50px;}
+}
+
+/* Honor prefers-reduced-motion: drop the flashy stuff (caret blink, glow
+   pulses, shake, flip, drop, skeleton shimmer, confetti is handled in JS).
+   We keep transitions on color/border-color so state changes are still
+   perceptible — just instant. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .lb-tile.cursor::after { animation: none; opacity: 1; }
 }
 `;
 
@@ -885,7 +903,7 @@ export default function Tabs() {
                   ))}
             </ul>
           </main>
-          <button className="lb-fab" onClick={() => user ? setView("submit") : setAuthOpen(true)} aria-label="Submit a new phrase">
+          <button className="lb-fab" onClick={() => user ? setView("submit") : setAuthOpen(true)} aria-label="Submit a phrase">
             + SUBMIT A PHRASE
           </button>
           {authOpen && <AuthModal onClose={()=>setAuthOpen(false)} onAuthed={(u)=>{setUser(u);setAuthOpen(false);}} />}
@@ -1047,11 +1065,22 @@ export default function Tabs() {
 
                   const style = {};
 
+                  // Build screen-reader-friendly tile label. Position is 1-indexed.
+                  const pos = `position ${li + 1} of word ${wi + 1}`;
+                  let tileLabel;
+                  if (wordSolved[wi]) tileLabel = `${lockedLetter} (${pos}, solved)`;
+                  else if (lockedLetter !== undefined) tileLabel = `${lockedLetter} (${pos}, locked)`;
+                  else if (typedLetter) tileLabel = `${typedLetter} (${pos}${isWagered ? ", staked 2×" : ", typed"})`;
+                  else tileLabel = `empty (${pos})`;
+                  if (fbForTile) tileLabel = `${fbForTile.letter} (${pos}, ${fbForTile.status})`;
+
                   return (
                     <div
                       key={li}
                       className={cls.join(" ")}
                       style={style}
+                      role="img"
+                      aria-label={tileLabel}
                       onClick={(e) => {
                         e.stopPropagation();
                         if (isCascPick) { pickCascade(wi, li); return; }
@@ -1237,11 +1266,48 @@ function Keyboard({ keyStatus, onKey, onBackspace, onEnter, onAllIn, disabled, c
   );
 }
 
+/* Shared modal wiring: Escape closes, focus moves to first focusable inside,
+   focus is restored to the trigger on close. Keeps modals consistent and
+   covers the WCAG 2.4.3 focus-order + 2.1.2 no-trap requirements. */
+function useModalA11y(onClose) {
+  const cardRef = useRef(null);
+  useEffect(() => {
+    const opener = document.activeElement;
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.stopPropagation(); onClose(); }
+      // Cheap focus trap: cycle Tab inside the card.
+      if (e.key !== "Tab" || !cardRef.current) return;
+      const focusables = cardRef.current.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0], last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKey);
+    // Move focus into the card.
+    setTimeout(() => {
+      const target = cardRef.current?.querySelector(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      target?.focus();
+    }, 30);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      // Restore focus to the element that opened the modal.
+      if (opener && typeof opener.focus === "function") opener.focus();
+    };
+  }, [onClose]);
+  return cardRef;
+}
+
 /* ─── HELP MODAL ────────────────────────────────────────────── */
 function HelpModal({ onClose }) {
+  const cardRef = useModalA11y(onClose);
   return (
     <div className="lb-ov" onClick={onClose}>
-      <div className="lb-card" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="lb-help-title">
+      <div ref={cardRef} className="lb-card" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="lb-help-title">
         <div className="lb-ct" id="lb-help-title" style={{color:"#E8920A",fontSize:32}}>HOW TO PLAY</div>
         <div className="lb-cs">One subject. One phrase. No mercy.</div>
         <div style={{textAlign:"left",fontSize:13,lineHeight:1.5,color:"#C0BBB5",margin:"8px 0 18px"}}>
@@ -1278,9 +1344,10 @@ function AuthModal({ onClose, onAuthed }) {
     }
   };
 
+  const cardRef = useModalA11y(onClose);
   return (
     <div className="lb-ov" onClick={onClose}>
-      <div className="lb-card" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="lb-auth-title">
+      <div ref={cardRef} className="lb-card" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="lb-auth-title">
         <div className="lb-ct" id="lb-auth-title" style={{color:"#E8920A"}}>SIGN IN</div>
         <div className="lb-cs">Anonymous play · login only to submit</div>
         <div className="lb-tabs">
@@ -1289,13 +1356,15 @@ function AuthModal({ onClose, onAuthed }) {
         </div>
         <div className="lb-form">
           <div className="lb-field">
-            <label className="lb-flabel">Handle</label>
+            <label className="lb-flabel" htmlFor="lb-auth-handle">Handle</label>
             <input
+              id="lb-auth-handle"
               className="lb-finput"
               autoCapitalize="off" autoCorrect="off" spellCheck={false}
               value={handle}
               onChange={e=>setHandle(e.target.value)}
               placeholder="2–24 chars · letters, numbers, _ -"
+              autoComplete="username"
             />
             <span className="lb-fhint">Public attribution on your puzzles.</span>
           </div>
@@ -1374,7 +1443,7 @@ function SubmitForm({ onCancel, onSubmitted, toast$, existingCategories = [] }) 
           <span className="lb-fhint">{words.length} word{words.length===1?"":"s"} · {totalLetters} letters · max 36</span>
         </div>
         <div className="lb-field">
-          <label className="lb-flabel">Preview</label>
+          <span className="lb-flabel">Preview</span>
           <div className={`lb-preview${words.length === 0 ? " empty" : ""}`} aria-hidden="true">
             {words.length === 0
               ? "Tiles preview as you type"
