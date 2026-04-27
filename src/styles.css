@@ -1,7 +1,18 @@
 /* T4BS — BaseNative shell stylesheet.
    Axiom: zero inline style. Every visual rule lives here. */
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* Layer order: reset → app → keyboard.
+   Layered rules from @basenative/keyboard (loaded after this file in
+   main.js) need to override the universal reset, so the reset goes in
+   its own layer where it can be beaten by anything in `app` or
+   `keyboard`. Without this, `* { margin: 0 }` was killing the
+   `margin: 0 auto` on `[data-bn="kb-rows"]` and the on-screen keyboard
+   was not centering on wide viewports. */
+@layer reset, app, keyboard;
+
+@layer reset {
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+}
 html, body { background: #0C0B09; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 html, body, #app { min-height: 100dvh; }
 body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
