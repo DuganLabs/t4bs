@@ -18,6 +18,18 @@ export default defineConfig({
       { find: /^\.\.\/\.\.\/\.\.\/src\/shared\/expression\.js$/, replacement: expressionShim },
     ],
   },
+  optimizeDeps: {
+    esbuildOptions: {
+      plugins: [
+        {
+          name: "shim-bn-expression",
+          setup(build) {
+            build.onResolve({ filter: /^\.\.\/\.\.\/\.\.\/src\/shared\/expression\.js$/ }, () => ({ path: expressionShim }));
+          },
+        },
+      ],
+    },
+  },
   plugins: [
     {
       name: "tabs-mock-api",

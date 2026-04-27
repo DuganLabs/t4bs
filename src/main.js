@@ -10,6 +10,7 @@
    - Game core: shared/engine.js (untouched) via /api/* endpoints. */
 
 import "./styles.css";
+import "@basenative/keyboard/styles.css";
 
 import { signal, effect } from "@basenative/runtime";
 import { createRouter, interceptLinks } from "@basenative/router";
