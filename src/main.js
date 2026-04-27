@@ -143,13 +143,23 @@ api.me().then(r => user.set(r.user)).catch(() => {});
   if (saved?.sessionId) {
     try {
       const s = await api.resumeSession(saved.sessionId);
-      if (s.error || s.finished) { await clearPersisted(SESSION_KEY); return; }
-      hydrateSession(s, /* fresh */ false);
-      router.navigate("/play");
-      toaster("RESUMED — pick up where you left off", "good");
+      if (s.error || s.finished) {
+        await clearPersisted(SESSION_KEY);
+      } else {
+        hydrateSession(s, /* fresh */ false);
+        router.navigate("/play");
+        toaster("RESUMED — pick up where you left off", "good");
+        return;
+      }
     } catch {
       await clearPersisted(SESSION_KEY);
     }
+  }
+
+  // Hard-reload on /play with no resumable session: bounce home so the
+  // user picks a round instead of staring at "loading round…" forever.
+  if (window.location.pathname === "/play" && !session()) {
+    router.navigate("/");
   }
 })();
 
