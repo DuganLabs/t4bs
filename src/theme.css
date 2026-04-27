@@ -1,0 +1,21 @@
+/* T4BS theme — overrides for @basenative/* component tokens.
+   Imported AFTER each @basenative/<pkg>/styles.css so these win.
+   Mirrors the @use pattern: import the package's defaults, then layer
+   on the consumer's theme. */
+
+@layer keyboard {
+  /* @basenative/keyboard — game palette layered on top of the WCAG-AA
+     default palette shipped by the package. */
+  [data-bn="keyboard"] {
+    --kb-bg: #0C0B09;
+    --kb-key-bg: #3A3530;
+    --kb-key-fg: #F0EDE4;
+    --kb-key-active: #5A5550;
+    --kb-key-green: #4EAF7C;
+    --kb-key-yellow: #D4B445;
+    --kb-key-absent: #1E1C18;
+    --kb-key-staked: #FFD700;
+    --kb-key-radius: 5px;
+    --kb-min-tap: 44px;
+  }
+}
