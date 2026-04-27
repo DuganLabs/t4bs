@@ -81,7 +81,10 @@ const router = createRouter([
   { path: "/moderate", name: "moderate" },
   { path: "/admin",    name: "admin" },
 ]);
-interceptLinks(router);
+// interceptLinks signature is (root, router) — first arg is the DOM element to
+// listen on, second is the router. Passing only `router` made `root` = router,
+// which has no addEventListener → blank-page crash.
+interceptLinks(document, router);
 
 effect(() => {
   const r = router.currentRoute();
