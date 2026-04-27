@@ -1,11 +1,10 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  "extends": "@basenative/tsconfig/react",
+  "extends": "@basenative/tsconfig/browser",
   "compilerOptions": {
     "noEmit": true,
     "allowJs": true,
-    "checkJs": false,
-    "jsx": "react-jsx"
+    "checkJs": false
   },
   "include": ["src/**/*", "shared/**/*"],
   "exclude": ["node_modules", "dist", "functions", ".wrangler"]

@@ -8,7 +8,7 @@ async function req(path, init = {}) {
     ...init,
   });
   let data = null;
-  try { data = await r.json(); } catch {}
+  try { data = await r.json(); } catch { /* empty */ }
   if (!r.ok) throw Object.assign(new Error(data?.error || `http-${r.status}`), { status: r.status, data });
   return data;
 }
