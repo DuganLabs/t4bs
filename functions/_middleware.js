@@ -1,16 +1,18 @@
-/* Top-level middleware: SSR dispatch (?next=1) + security headers +
-   no-store for API responses. */
+/* Top-level middleware: SSR dispatch (default) + ?legacy=1 escape +
+   security headers + no-store for API responses. */
 
-import { shouldRenderNext } from "../src/next/route-table.js";
+import { shouldRenderSsr } from "../src/next/route-table.js";
 import { renderSsr } from "./_shared/ssr.js";
 
 export const onRequest = async (ctx) => {
   const { request, next } = ctx;
   const url = new URL(request.url);
 
-  // ── SSR path: ?next=1 on a routable view ─────────────────────────────
-  // Only intercept GET — POSTs to /api/* must still flow through Functions.
-  if (request.method === "GET" && shouldRenderNext(url.pathname, url.searchParams)) {
+  // ── SSR is the default ───────────────────────────────────────────────
+  // `?legacy=1` is the escape hatch back to the client-only SPA at
+  // dist/index.html. Only intercept GET — POSTs to /api/* must still
+  // flow through Functions.
+  if (request.method === "GET" && shouldRenderSsr(url.pathname, url.searchParams)) {
     try {
       const ssr = await renderSsr(ctx);
       if (ssr) return decorate(ssr, url);
