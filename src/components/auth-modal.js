@@ -1,5 +1,5 @@
 /* Single-file component: passkey sign-in modal.
-   Wires @simplewebauthn/browser via the existing src/lib/auth.js helpers. */
+   Wires @basenative/auth-webauthn/client via the existing src/lib/auth.js helpers. */
 
 import { signal, effect } from "@basenative/runtime";
 import { h } from "../lib/dom.js";

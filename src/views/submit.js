@@ -122,15 +122,9 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
       class: "lb-btn lb-bp",
       type: "button",
       disabled: () => busy() || !category() || !phrase(),
+      text: () => busy() ? "…" : "SUBMIT FOR REVIEW",
       onClick: submit,
-    },
-      () => busy() ? "Submitting…" : "Submit"
-    ),
-    h("button", {
-      class: "lb-btn lb-bs",
-      type: "button",
-      disabled: () => busy(),
-      onClick: onCancel,
-    }, "Cancel"),
+    }),
+    h("button", { class: "lb-btn lb-bs", type: "button", onClick: onCancel }, "Cancel"),
   );
 }

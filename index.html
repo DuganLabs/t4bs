@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" dir="ltr">
   <head>
     <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0C0B09" />
     <meta name="color-scheme" content="dark" />
@@ -10,20 +11,25 @@
     <!-- T4BS · Time For BS · made by The Synonym Toast Bunch -->
     <title>Tabs — quick category puzzles</title>
     <meta name="description" content="Pick a category. Solve the hidden phrase. Stake the letters you're sure about." />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
 
-    <!-- Open Graph -->
+    <!-- Open Graph — full social sharing markup for rich previews -->
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Tabs — quick category puzzles" />
     <meta property="og:description" content="Pick a category. Solve the hidden phrase. Stake the letters you're sure about." />
     <meta property="og:image" content="https://t4bs.com/og/default.png" />
+    <meta property="og:image:secure_url" content="https://t4bs.com/og/default.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:image:alt" content="Tabs — quick category puzzles" />
-    <meta property="og:url" content="https://t4bs.com" />
+    <meta property="og:url" content="https://t4bs.com/" />
     <meta property="og:site_name" content="Tabs" />
+    <meta property="og:locale" content="en_US" />
 
-    <!-- Twitter -->
+    <!-- Twitter Card — improved engagement and sharing -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@t4bs" />
     <meta name="twitter:title" content="Tabs — quick category puzzles" />
     <meta name="twitter:description" content="Pick a category. Solve the hidden phrase. Stake the letters you're sure about." />
     <meta name="twitter:image" content="https://t4bs.com/og/default.png" />
@@ -37,29 +43,33 @@
     <meta name="format-detection" content="telephone=no" />
 
     <link rel="canonical" href="https://t4bs.com/" />
+    <link rel="preload" as="image" href="/favicon.svg" type="image/svg+xml" imagesrcset="/favicon.svg" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
+    <!-- Prefetch shared worker bundle for faster game load -->
+    <link rel="prefetch" href="/src/lib/game.js" as="script" />
 
-    <!-- Font hosting: preconnect cuts ~150ms of TLS+DNS off first-paint.
-         The actual @import lives in App.css-in-JS; this only warms the
-         connection so the import resolves faster. -->
+    <!-- Font hosting: preconnect + dns-prefetch optimize font load times.
+         display=swap on all fonts ensures text is always visible while custom
+         fonts load, improving LCP and FOUT. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
     <link
       rel="preload"
       as="style"
-      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600&family=Caveat:wght@700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue:wght@400&family=DM+Sans:wght@400;600&family=Caveat:wght@700&family=Inter:wght@400;600&display=swap"
     />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600&family=Caveat:wght@700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue:wght@400&family=DM+Sans:wght@400;600&family=Caveat:wght@700&family=Inter:wght@400;600&display=swap"
       media="print"
       onload="this.media='all'"
     />
     <noscript>
       <link
         rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600&family=Caveat:wght@700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Bebas+Neue:wght@400&family=DM+Sans:wght@400;600&family=Caveat:wght@700&family=Inter:wght@400;600&display=swap"
       />
     </noscript>
 
@@ -84,13 +94,16 @@
     </script>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app" role="application" aria-label="Tabs word puzzle game"></div>
     <noscript>
-      <div class="noscript-msg">
+      <div class="noscript-msg" role="alert">
         <h1>TABS</h1>
-        <p>This game needs JavaScript. Enable it and reload to play.</p>
+        <p>This game requires JavaScript to run. Please enable it in your browser settings and reload the page.</p>
       </div>
     </noscript>
+    <!-- Main bundle: module-loaded for ES2020+ native import support.
+         defer is implicit in type=module and ensures DOM is ready before
+         hydration. Vite build will optimize this in production. -->
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

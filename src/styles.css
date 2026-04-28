@@ -1,5 +1,7 @@
 /* T4BS — BaseNative shell stylesheet.
-   Axiom: zero inline style. Every visual rule lives here. */
+   Axiom: zero inline style. Every visual rule lives here.
+   Font strategy: display=swap at source + @font-face fallbacks ensure
+   text is always readable while custom fonts load. Improves LCP. */
 
 /* Layer order: reset → app → keyboard.
    Layered rules from @basenative/keyboard (loaded after this file in
@@ -9,6 +11,42 @@
    `margin: 0 auto` on `[data-bn="kb-rows"]` and the on-screen keyboard
    was not centering on wide viewports. */
 @layer reset, app, keyboard;
+
+/* Fallback font stacks with swap display for FOUT resilience */
+@font-face {
+  font-family: 'Bebas Neue';
+  src: local('Bebas Neue'), local('BebasNeue');
+  font-display: swap;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: 'DM Sans';
+  src: local('DM Sans'), local('DMSans');
+  font-display: swap;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: 'DM Sans';
+  src: local('DM Sans'), local('DMSans');
+  font-display: swap;
+  font-weight: 600;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: local('Inter');
+  font-display: swap;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: local('Inter');
+  font-display: swap;
+  font-weight: 600;
+}
 
 @layer reset {
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

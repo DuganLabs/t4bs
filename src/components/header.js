@@ -42,6 +42,8 @@ export function createHeader({
 
   const scoreChip = h("div", {
     class: "lb-score",
+    role: "status",
+    "aria-live": "polite",
     hidden: () => view() !== "playing",
   },
     h("span", { class: "lb-snum", text: () => String(score()) }),
@@ -50,6 +52,8 @@ export function createHeader({
 
   const livesEl = h("div", {
     class: "lb-lives",
+    role: "status",
+    "aria-live": "polite",
     "aria-label": () => `${lives()} of 4 lives remaining`,
     hidden: () => view() !== "playing",
   });
