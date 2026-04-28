@@ -2,7 +2,6 @@
 <html lang="en" dir="ltr">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0C0B09" />
     <meta name="color-scheme" content="dark" />
@@ -43,16 +42,16 @@
     <meta name="format-detection" content="telephone=no" />
 
     <link rel="canonical" href="https://t4bs.com/" />
-    <link rel="preload" as="image" href="/favicon.svg" type="image/svg+xml" imagesrcset="/favicon.svg" />
+    <link rel="preload" as="image" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
 
-    <!-- Font hosting: preconnect + dns-prefetch optimize font load times.
-         display=swap on all fonts ensures text is always visible while custom
-         fonts load, improving LCP and FOUT. -->
+    <!-- Font hosting: preconnect (skips DNS+TLS handshake), preload-as-style
+         hints high-priority fetch, then load with media=print + onload swap
+         so the stylesheet doesn't block first paint. display=swap keeps text
+         visible during font load (no FOIT). -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
     <link
       rel="preload"
       as="style"
