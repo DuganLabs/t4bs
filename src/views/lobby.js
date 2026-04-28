@@ -59,16 +59,20 @@ export function createLobby({
       const credit = group.puzzles.length === 1
         ? `by ${group.puzzles[0].submittedBy}`
         : `${group.puzzles.length} puzzles`;
+      /* axe `label-content-name-mismatch`: previously aria-label
+         overrode the visible category + credit text. Now the
+         accessible name is built from the visible text plus a
+         sr-only "Play " prefix, so it matches what the user sees. */
       return h("li", null,
         h("button", {
           type: "button",
           class: "lb-lobby-item",
-          "aria-label": `Play ${group.category} — ${credit}`,
           onClick: () => {
             const pick = group.puzzles[Math.floor(Math.random() * group.puzzles.length)];
             onPick(pick.id);
           },
         },
+          h("span", { class: "sr-only" }, "Play "),
           h("span", { class: "lb-lobby-cat" }, group.category),
           h("span", { class: "lb-lobby-by" }, credit),
         ),

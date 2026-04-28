@@ -3,10 +3,17 @@
    keeps it portable across the @basenative/server SSR worker and
    any node:test consumers. */
 
+/* axe \`label-content-name-mismatch\`: where a control has visible
+   text, its accessible name must contain that text. The previous
+   aria-label values ("Tabs home", "Signed in as wmd") replaced
+   visible "T4BS" / handle entirely. The fixed shape uses visible
+   text + a <span class="sr-only"> suffix so the accessible name is
+   a superset of what the user sees. */
 export default `<header role="banner" data-bn-region="header">
   <nav aria-label="Tabs primary">
-    <a href="/" data-bn-action="logo" aria-label="Tabs home">
+    <a href="/" data-bn-action="logo">
       <strong>T<em>4</em>BS</strong>
+      <span class="sr-only"> — Tabs home</span>
     </a>
 
     <template @if="route === 'play' &amp;&amp; play">
@@ -27,8 +34,9 @@ export default `<header role="banner" data-bn-region="header">
       </li>
       <template @if="user">
         <li>
-          <button type="button" data-bn-action="account" :aria-label="'Signed in as ' + user.handle">
+          <button type="button" data-bn-action="account">
             {{ user.handle }}
+            <span class="sr-only"> — open account menu</span>
           </button>
         </li>
       </template>

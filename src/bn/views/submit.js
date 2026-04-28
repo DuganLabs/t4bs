@@ -52,7 +52,7 @@ export default `<main aria-labelledby="submit-title" data-bn-view="submit">
       <p role="alert" data-bn-bind="submit-error" hidden></p>
     </fieldset>
 
-    <button type="submit" data-bn-action="submit-confirm" aria-label="Submit for review">
+    <button type="submit" data-bn-action="submit-confirm">
       Submit for review
     </button>
     <button type="button" data-bn-action="submit-cancel">Cancel</button>

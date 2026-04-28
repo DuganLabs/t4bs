@@ -17,17 +17,22 @@ export function createHeader({
   onAdmin,
   onLogout,
 }) {
+  /* axe `label-content-name-mismatch` — when a control has visible
+     text, its accessible name must contain that text. The old
+     aria-label="Back to lobby" overrode the visible "T4BS" entirely
+     (Lighthouse a11y regression). Now the accessible name is
+     "T4BS — back to lobby" via visible text + sr-only suffix. */
   const logo = h("button", {
     class: "lb-logo",
     type: "button",
     onClick: onLogo,
-    "aria-label": "Back to lobby",
   },
     h("span", { class: "lb-logo-box", "aria-hidden": "true" },
       // Mini Tabs mark — T + accent dot
       svgMark(),
     ),
-    "T4BS"
+    "T4BS",
+    h("span", { class: "sr-only" }, " — back to lobby"),
   );
 
   const right = h("div", { class: "lb-hd-r" });

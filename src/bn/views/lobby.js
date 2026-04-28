@@ -49,7 +49,7 @@ export default `<main aria-labelledby="lobby-title" data-bn-view="lobby">
   </section>
 
   <a href="/submit" data-bn-action="lobby-submit" aria-label="Submit a phrase">
-    + Submit a phrase
+    <span aria-hidden="true">+ </span>Submit a phrase
   </a>
 </main>
 `;
