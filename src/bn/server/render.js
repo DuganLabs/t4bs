@@ -13,9 +13,7 @@
    own the markup; this file only orchestrates context shaping and the
    ordered render() calls. */
 
-// See src/bn/vendor/bn-server-render.js for why we vendor instead of
-// importing from "@basenative/server" directly. Drop when 0.4.1 ships.
-import { render } from "../vendor/bn-server-render.js";
+import { render } from "@basenative/server";
 import layoutHtml from "../views/layout.js";
 import headerHtml from "../views/header.js";
 import lobbyHtml from "../views/lobby.js";
