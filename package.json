@@ -27,7 +27,7 @@
     "@resvg/resvg-wasm": "^2.6.2",
     "@simplewebauthn/browser": "^11.0.0",
     "@simplewebauthn/server": "^11.0.0",
-    "satori": "^0.10.14"
+    "satori": "^0.26.0"
   },
   "devDependencies": {
     "@basenative/eslint-config": "^0.2.0",
