@@ -28,11 +28,11 @@ export function renderShell(input) {
   const desc = description || "Pick a category. Solve the hidden phrase. Stake the letters you're sure about.";
   const url  = `https://t4bs.com${canonicalPath}`;
 
+  const fontsHref = "https://fonts.googleapis.com/css2?family=Bebas+Neue:wght@400&family=DM+Sans:wght@400;600&family=Caveat:wght@700&family=Inter:wght@400;600&display=swap";
   return `<!DOCTYPE html>
 <html lang="en" dir="ltr">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0C0B09" />
     <meta name="color-scheme" content="dark" />
@@ -69,17 +69,15 @@ export function renderShell(input) {
     <meta name="format-detection" content="telephone=no" />
 
     <link rel="canonical" href="${esc(url)}" />
-    <link rel="preload" as="image" href="/favicon.svg" type="image/svg+xml" imagesrcset="/favicon.svg" />
+    <link rel="preload" as="image" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Bebas+Neue:wght@400&family=DM+Sans:wght@400;600&family=Caveat:wght@700&family=Inter:wght@400;600&display=swap"
-    />
+    <link rel="preload" as="style" href="${esc(fontsHref)}" />
+    <link rel="stylesheet" href="${esc(fontsHref)}" media="print" onload="this.media='all'" />
+    <noscript><link rel="stylesheet" href="${esc(fontsHref)}" /></noscript>
 ${assets.css.map(href => `    <link rel="stylesheet" href="${esc(href)}" />`).join("\n")}
 
     <script type="application/ld+json">
