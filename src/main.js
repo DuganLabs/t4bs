@@ -11,6 +11,7 @@
 
 import "./styles.css";
 import "@basenative/keyboard/styles.css";
+import "@basenative/combobox/css";
 
 import { signal, effect } from "@basenative/runtime";
 import { createRouter, interceptLinks } from "@basenative/router";

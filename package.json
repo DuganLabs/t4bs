@@ -17,7 +17,9 @@
     "db:migrate:remote": "for f in migrations/*.sql; do wrangler d1 execute tabs-db --remote --file=\"$f\"; done"
   },
   "dependencies": {
+    "@basenative/admin": "^1.0.0",
     "@basenative/auth-webauthn": "^1.0.0",
+    "@basenative/combobox": "^1.0.0",
     "@basenative/keyboard": "^1.0.0",
     "@basenative/og-image": "^0.2.0",
     "@basenative/persist": "^1.0.0",

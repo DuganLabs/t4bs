@@ -381,60 +381,81 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
   background: #1E1C18; border: 1px solid #2A2724; color: #F0EDE4;
 }
 
-/* MODERATION */
-.lb-mod-list { width: 100%; max-width: 540px; display: flex; flex-direction: column; gap: 12px; }
-.lb-mod-item {
+/* MODERATION & ADMIN — markup from @basenative/admin/components.
+   The bn-admin-* classes are produced by renderAdminQueueList +
+   renderAdminUserList; we theme them to match the t4bs palette. */
+.bn-sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+.bn-admin-empty { color: #988570; font-size: 13px; padding: 8px 0; }
+.bn-admin-section {
+  font-size: 11px; letter-spacing: 1.5px; color: #988570;
+  text-transform: uppercase; margin-top: 10px; margin-bottom: 6px;
+}
+
+.bn-admin-queue {
+  list-style: none; padding: 0; margin: 0;
+  width: 100%; max-width: 540px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.bn-admin-queue__item {
   background: #161412; border: 1.5px solid #222; border-radius: 10px;
   padding: 14px; display: flex; flex-direction: column; gap: 8px;
 }
-.lb-mod-meta { display: flex; justify-content: space-between; align-items: baseline; }
-.lb-mod-cat { font-family: 'Bebas Neue', sans-serif; font-size: 15px; letter-spacing: 2px; color: #F0EDE4; }
-.lb-mod-by { font-size: 10px; letter-spacing: 1.2px; color: #9A9590; text-transform: uppercase; }
-.lb-mod-phrase {
+.bn-admin-queue__meta { display: flex; justify-content: space-between; align-items: baseline; }
+.bn-admin-queue__cat  { font-family: 'Bebas Neue', sans-serif; font-size: 15px; letter-spacing: 2px; color: #F0EDE4; }
+.bn-admin-queue__by   { font-size: 10px; letter-spacing: 1.2px; color: #9A9590; text-transform: uppercase; }
+.bn-admin-queue__phrase {
   font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2px;
   color: #E8920A; line-height: 1.2; word-break: break-word;
 }
-.lb-mod-actions { display: flex; gap: 8px; }
-.lb-mod-btn {
-  flex: 1; padding: 10px; border: none; border-radius: 6px;
-  font-family: 'Bebas Neue', sans-serif; font-size: 13px; letter-spacing: 1.5px;
-  cursor: pointer; min-height: 42px;
-}
-.lb-mod-btn.ok { background: #4EAF7C; color: #0A1F12; }
-.lb-mod-btn.no { background: #2C2925; color: #FF6E6E; border: 1px solid rgba(255,77,77,.3); }
+.bn-admin-queue__actions { display: flex; gap: 8px; }
 
-/* ADMIN */
-.lb-adm { width: 100%; max-width: 540px; display: flex; flex-direction: column; gap: 14px; }
-.lb-adm-search {
+.bn-admin { width: 100%; max-width: 540px; display: flex; flex-direction: column; gap: 14px; }
+.bn-admin-search-wrap { display: block; }
+.bn-admin-search {
   width: 100%; padding: 12px 14px; border-radius: 8px;
   background: #100F0D; color: #F0EDE4; border: 1.5px solid #2A2724;
   font-size: 15px; letter-spacing: .5px; outline: none; min-height: 44px;
 }
-.lb-adm-search:focus { border-color: #E8920A; box-shadow: 0 0 0 3px rgba(232,146,10,.15); }
-.lb-adm-section { font-size: 11px; letter-spacing: 1.5px; color: #988570; text-transform: uppercase; margin-top: 6px; }
-.lb-adm-row {
+.bn-admin-search:focus { border-color: #E8920A; box-shadow: 0 0 0 3px rgba(232,146,10,.15); }
+
+.bn-admin-row {
   display: flex; align-items: center; gap: 10px; padding: 10px 12px;
-  background: #161412; border: 1.5px solid #222; border-radius: 8px; min-height: 52px;
+  background: #161412; border: 1.5px solid #222; border-radius: 8px;
+  min-height: 52px; margin-bottom: 8px;
 }
-.lb-adm-handle { flex: 1; font-family: 'Bebas Neue', sans-serif; font-size: 16px; letter-spacing: 1.5px; color: #F0EDE4; }
-.lb-adm-role {
+.bn-admin-row__handle { flex: 1; font-family: 'Bebas Neue', sans-serif; font-size: 16px; letter-spacing: 1.5px; color: #F0EDE4; }
+.bn-admin-row__handle small { font-family: inherit; font-size: 10px; letter-spacing: 1px; color: #988570; margin-left: 6px; }
+.bn-admin-row__actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.bn-admin-role {
   font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase;
   padding: 3px 8px; border-radius: 999px;
   background: #1E1C18; color: #988570; border: 1px solid #2A2724;
 }
-.lb-adm-role.admin     { background: rgba(232,146,10,.12); color: #E8920A; border-color: rgba(232,146,10,.4); }
-.lb-adm-role.moderator { background: rgba(78,175,124,.12); color: #4EAF7C; border-color: rgba(78,175,124,.4); }
-.lb-adm-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.lb-adm-btn {
-  border: none; border-radius: 6px; padding: 7px 10px; cursor: pointer;
-  font-family: 'Bebas Neue', sans-serif; font-size: 11px; letter-spacing: 1.2px;
-  min-height: 32px;
+.bn-admin-role--admin     { background: rgba(232,146,10,.12); color: #E8920A; border-color: rgba(232,146,10,.4); }
+.bn-admin-role--moderator { background: rgba(78,175,124,.12); color: #4EAF7C; border-color: rgba(78,175,124,.4); }
+
+.bn-admin-btn {
+  border-radius: 6px; cursor: pointer;
+  font-family: 'Bebas Neue', sans-serif; letter-spacing: 1.2px;
   background: #1E1C18; color: #988570; border: 1px solid #2A2724;
+  padding: 7px 10px; font-size: 11px; min-height: 32px;
 }
-.lb-adm-btn:hover { color: #F0EDE4; border-color: #E8920A; }
-.lb-adm-btn.danger:hover { color: #FF6E6E; border-color: #FF6E6E; }
-.lb-adm-btn.primary { background: #E8920A; color: #0A0907; border: none; }
-.lb-adm-btn:disabled { opacity: .45; cursor: default; }
+.bn-admin-btn:hover { color: #F0EDE4; border-color: #E8920A; }
+.bn-admin-btn:disabled { opacity: .45; cursor: default; }
+.bn-admin-btn--danger:hover { color: #FF6E6E; border-color: #FF6E6E; }
+.bn-admin-btn--ok {
+  flex: 1; min-height: 42px; padding: 10px; font-size: 13px; letter-spacing: 1.5px;
+  background: #4EAF7C; color: #0A1F12; border: none;
+}
+.bn-admin-btn--no {
+  flex: 1; min-height: 42px; padding: 10px; font-size: 13px; letter-spacing: 1.5px;
+  background: #2C2925; color: #FF6E6E; border: 1px solid rgba(255,77,77,.3);
+}
 
 /* AUTH TABS */
 .lb-tabs { display: flex; gap: 6px; margin-bottom: 16px; background: #100F0D; padding: 4px; border-radius: 8px; }

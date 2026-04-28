@@ -1,15 +1,28 @@
-/* Single-file component: ADMIN view (mod management).
-   Search + promote/demote. Mirrors @basenative/admin promote patterns. */
+/* ADMIN view (mod management). Search + promote/demote. Uses
+   @basenative/admin's shared user-list renderer so the markup matches
+   the SSR first paint (and PendingBusiness once it migrates).
+
+   Implementation note: renderAdminUserList includes the search input
+   inside its output. We can't re-emit that HTML on every results-change
+   (focus + caret would jump every keystroke), so we render the search
+   input as a stable element and only innerHTML-replace the lists. */
 
 import { signal, effect } from "@basenative/runtime";
-import { h, reactiveList } from "../lib/dom.js";
+import { renderAdminUserList } from "@basenative/admin/components";
+import { h } from "../lib/dom.js";
 import { api } from "../lib/api.js";
+
+const LABELS = {
+  search: "Search users by handle…",
+  currentSection: "Moderators & admins",
+  resultsSection: "Search results",
+  none: "none yet — search above to promote someone.",
+};
 
 export function createAdmin({ currentHandle, toaster, goLobby }) {
   const elevated = signal(null);
   const q        = signal("");
   const results  = signal(null);
-  const busy     = signal(null);
   const err      = signal(null);
 
   function loadElevated() {
@@ -17,7 +30,6 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
   }
   loadElevated();
 
-  // Debounced search
   let timer = null;
   effect(() => {
     const term = q().trim();
@@ -29,10 +41,9 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
   });
 
   async function setRole(u, role) {
-    if (u.handle === currentHandle && role !== "admin") {
-      if (!window.confirm("Demote yourself? You'll lose admin access immediately.")) return;
+    if (u.handle === currentHandle && role === "user") {
+      if (!window.confirm("Demote yourself? You'll lose access immediately.")) return;
     }
-    busy.set(u.id);
     try {
       await api.modPromote(u.id, role);
       toaster(role === "user" ? "DEMOTED" : role.toUpperCase(),
@@ -42,92 +53,72 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
       if (term) api.modUsers(term).then(results.set).catch(() => {});
     } catch (e) {
       toaster(String(e.message || e), "bad");
-    } finally {
-      busy.set(null);
     }
   }
-
-  function row(u) {
-    const actions = h("div", { class: "lb-adm-actions" });
-    if (u.role !== "moderator") {
-      actions.append(h("button", {
-        class: "lb-adm-btn primary",
-        type: "button",
-        disabled: () => busy() === u.id,
-        onClick: () => setRole(u, "moderator"),
-      }, u.role === "admin" ? "→ MOD" : "MAKE MOD"));
-    }
-    if (u.role !== "admin") {
-      actions.append(h("button", {
-        class: "lb-adm-btn",
-        type: "button",
-        disabled: () => busy() === u.id,
-        onClick: () => setRole(u, "admin"),
-      }, "MAKE ADMIN"));
-    }
-    if (u.role !== "user") {
-      actions.append(h("button", {
-        class: "lb-adm-btn danger",
-        type: "button",
-        disabled: () => busy() === u.id,
-        onClick: () => setRole(u, "user"),
-      }, "REMOVE"));
-    }
-    return h("div", { class: "lb-adm-row" },
-      h("span", { class: "lb-adm-handle" }, u.handle),
-      h("span", { class: `lb-adm-role ${u.role}` }, u.role),
-      actions,
-    );
-  }
-
-  const search = h("input", {
-    class: "lb-adm-search",
-    type: "search",
-    placeholder: "Search users by handle…",
-    autocorrect: "off",
-    autocapitalize: "off",
-    "aria-label": "Search users by handle",
-    onInput: (e) => q.set(e.target.value),
-  });
 
   const errBox = h("div", { class: "lb-ferror", text: () => err() || "", hidden: () => !err() });
 
-  const resultsSection = h("div");
-  reactiveList(resultsSection, () => {
-    const r = results();
-    if (!r) return [];
-    return [
-      h("div", { class: "lb-adm-section" }, "Search results"),
-      ...(r.length === 0
-        ? [h("div", { class: "lb-cred" }, "no matches.")]
-        : r.map(row)),
-    ];
+  const search = h("input", {
+    class: "bn-admin-search",
+    type: "search",
+    placeholder: LABELS.search,
+    "aria-label": LABELS.search,
+    autocorrect: "off",
+    autocapitalize: "off",
+    onInput: (e) => q.set(e.target.value),
   });
 
-  const elevatedSection = h("div");
-  reactiveList(elevatedSection, () => {
-    const e = elevated();
-    const heading = results() ? "Current moderators & admins" : "Moderators & admins";
-    if (e === null) {
-      return [h("div", { class: "lb-adm-section" }, heading), h("div", { class: "lb-cred" }, "loading…")];
+  const lists = h("div");
+  effect(() => {
+    const r = results();
+    const u = elevated();
+    if (u === null) {
+      lists.innerHTML = `<div class="lb-cred">loading…</div>`;
+      return;
     }
-    if (e.length === 0) {
-      return [h("div", { class: "lb-adm-section" }, heading),
-              h("div", { class: "lb-cred" }, "none yet — search above to promote someone.")];
-    }
-    return [h("div", { class: "lb-adm-section" }, heading), ...e.map(row)];
+    // Render the full component then strip the search-wrap so the static
+    // input above keeps focus across re-renders.
+    const tmp = document.createElement("div");
+    tmp.innerHTML = renderAdminUserList({
+      users: u,
+      results: r,
+      query: "",
+      currentHandle: currentHandle || "",
+      labels: LABELS,
+      actionHandler: "adm-set-role",
+      searchHandler: "adm-search",
+    });
+    const bn = tmp.firstElementChild;
+    const wrap = bn?.querySelector(".bn-admin-search-wrap");
+    if (wrap) wrap.remove();
+    lists.innerHTML = bn ? bn.innerHTML : "";
   });
+
+  lists.addEventListener("click", (e) => {
+    const btn = e.target.closest('button[data-action="adm-set-role"]');
+    if (!btn) return;
+    const userId = btn.dataset.userId;
+    const handle = btn.dataset.handle;
+    const role = btn.dataset.role;
+    const all = [...(elevated() || []), ...(results() || [])];
+    const user = all.find(x => x.id === userId) || { id: userId, handle, role: "" };
+    setRole(user, role);
+  });
+
+  const root = h("div", { class: "bn-admin" },
+    h("label", { class: "bn-admin-search-wrap" },
+      h("span", { class: "bn-sr-only" }, LABELS.search),
+      search,
+    ),
+    lists,
+  );
 
   return h("main", { "aria-labelledby": "lb-admin-title" },
     h("h1", { id: "lb-admin-title", class: "sr-only" }, "Moderator administration"),
     h("div", { class: "lb-sticky lb-sticky-narrow" }, "Moderators"),
     h("div", { class: "lb-tagline" }, "Promote or demote · admins only"),
-    h("div", { class: "lb-adm" },
-      search,
-      errBox,
-      resultsSection,
-      elevatedSection,
-    ),
+    errBox,
+    root,
     h("button", { class: "lb-btn lb-bs lb-bs-back", type: "button", onClick: goLobby }, "← Back"),
   );
 }

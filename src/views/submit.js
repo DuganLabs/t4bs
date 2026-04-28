@@ -1,8 +1,10 @@
 /* Single-file component: SUBMIT view.
    Posts to /api/submit with category + phrase. Live tile preview.
-   Existing categories feed a <datalist> for autocomplete. */
+   Existing categories drive the @basenative/combobox typeahead, with
+   `allowCreate` for new categories. */
 
 import { signal, computed, effect } from "@basenative/runtime";
+import { Combobox } from "@basenative/combobox";
 import { h, reactiveList } from "../lib/dom.js";
 import { api } from "../lib/api.js";
 
@@ -31,18 +33,34 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
     }
   }
 
-  const catInput = h("input", {
+  // Combobox: signal-driven, allowCreate, runtime.effect hooks the
+  // input value back to the category signal.
+  const cb = Combobox({
     id: "lb-cat",
-    class: "lb-finput",
-    maxlength: "30",
-    list: "lb-cat-list",
-    autocomplete: "off",
-    autocapitalize: "characters",
+    name: "category",
+    options: existingCategories() || [],
+    value: category,
+    allowCreate: true,
+    createLabel: (input) => `+ NEW CATEGORY "${input.toUpperCase()}"`,
     placeholder: "Pick or add a category",
-    "aria-describedby": "lb-cat-hint",
-    onInput: (e) => category.set(e.target.value.toUpperCase()),
+    ariaDescribedBy: "lb-cat-hint",
+    onChange: (v) => category.set(String(v).toUpperCase()),
+    onCreate: (label) => category.set(String(label).toUpperCase()),
+    runtime: { effect },
   });
-  effect(() => { catInput.value = category(); });
+
+  // Wrapper element receives the combobox HTML; hydrate after the
+  // wrapper is appended to the DOM (bind: ref runs synchronously,
+  // before mount, so we wait one microtask via queueMicrotask).
+  const cbWrapper = h("div", {
+    class: "lb-cat-combobox",
+    html: cb.html,
+    bind: (el) => {
+      const handle = cb.hydrate(el);
+      // Mirror existingCategories changes back into the listbox.
+      effect(() => handle.setOptions(existingCategories() || []));
+    },
+  });
 
   const phraseInput = h("input", {
     id: "lb-phrase",
@@ -54,11 +72,6 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
     "aria-describedby": "lb-phrase-hint",
     onInput: (e) => phrase.set(e.target.value),
   });
-
-  const datalist = h("datalist", { id: "lb-cat-list" });
-  reactiveList(datalist, () =>
-    (existingCategories() || []).map(c => h("option", { value: c }))
-  );
 
   const preview = h("div", {
     class: () => `lb-preview${words().length === 0 ? " empty" : ""}`,
@@ -86,9 +99,7 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
     h("div", { class: "lb-tagline" }, "It enters the moderation queue"),
     h("div", { class: "lb-form" },
       h("div", { class: "lb-field" },
-        h("label", { class: "lb-flabel", for: "lb-cat" }, "Category"),
-        catInput,
-        datalist,
+        cbWrapper,
         h("span", {
           id: "lb-cat-hint",
           class: "lb-fhint",
