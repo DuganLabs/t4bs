@@ -1,7 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createEngine } from "./engine.js";
-import { initialState, publicShape } from "./pure.js";
 
 /* Mock stores for in-memory testing. */
 const createMockStores = () => {
@@ -355,7 +354,6 @@ describe("Game Engine", () => {
       const engine = createEngine({ puzzles, sessions });
 
       const started = await engine.startSession("puzzle-1");
-      const sess = await sessions.get(started.sessionId);
 
       // First correct guess (should grant cascade)
       let result = await engine.submitGuess(started.sessionId, 0, ["E", "L", "L", "O"]);
@@ -485,7 +483,6 @@ describe("Game Engine", () => {
       const origSess = await sessions.get(started.sessionId);
       const origLives = origSess.lives;
       const origScore = origSess.score;
-      const origLocked = JSON.stringify(origSess.locked);
 
       // Make a guess
       await engine.submitGuess(started.sessionId, 0, ["X", "Y", "Z", "Q"]);
