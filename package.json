@@ -19,6 +19,7 @@
   "dependencies": {
     "@basenative/admin": "^1.0.0",
     "@basenative/auth-webauthn": "^1.0.0",
+    "@basenative/combobox": "^1.0.0",
     "@basenative/keyboard": "^1.0.0",
     "@basenative/og-image": "^0.2.0",
     "@basenative/persist": "^1.0.0",

@@ -176,10 +176,10 @@ describe("renderPage — every route emits a complete HTML document", () => {
       },
     };
     const html = renderPage(ctx, ASSETS);
-    assert.ok(html.includes(">wmd<"));
-    // wmd is admin → shows "→ MOD" demote button + REMOVE
-    assert.ok(html.includes("→ MOD"));
-    // mary is moderator → only "MAKE ADMIN" + "REMOVE" available
+    assert.ok(html.includes(">wmd"));
+    // wmd is admin → shows MAKE MODERATOR demote button + REMOVE
+    assert.ok(html.includes("MAKE MODERATOR"));
+    // mary is moderator → MAKE ADMIN + REMOVE available
     assert.ok(html.includes("MAKE ADMIN"));
     assert.ok(html.includes("REMOVE"));
   });
