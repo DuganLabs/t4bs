@@ -32,6 +32,7 @@ import { createPlay } from "./views/play.js";
 import { createSubmit } from "./views/submit.js";
 import { createModerate } from "./views/moderate.js";
 import { createAdmin } from "./views/admin.js";
+import { decidePlayBoot, withTimeout, isResumable } from "./bn/client/play-boot.js";
 
 /* ── error logging (carryover from the React main) ─────────────────────── */
 function postLog(payload) {
@@ -72,6 +73,11 @@ const lives         = signal(4);
 const tokens        = signal(0);
 const phase         = signal("lobby");
 const reveal        = signal(null);
+/* True while the /play boot resolver is running — distinguishes
+   "still loading" from "definitively no session". */
+const playLoading   = signal(window.location.pathname === "/play");
+
+const RESUME_TIMEOUT_MS = 8000;
 
 const toaster = makeToaster(toast);
 
@@ -131,37 +137,43 @@ api.listPuzzles().then(lobby.set).catch(e => error.set(String(e.message || e)));
 api.me().then(r => user.set(r.user)).catch(() => {});
 
 (async () => {
-  const url = new URL(window.location.href);
-  const playParam = url.searchParams.get("play");
-  const playId = playParam ? Number(playParam) : NaN;
-  if (Number.isFinite(playId) && playId > 0) {
-    url.searchParams.delete("play");
-    window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
-    await start(playId);
-    return;
-  }
+  try {
+    const saved = await loadPersisted(SESSION_KEY).catch(() => null);
+    const intent = decidePlayBoot(window.location, saved);
 
-  const saved = await loadPersisted(SESSION_KEY);
-  if (saved?.sessionId) {
-    try {
-      const s = await api.resumeSession(saved.sessionId);
-      if (s.error || s.finished) {
-        await clearPersisted(SESSION_KEY);
-      } else {
-        hydrateSession(s, /* fresh */ false);
-        router.navigate("/play");
-        toaster("RESUMED — pick up where you left off", "good");
-        return;
-      }
-    } catch {
-      await clearPersisted(SESSION_KEY);
+    if (intent.kind === "start") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("play");
+      window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
+      await start(intent.puzzleId);
+      return;
     }
-  }
 
-  // Hard-reload on /play with no resumable session: bounce home so the
-  // user picks a round instead of staring at "loading round…" forever.
-  if (window.location.pathname === "/play" && !session()) {
-    router.navigate("/");
+    if (intent.kind === "resume") {
+      try {
+        const s = await withTimeout(
+          api.resumeSession(intent.sessionId),
+          RESUME_TIMEOUT_MS,
+          "resume-timeout",
+        );
+        if (isResumable(s)) {
+          hydrateSession(s, /* fresh */ false);
+          router.navigate("/play");
+          toaster("RESUMED — pick up where you left off", "good");
+          return;
+        }
+        await clearPersisted(SESSION_KEY).catch(() => {});
+      } catch (e) {
+        await clearPersisted(SESSION_KEY).catch(() => {});
+        if (/** @type {{ code?: string }} */ (e)?.code === "ETIMEOUT") {
+          toaster("Couldn't reach the server — try again.", "bad");
+        }
+      }
+    }
+
+    if (window.location.pathname === "/play") router.navigate("/");
+  } finally {
+    playLoading.set(false);
   }
 })();
 
@@ -196,12 +208,13 @@ function hydrateSession(s, fresh) {
 async function start(puzzleId) {
   error.set(null);
   try {
-    const s = await api.startSession(puzzleId);
+    const s = await withTimeout(api.startSession(puzzleId), RESUME_TIMEOUT_MS, "start-timeout");
     hydrateSession(s, true);
     await savePersisted(SESSION_KEY, { sessionId: s.sessionId }, 12 * 3600);
     router.navigate("/play");
   } catch (e) {
-    error.set(String(e.message || e));
+    error.set(String(/** @type {Error} */ (e)?.message || e));
+    if (window.location.pathname === "/play") router.navigate("/");
   }
 }
 
@@ -327,8 +340,12 @@ effect(() => {
     }));
   } else if (v === "playing") {
     if (!session()) {
-      // Awaiting hydrate — show a minimal placeholder.
-      mount(viewSlot, h("div", { class: "lb-cred" }, "loading round…"));
+      if (playLoading()) {
+        mount(viewSlot, h("div", { class: "lb-cred" }, "loading round…"));
+      } else {
+        mount(viewSlot);
+        if (window.location.pathname === "/play") router.navigate("/");
+      }
       return;
     }
     mount(viewSlot, createPlay({
