@@ -1,8 +1,7 @@
 /* HTTP helpers + auth context for Cloudflare Pages Functions. */
 
-import { d1Users, d1UserSessions } from "./d1.js";
-
-export const SESSION_COOKIE = "t4bs_sess";
+import { d1Users } from "./d1.js";
+import { adapter } from "./webauthn.js";
 
 export const json = (data, status = 200, extraHeaders = {}) =>
   new Response(JSON.stringify(data), {
@@ -21,28 +20,9 @@ export async function readJson(request) {
   catch { return {}; }
 }
 
-export function getCookie(request, name) {
-  const c = request.headers.get("cookie") || "";
-  const m = c.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return m ? decodeURIComponent(m[1]) : null;
-}
-
-export function setCookie(name, value, opts = {}) {
-  const parts = [`${name}=${value}`, `Path=/`, `HttpOnly`, `SameSite=Lax`];
-  if (opts.secure !== false) parts.push("Secure");
-  if (opts.maxAgeSeconds) parts.push(`Max-Age=${opts.maxAgeSeconds}`);
-  return parts.join("; ");
-}
-
-export function clearCookie(name) {
-  return `${name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax; Secure`;
-}
-
 export async function currentUser(request, env) {
-  const tok = getCookie(request, SESSION_COOKIE);
-  if (!tok) return null;
-  const sessions = d1UserSessions(env.DB);
-  return await sessions.getUser(tok);
+  const auth = adapter(env);
+  return await auth.currentUser(request);
 }
 
 /* ─── Roles ─────────────────────────────────────────────────────

@@ -39,6 +39,9 @@ export function createPlay({
   const shareLbl  = signal(null);
   let resultRecorded = false;
 
+  // ── accessibility announcements ────────────────────────────────────────
+  const announcement = signal("");
+
   // ── derived ────────────────────────────────────────────────────────────
   const keyStatus = computed(() => computeKeyStatus({
     session: session(),
@@ -48,14 +51,14 @@ export function createPlay({
   }));
 
   const hintText = computed(() => {
-    if (casc()) return "⚡ tap any unrevealed tile to reveal";
+    if (casc()) return "Cascade active. Tap any unrevealed tile in any unsolved word to reveal it.";
     if (phase() !== "playing") return "";
     if (active() === null) return "";
     const s = session();
     const slots = openSlots(s.words[active()], locked()[active()]);
     const room = slots.length - typed()[active()].length;
-    if (room === 0) return "press enter or tap go · tap a tile to stake 2×";
-    return `type ${room} letter${room === 1 ? "" : "s"} for word ${active() + 1}`;
+    if (room === 0) return "Word complete. Press enter to submit or tap a tile to stake 2× points.";
+    return `Type ${room} more letter${room === 1 ? "" : "s"} for word ${active() + 1}.`;
   });
 
   const allInBonus = computed(() => fullCount(session().words, locked()) * 8);
@@ -78,7 +81,12 @@ export function createPlay({
     if (p === "won" || p === "lost") {
       onResultRecorded(p === "won", score(), session()?.category);
       resultRecorded = true;
-      if (p === "won") confetti();
+      if (p === "won") {
+        confetti();
+        announcement.set(`You won! Final score ${score()} points.`);
+      } else {
+        announcement.set(`Game over. Final score ${score()} points.`);
+      }
       if (navigator.vibrate) navigator.vibrate(p === "won" ? [40, 40, 80] : 200);
     }
   });
@@ -191,10 +199,19 @@ export function createPlay({
         active.set(null);
         const wagerCount = wagers().length > 0 ? 0 : 0; // wagers reset above
         const wagerNote = wagerCount > 0 ? ` · ${wagerCount}× STAKE WON` : "";
+        const msg = `Correct! Word ${wi + 1} solved. ${result.lives} lives remaining.`;
+        announcement.set(msg);
         toaster(`+${result.scoreDelta}pts${wagerNote}`, "great");
-        if (result.cascadeEarned) setTimeout(() => casc.set(true), 600);
+        if (result.cascadeEarned) {
+          setTimeout(() => {
+            casc.set(true);
+            announcement.set("Cascade earned! Tap any unrevealed tile to reveal it.");
+          }, 600);
+        }
       } else {
         shaking.set(wi); setTimeout(() => shaking.set(null), 480);
+        const msg = `Incorrect. ${result.lives} lives remaining.`;
+        announcement.set(msg);
         toaster(`${result.scoreDelta}pts`, "bad");
       }
       setTimeout(() => {
@@ -222,6 +239,7 @@ export function createPlay({
       setTimeout(() => cascDrop.set(null), 600);
       casc.set(false);
       active.set(wi);
+      announcement.set(`Free letter revealed in word ${wi + 1}. ${result.tokens} tokens remaining.`);
       toaster("⚡ FREE LETTER", "cascade");
     } catch (e) {
       toaster(`error: ${String(e.message || e)}`, "bad");
@@ -230,11 +248,16 @@ export function createPlay({
 
   // ── all-in ────
   function openAllIn() {
-    if (allInMode()) { allInMode.set(false); return; }
+    if (allInMode()) {
+      allInMode.set(false);
+      announcement.set("Fold. Returned to normal play.");
+      return;
+    }
     typed.set(session().words.map(() => []));
     wagers.set(session().words.map(() => []));
     active.set(null);
     allInMode.set(true);
+    announcement.set("All-in mode. Type the rest of the phrase to shove.");
   }
   async function submitAllIn() {
     const s = session();
@@ -254,6 +277,7 @@ export function createPlay({
     });
     if (guesses.some((g, i) => g.length !== s.words[i])) {
       toaster("FINISH TYPING THE PHRASE", "bad");
+      announcement.set("Please finish typing the entire phrase before submitting.");
       return;
     }
     try {
@@ -269,8 +293,10 @@ export function createPlay({
           return m;
         }));
         posFeedback.set(s.words.map(len => Array(len).fill("green")));
+        announcement.set(`All-in correct! Phrase solved. Score increased by ${result.scoreDelta} points.`);
         toaster(`ALL-IN CORRECT  +${result.scoreDelta}pts`, "great");
       } else {
+        announcement.set("All-in busted. Game over.");
         toaster("ALL-IN BUSTED — GAME OVER", "bad");
       }
       setTimeout(() => {
@@ -297,6 +323,15 @@ export function createPlay({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
+  });
+
+  // ── Accessibility: visually-hidden announcement region ──
+  const ariaLive = h("div", {
+    class: "sr-only",
+    role: "status",
+    "aria-live": "polite",
+    "aria-atomic": "true",
+    text: announcement,
   });
 
   // ── DOM build ──────────────────────────────────────────────────────────
@@ -382,11 +417,20 @@ export function createPlay({
 
         const pos = `position ${li + 1} of word ${wi + 1}`;
         let tileLabel;
-        if (wordSolved()[wi]) tileLabel = `${lockedLetter} (${pos}, solved)`;
-        else if (lockedLetter !== undefined) tileLabel = `${lockedLetter} (${pos}, locked)`;
-        else if (typedLetter) tileLabel = `${typedLetter} (${pos}${isWagered ? ", staked 2×" : ", typed"})`;
-        else tileLabel = `empty (${pos})`;
-        if (fbForTile) tileLabel = `${fbForTile.letter} (${pos}, ${fbForTile.status})`;
+        if (wordSolved()[wi]) tileLabel = `${lockedLetter} at ${pos}, word solved`;
+        else if (lockedLetter !== undefined) tileLabel = `${lockedLetter} at ${pos}, locked`;
+        else if (typedLetter) {
+          let state = "typed";
+          if (isWagered) state += ", staked 2 times";
+          if (isCursor) state += ", cursor here";
+          tileLabel = `${typedLetter} at ${pos}, ${state}`;
+        }
+        else {
+          tileLabel = `Empty at ${pos}`;
+          if (isCursor) tileLabel += ", cursor here";
+          if (isCascPick) tileLabel += ", cascade reveal available";
+        }
+        if (fbForTile) tileLabel = `${fbForTile.letter} at ${pos}, ${fbForTile.status}`;
 
         wordEl.append(h("div", {
           class: cls.join(" "),
@@ -444,7 +488,7 @@ export function createPlay({
 
   const kbWrap = h("div", {
     class: () => `lb-kb-wrap${allInMode() ? " allin" : ""}`,
-    "aria-label": "Keyboard",
+    "aria-label": () => allInMode() ? "Keyboard in all-in mode" : "On-screen keyboard for game play",
     role: "region",
     hidden: () => phase() !== "playing",
   });
@@ -454,13 +498,21 @@ export function createPlay({
     class: () => `lb-kb-allin${allInMode() ? " on" : ""}`,
     type: "button",
     onClick: openAllIn,
-    "aria-label": () => allInMode() ? "Fold and resume normal play" : "Enter all-in mode: type the rest of the phrase to shove",
+    "aria-label": () => allInMode() ? "Fold and resume normal play mode" : "Enter all-in mode: type all remaining letters and submit for bonus points or lose all lives",
     text: () => allInMode() ? "FOLD" : "ALL IN",
     disabled: () => casc() && !allInMode(),
   });
   const stakeLbl = h("span", {
     class: "lb-kb-stake",
     "aria-live": "polite",
+    "aria-label": () => {
+      const wagerCount = allInMode()
+        ? wagers().reduce((acc, w) => acc + (w?.length || 0), 0)
+        : (active() !== null ? (wagers()[active()]?.length || 0) : 0);
+      if (wagerCount > 0) return `${wagerCount} positions staked for 2 times points`;
+      if (allInMode()) return "Type the remaining letters of the phrase";
+      return "";
+    },
     text: () => {
       const wagerCount = allInMode()
         ? wagers().reduce((acc, w) => acc + (w?.length || 0), 0)
@@ -512,6 +564,7 @@ export function createPlay({
   });
 
   return h("div", { class: "lb-play-host" },
+    ariaLive,
     h("main", { "aria-labelledby": "lb-play-title" },
       h("h1", { id: "lb-play-title", class: "sr-only", text: () => `${session().category} — round #${session().id}` }),
       h("div", { class: "lb-num", text: () => `#${session().id} · ${session().category.toLowerCase()}` }),
