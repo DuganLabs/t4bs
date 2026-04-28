@@ -529,7 +529,19 @@ export function createPlay({
   // Hydrate the keyboard once it's in the tree.
   queueMicrotask(() => {
     const root = kbHost.querySelector('[data-bn="keyboard"]');
-    if (root) kb.hydrate(root);
+    if (!root) return;
+    kb.hydrate(root);
+    // iPhone workaround: @basenative/keyboard@1.0.0's preventFocusSteal
+    // calls preventDefault on touchstart, which on iOS Safari suppresses
+    // the synthetic click that the keyboard's dispatch handler relies on.
+    // Synthesize a click on touchend so the dispatch fires on iPhone.
+    // Drop this once the package bumps to 1.0.1 (fix lands upstream).
+    root.addEventListener("touchend", (e) => {
+      const btn = e.target && e.target.closest && e.target.closest("[data-bn-kb-key]");
+      if (!btn || btn.disabled) return;
+      e.preventDefault();
+      btn.click();
+    }, { passive: false });
   });
 
   // ── End-state overlays ──
