@@ -1,9 +1,10 @@
-/* Single-file component: MODERATE view.
-   Lists /api/moderate/pending submissions; approve / reject in place.
-   Mirrors @basenative/admin queue patterns. */
+/* MODERATE view. Lists /api/moderate/pending submissions; approve / reject
+   in place. Uses @basenative/admin's shared queue renderer so the markup
+   matches the SSR first paint (and PendingBusiness once it migrates). */
 
-import { signal } from "@basenative/runtime";
-import { h, reactiveList } from "../lib/dom.js";
+import { signal, effect } from "@basenative/runtime";
+import { renderAdminQueueList } from "@basenative/admin/components";
+import { h } from "../lib/dom.js";
 import { api } from "../lib/api.js";
 
 export function createModerate({ toaster, onLobbyChange, goLobby }) {
@@ -29,25 +30,21 @@ export function createModerate({ toaster, onLobbyChange, goLobby }) {
 
   const errBox = h("div", { class: "lb-ferror", text: () => err() || "", hidden: () => !err() });
 
-  const queue = h("div", { class: "lb-mod-list" });
-  reactiveList(queue, () => {
+  const queueRoot = h("div");
+  effect(() => {
     const items = list();
-    if (err()) return [];
-    if (items === null) return [h("div", { class: "lb-cred" }, "loading…")];
-    if (items.length === 0) return [h("div", { class: "lb-cred" }, "queue empty.")];
-    return items.map(s =>
-      h("div", { class: "lb-mod-item" },
-        h("div", { class: "lb-mod-meta" },
-          h("span", { class: "lb-mod-cat" }, s.category),
-          h("span", { class: "lb-mod-by" }, `by ${s.submittedBy}`),
-        ),
-        h("div", { class: "lb-mod-phrase" }, s.phrase),
-        h("div", { class: "lb-mod-actions" },
-          h("button", { class: "lb-mod-btn ok", type: "button", onClick: () => decide(s.id, "approved") }, "APPROVE"),
-          h("button", { class: "lb-mod-btn no", type: "button", onClick: () => decide(s.id, "rejected") }, "REJECT"),
-        ),
-      ),
-    );
+    if (err()) { queueRoot.innerHTML = ""; return; }
+    if (items === null) {
+      queueRoot.innerHTML = `<div class="lb-cred">loading…</div>`;
+      return;
+    }
+    queueRoot.innerHTML = renderAdminQueueList({ items, actionHandler: "mod-decide" });
+  });
+
+  queueRoot.addEventListener("click", (e) => {
+    const btn = e.target.closest('button[data-action="mod-decide"]');
+    if (!btn) return;
+    decide(Number(btn.dataset.id), btn.dataset.decision);
   });
 
   return h("main", { "aria-labelledby": "lb-mod-title" },
@@ -55,7 +52,7 @@ export function createModerate({ toaster, onLobbyChange, goLobby }) {
     h("div", { class: "lb-sticky lb-sticky-narrow" }, "Moderation queue"),
     h("div", { class: "lb-tagline" }, "Approve or reject pending phrases"),
     errBox,
-    queue,
+    queueRoot,
     h("button", { class: "lb-btn lb-bs lb-bs-back", type: "button", onClick: goLobby }, "← Back"),
   );
 }
