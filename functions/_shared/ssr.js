@@ -1,11 +1,18 @@
-/* SSR dispatcher for ?next=1 requests.
-   Builds a per-route context from D1 + cookie auth, renders via the
-   shared src/next/server/render.js, returns an HTML response.
-   Errors fall through to the static SPA so we never serve a broken page. */
+/* SSR dispatcher.
 
-import { matchRoute }   from "../../src/next/route-table.js";
-import { renderPage }   from "../../src/next/server/render.js";
-import { loadAssets }   from "../../src/next/server/manifest.js";
+   Builds a per-route context from D1 + cookie auth, renders via
+   src/bn/server/render.js (which calls @basenative/server's `render()`
+   on real HTML templates), returns an HTML response.
+
+   Errors propagate up so the middleware can decide between serving an
+   error page and falling through to the static SPA. We DON'T swallow
+   them — silent fallback was the source of the "reload broken" bug:
+   any SSR exception used to drop the user onto the static index.html,
+   which then wasn't initialized for deep routes. */
+
+import { matchRoute }   from "../../src/bn/route-table.js";
+import { renderPage }   from "../../src/bn/server/render.js";
+import { loadAssets }   from "../../src/bn/server/manifest.js";
 import { createEngine } from "../../shared/engine.js";
 import {
   d1Puzzles, d1Sessions, d1Submissions, d1Users,
@@ -15,11 +22,10 @@ import {
 } from "./util.js";
 
 /**
- * Render an SSR HTML response for the request, or return null if the
- * caller should fall through to the static asset handler.
+ * Render an SSR HTML response for the request.
  *
  * @param {{ request: Request, env: any }} args
- * @returns {Promise<Response | null>}
+ * @returns {Promise<Response>}
  */
 export async function renderSsr({ request, env }) {
   const url = new URL(request.url);
@@ -93,7 +99,7 @@ export async function renderSsr({ request, env }) {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
-      "X-T4BS-SSR": "next",
+      "X-T4BS-SSR": "bn",
     },
   });
 }

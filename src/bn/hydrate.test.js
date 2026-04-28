@@ -1,0 +1,176 @@
+/* SSR pipeline tests for the BaseNative-driven render path.
+
+   These exercise the templates + render orchestrator using the real
+   @basenative/server `render()` — no jsdom required, the renderer
+   parses HTML strings via node-html-parser. Run with:
+
+     node --test src/bn/hydrate.test.js
+*/
+
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+
+import { matchRoute, shouldRenderSsr } from "./route-table.js";
+import { renderPage } from "./server/render.js";
+
+const ASSETS = { js: "/assets/bn-hydrate.js", css: ["/assets/app.css"] };
+
+function baseCtx(overrides = {}) {
+  return {
+    route: "lobby",
+    pathname: "/",
+    user: null,
+    error: null,
+    lobby: null,
+    play: null,
+    submit: { existingCategories: [] },
+    moderate: { pending: null, forbidden: false },
+    admin: { elevated: null, currentHandle: null, forbidden: false },
+    ...overrides,
+  };
+}
+
+describe("matchRoute", () => {
+  it("matches the canonical paths", () => {
+    assert.equal(matchRoute("/"),         "lobby");
+    assert.equal(matchRoute("/play"),     "play");
+    assert.equal(matchRoute("/submit"),   "submit");
+    assert.equal(matchRoute("/moderate"), "moderate");
+    assert.equal(matchRoute("/admin"),    "admin");
+  });
+
+  it("normalizes trailing slashes", () => {
+    assert.equal(matchRoute("/admin/"), "admin");
+  });
+
+  it("returns not-found for unknown paths", () => {
+    assert.equal(matchRoute("/wat"),      "not-found");
+    assert.equal(matchRoute("/play/123"), "not-found");
+  });
+});
+
+describe("shouldRenderSsr", () => {
+  it("opts out for ?legacy=1", () => {
+    assert.equal(shouldRenderSsr("/", new URLSearchParams("legacy=1")), false);
+  });
+
+  it("never intercepts /api, /og, /s, /assets, manifest, favicon", () => {
+    const empty = new URLSearchParams();
+    assert.equal(shouldRenderSsr("/api/me",            empty), false);
+    assert.equal(shouldRenderSsr("/og/score/1.png",    empty), false);
+    assert.equal(shouldRenderSsr("/s/abc",             empty), false);
+    assert.equal(shouldRenderSsr("/assets/main.js",    empty), false);
+    assert.equal(shouldRenderSsr("/asset-manifest.json", empty), false);
+    assert.equal(shouldRenderSsr("/favicon.svg",       empty), false);
+    assert.equal(shouldRenderSsr("/robots.txt",        empty), false);
+    assert.equal(shouldRenderSsr("/sitemap.xml",       empty), false);
+  });
+
+  it("renders SSR for canonical routes", () => {
+    const empty = new URLSearchParams();
+    assert.equal(shouldRenderSsr("/",         empty), true);
+    assert.equal(shouldRenderSsr("/play",     empty), true);
+    assert.equal(shouldRenderSsr("/admin",    empty), true);
+  });
+});
+
+describe("renderPage — emits a complete BaseNative-rendered HTML document for every route", () => {
+  for (const route of ["lobby", "play", "submit", "moderate", "admin", "not-found"]) {
+    it(`route=${route} produces a doctype + <html> + #app`, () => {
+      const html = renderPage(baseCtx({ route, pathname: route === "lobby" ? "/" : `/${route}` }), ASSETS);
+      assert.ok(html.startsWith("<!DOCTYPE html>"), `expected doctype, got: ${html.slice(0, 40)}`);
+      assert.match(html, /<html lang="en"/);
+      assert.match(html, /<div id="app"/);
+      assert.match(html, /<script type="module" src="\/assets\/bn-hydrate\.js"/);
+    });
+  }
+
+  it("inlines SSR state as JSON in #bn-ssr-state", () => {
+    const html = renderPage(baseCtx({ user: { handle: "warren", role: "admin", isAdmin: true, isModerator: true } }), ASSETS);
+    assert.match(html, /<script type="application\/json" id="bn-ssr-state"/);
+    assert.match(html, /"handle":"warren"/);
+  });
+
+  // The script-block JSON dump is the only sink we control here. Body
+  // text interpolated via {{ … }} is set as raw HTML by
+  // @basenative/server (node-html-parser rawText), so the t4bs DB layer
+  // is responsible for keeping HTML-significant characters out of
+  // category/handle fields before they reach SSR.
+  it("escapes </script> in the inlined SSR-state JSON block", () => {
+    const ctx = baseCtx({
+      lobby: [{ id: 1, category: "evil-cat", submittedBy: "</script><img/onerror=alert(1)>" }],
+    });
+    const html = renderPage(ctx, ASSETS);
+    const start = html.indexOf("<script type=\"application/json\" id=\"bn-ssr-state\">");
+    const end = html.indexOf("</script>", start);
+    const jsonBlock = html.slice(start, end);
+    assert.ok(!jsonBlock.includes("</script>"), "raw </script> must not survive in the SSR-state JSON");
+    assert.match(jsonBlock, /\\u003c\/script\\u003e|\\u003c\\u002fscript\\u003e/);
+  });
+
+  it("renders semantic <main aria-labelledby> + <h1> for each view", () => {
+    for (const route of ["lobby", "play", "submit", "moderate", "admin", "not-found"]) {
+      const html = renderPage(baseCtx({ route, pathname: route === "lobby" ? "/" : `/${route}` }), ASSETS);
+      assert.match(html, /<main[^>]*aria-labelledby/, `${route}: expected <main aria-labelledby>`);
+      assert.match(html, /<h1/, `${route}: expected <h1>`);
+    }
+  });
+
+  it("lobby view renders @for puzzle groups using BaseNative directives", () => {
+    const lobby = [
+      { id: 1, category: "ANIMALS", submittedBy: "wmd" },
+      { id: 2, category: "ANIMALS", submittedBy: "warren" },
+      { id: 3, category: "FOODS",   submittedBy: "wmd" },
+    ];
+    const html = renderPage(baseCtx({ lobby }), ASSETS);
+    assert.match(html, /ANIMALS/);
+    assert.match(html, /FOODS/);
+    assert.match(html, /data-puzzle-ids="1,2"/);
+    assert.match(html, /data-puzzle-ids="3"/);
+  });
+
+  it("play view shows word-length skeleton with anchor letters", () => {
+    const play = {
+      id: 42,
+      category: "GREETINGS",
+      submittedBy: "wmd",
+      words: [5, 5],
+      totalLetters: 10,
+      anchors: [{ wi: 0, li: 0, letter: "H" }, { wi: 1, li: 4, letter: "D" }],
+    };
+    const html = renderPage(baseCtx({ route: "play", pathname: "/play", play }), ASSETS);
+    assert.match(html, /GREETINGS/);
+    assert.match(html, /data-locked="true"/);
+    assert.match(html, />\s*H\s*</);
+    assert.match(html, />\s*D\s*</);
+  });
+
+  it("admin view honors forbidden flag", () => {
+    const html = renderPage(baseCtx({
+      route: "admin", pathname: "/admin",
+      admin: { elevated: null, currentHandle: null, forbidden: true },
+    }), ASSETS);
+    assert.match(html, /You need admin access/);
+  });
+
+  it("moderate view honors forbidden flag", () => {
+    const html = renderPage(baseCtx({
+      route: "moderate", pathname: "/moderate",
+      moderate: { pending: null, forbidden: true },
+    }), ASSETS);
+    assert.match(html, /You need moderator access/);
+  });
+
+  it("not-found view shows the requested pathname", () => {
+    const html = renderPage(baseCtx({ route: "not-found", pathname: "/wat" }), ASSETS);
+    assert.match(html, /<code>\/wat<\/code>/);
+  });
+
+  it("emits the hashed JS + CSS asset paths", () => {
+    const assets = { js: "/assets/bn-hydrate-abc123.js", css: ["/assets/app-def.css", "/assets/bundle-456.css"] };
+    const html = renderPage(baseCtx(), assets);
+    assert.match(html, /\/assets\/bn-hydrate-abc123\.js/);
+    assert.match(html, /\/assets\/app-def\.css/);
+    assert.match(html, /\/assets\/bundle-456\.css/);
+  });
+});

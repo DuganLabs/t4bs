@@ -24,6 +24,7 @@ export default [
       "public/",
       "migrations/",
       "src/lib/_bn-expression.js", // vendored from basenative; not authored here
+      "src/bn/vendor/", // vendored @basenative/server@0.4.1 render(); drop when 0.4.1 is published
     ],
   },
 ];

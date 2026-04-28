@@ -1,6 +1,6 @@
-/* Shared route table for the SSR worker and the client hydrator.
-   One source of truth — the worker matches paths to render the right view,
-   and the client uses the same names to mount the right interactive shell. */
+/* Single source of truth for the routes the BaseNative SSR worker
+   serves. Mirrors @basenative/router's path syntax so the client-side
+   router uses the exact same table after hydration. */
 
 /** @typedef {'lobby'|'play'|'submit'|'moderate'|'admin'|'not-found'} RouteName */
 
@@ -22,10 +22,9 @@ export function matchRoute(pathname) {
   return "not-found";
 }
 
-/* SSR is the default. `?legacy=1` is the escape hatch back to the
-   client-only SPA shell at dist/index.html. Asset / API / OG / share
-   paths always fall through to their own handlers so the SSR worker
-   never intercepts them. */
+/* Asset / API / OG / share paths fall through to their own handlers
+   so the SSR worker never intercepts them. `?legacy=1` is the escape
+   hatch back to the static SPA shell at dist/index.html. */
 /** @param {string} pathname @param {URLSearchParams} search */
 export function shouldRenderSsr(pathname, search) {
   if (search.get("legacy") === "1") return false;
