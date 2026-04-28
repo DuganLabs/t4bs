@@ -1,35 +1,9 @@
-/* Page shell — wraps a view's body in the full <!doctype html> envelope.
-   Mirrors index.html's meta/OG/font setup so SSR'd pages match the SPA's
-   social previews and theme. The hydration bundle path is resolved from
-   Vite's manifest (handed in by the worker) so we pick up cache-busted
-   filenames after every build. */
+/* layout.html — exported as a string for both worker and vite
+   bundling. Edit this file to change the template; the .js wrapper
+   keeps it portable across the @basenative/server SSR worker and
+   any node:test consumers. */
 
-import { esc, escJson, join } from "./util/escape.js";
-
-/**
- * @typedef {{
- *   title: string,
- *   description?: string,
- *   canonicalPath?: string,
- *   bodyClass?: string,
- *   appHtml: string,
- *   ssrState: unknown,
- *   assets: { js: string, css: string[] },
- * }} ShellInput
- */
-
-/** @param {ShellInput} input */
-export function renderShell(input) {
-  const {
-    title, description, canonicalPath = "/",
-    bodyClass, appHtml, ssrState, assets,
-  } = input;
-
-  const desc = description || "Pick a category. Solve the hidden phrase. Stake the letters you're sure about.";
-  const url  = `https://t4bs.com${canonicalPath}`;
-
-  const fontsHref = "https://fonts.googleapis.com/css2?family=Bebas+Neue:wght@400&family=DM+Sans:wght@400;600&family=Caveat:wght@700&family=Inter:wght@400;600&display=swap";
-  return `<!DOCTYPE html>
+export default `<!DOCTYPE html>
 <html lang="en" dir="ltr">
   <head>
     <meta charset="UTF-8" />
@@ -38,27 +12,27 @@ export function renderShell(input) {
     <meta name="color-scheme" content="dark" />
     <meta name="generator" content="BaseNative — basenative.dev" />
 
-    <title>${esc(title)}</title>
-    <meta name="description" content="${esc(desc)}" />
+    <title>{{ title }}</title>
+    <meta name="description" content="{{ description }}" />
     <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
 
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="${esc(title)}" />
-    <meta property="og:description" content="${esc(desc)}" />
+    <meta property="og:title" content="{{ title }}" />
+    <meta property="og:description" content="{{ description }}" />
     <meta property="og:image" content="https://t4bs.com/og/default.png" />
     <meta property="og:image:secure_url" content="https://t4bs.com/og/default.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:alt" content="Tabs — quick category puzzles" />
-    <meta property="og:url" content="${esc(url)}" />
+    <meta property="og:url" content="{{ canonicalUrl }}" />
     <meta property="og:site_name" content="Tabs" />
     <meta property="og:locale" content="en_US" />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@t4bs" />
-    <meta name="twitter:title" content="${esc(title)}" />
-    <meta name="twitter:description" content="${esc(desc)}" />
+    <meta name="twitter:title" content="{{ title }}" />
+    <meta name="twitter:description" content="{{ description }}" />
     <meta name="twitter:image" content="https://t4bs.com/og/default.png" />
     <meta name="twitter:image:alt" content="Tabs — quick category puzzles" />
 
@@ -68,17 +42,20 @@ export function renderShell(input) {
     <meta name="apple-mobile-web-app-title" content="Tabs" />
     <meta name="format-detection" content="telephone=no" />
 
-    <link rel="canonical" href="${esc(url)}" />
+    <link rel="canonical" :href="canonicalUrl" />
     <link rel="preload" as="image" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preload" as="style" href="${esc(fontsHref)}" />
-    <link rel="stylesheet" href="${esc(fontsHref)}" media="print" onload="this.media='all'" />
-    <noscript><link rel="stylesheet" href="${esc(fontsHref)}" /></noscript>
-${assets.css.map(href => `    <link rel="stylesheet" href="${esc(href)}" />`).join("\n")}
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Bebas+Neue:wght@400&amp;family=DM+Sans:wght@400;600&amp;family=Caveat:wght@700&amp;family=Inter:wght@400;600&amp;display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue:wght@400&amp;family=DM+Sans:wght@400;600&amp;family=Caveat:wght@700&amp;family=Inter:wght@400;600&amp;display=swap" media="print" onload="this.media='all'" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue:wght@400&amp;family=DM+Sans:wght@400;600&amp;family=Caveat:wght@700&amp;family=Inter:wght@400;600&amp;display=swap" /></noscript>
+
+    <template @for="href of cssAssets">
+      <link rel="stylesheet" :href="href" />
+    </template>
 
     <script type="application/ld+json">
       {
@@ -98,16 +75,18 @@ ${assets.css.map(href => `    <link rel="stylesheet" href="${esc(href)}" />`).jo
       }
     </script>
   </head>
-  <body${join(bodyClass ? ` class="${esc(bodyClass)}"` : null)}>
-    <div id="app" role="application" aria-label="Tabs word puzzle game">${appHtml}</div>
+  <body :data-route="route">
+    <div id="app" role="application" aria-label="Tabs word puzzle game">
+      <!--BN_VIEW-->
+    </div>
     <noscript>
-      <div class="noscript-msg" role="alert">
-        <h1>TABS</h1>
-        <p>This game requires JavaScript to run. Please enable it in your browser settings and reload the page.</p>
-      </div>
+      <p role="alert">
+        Tabs needs JavaScript for the interactive game. The page above is the static round preview;
+        enable JavaScript to play.
+      </p>
     </noscript>
-    <script>window.__T4BS_SSR__=${escJson(ssrState)};</script>
-    <script type="module" src="${esc(assets.js)}"></script>
+    <script type="application/json" id="bn-ssr-state">{{ ssrStateJson }}</script>
+    <!--BN_HYDRATE_SCRIPT-->
   </body>
-</html>`;
-}
+</html>
+`;

@@ -1,14 +1,15 @@
-/* T4BS — BaseNative SSR hydration entry (?next=1 path).
+/* T4BS — BaseNative client hydrator.
 
-   Boots the same signal-driven views the SPA uses, but seeds them from
-   window.__T4BS_SSR__ so the first interaction skips /api/puzzles +
-   /api/auth/me round-trips. The SSR'd #app DOM is replaced by the live
-   imperative tree once the signals are wired — same UI, same behavior
-   as the SPA path, just with a server-rendered first paint.
+   Reads the SSR-emitted state from <script id="bn-ssr-state">, seeds
+   the same signals the SPA uses, then mounts the imperative game tree
+   on top of the SSR'd shell. The shell's semantic markup (header /
+   main / section) survives until the SPA replaces #app's children
+   with the live signal-driven view tree.
 
-   Importantly: this entry is ONLY loaded when the worker decides to
-   serve the SSR shell (presence of ?next=1). The legacy SPA at
-   /src/main.js continues to drive everything else, untouched. */
+   Loaded only when functions/_middleware.js decided to serve the SSR
+   shell (the default). `?legacy=1` opts out and serves dist/index.html
+   plus src/main.js — which is identical to this entry minus the SSR
+   seed and asset-manifest plumbing. */
 
 import "../../styles.css";
 import "@basenative/keyboard/styles.css";
@@ -36,7 +37,19 @@ import { createAdmin }    from "../../views/admin.js";
 
 /** @typedef {import("../route-table.js").RouteName} RouteName */
 
-const SSR = /** @type {any} */ (typeof window !== "undefined" ? window.__T4BS_SSR__ : null) || {};
+/* SSR state lives in a typed JSON script block — same channel the
+   express example uses (`<script type="application/json">`). Falls
+   back to an empty object on the legacy SPA path or when the SSR
+   shell wasn't served. */
+function readSsrState() {
+  if (typeof document === "undefined") return {};
+  const node = document.getElementById("bn-ssr-state");
+  if (!node) return {};
+  try { return JSON.parse(node.textContent || "{}"); }
+  catch { return {}; }
+}
+
+const SSR = readSsrState();
 
 /* ── Error logging — same envelope as src/main.js ──────────────────── */
 function postLog(payload) {
@@ -136,6 +149,16 @@ if (!SSR.user) {
   api.me().then(r => user.set(r.user)).catch(() => {});
 }
 
+/* Reload-safe play-route resume.
+   On a fresh GET to /play (e.g. browser refresh, deep-link), the
+   server has no session context. We resolve it client-side, in
+   priority order:
+     1. ?play=<id> query param — start a new round on that puzzle.
+     2. A persisted session id — resume it via /api/sessions/:id.
+     3. Nothing → bounce to / so the user picks something.
+   Without this block, refreshing /play used to show "loading round…"
+   indefinitely (or bounce silently to /), which is what the user
+   reported as "page reload broken". */
 (async () => {
   const url = new URL(window.location.href);
   const playParam = url.searchParams.get("play");
@@ -155,7 +178,9 @@ if (!SSR.user) {
         await clearPersisted(SESSION_KEY);
       } else {
         hydrateSession(s, /* fresh */ false);
-        router.navigate("/play");
+        if (window.location.pathname !== "/play") {
+          router.navigate("/play");
+        }
         toaster("RESUMED — pick up where you left off", "good");
         return;
       }
@@ -257,6 +282,12 @@ async function shareResult({ won }) {
 const root = document.getElementById("app");
 if (!root) throw new Error("missing #app — SSR shell broken");
 
+/* The SSR shell renders semantic HTML (<header><main>) into #app for
+   crawlers + first paint. The SPA below replaces #app's contents with
+   the imperative signal-driven tree. The mount() call clears existing
+   children, so the SSR markup is the wallpaper that buys us LCP +
+   no-script readability while the SPA boots. */
+
 const header = createHeader({
   view, user, score, lives, tokens,
   onLogo:   () => router.navigate("/"),
@@ -327,7 +358,7 @@ effect(() => {
     }));
   } else if (v === "playing") {
     if (!session()) {
-      mount(viewSlot, h("div", { class: "lb-cred" }, "loading round…"));
+      mount(viewSlot, h("p", { role: "status", "aria-live": "polite" }, "Loading round…"));
       return;
     }
     mount(viewSlot, createPlay({

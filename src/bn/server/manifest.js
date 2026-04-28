@@ -1,13 +1,13 @@
-/* Reads dist/asset-manifest.json (emitted via vite build) and resolves
-   the hashed JS + transitively-imported CSS for the next-hydrate entry.
+/* Reads dist/asset-manifest.json (emitted by `vite build`) and resolves
+   the hashed JS + transitively-imported CSS for the bn-hydrate entry.
    Cached per isolate so we only fetch + parse once per warm worker.
 
-   The manifest is shipped as a static asset at /asset-manifest.json by
-   wrangler pages — we read it via env.ASSETS.fetch(). Falls back to a
-   sensible dev-time default when manifest is missing (vite dev). */
+   Manifest is shipped as a static asset at /asset-manifest.json by
+   wrangler pages — read via env.ASSETS.fetch(). Falls back to a sensible
+   dev-time default when the manifest is missing (vite dev). */
 
-const ENTRY_KEY = "src/next/client/main.js";
-const DEV_FALLBACK = { js: "/src/next/client/main.js", css: [] };
+const ENTRY_KEY = "src/bn/client/hydrate.js";
+const DEV_FALLBACK = { js: "/src/bn/client/hydrate.js", css: [] };
 
 /** @typedef {{ file: string, css?: string[], imports?: string[] }} Chunk */
 /** @typedef {Record<string, Chunk>} Manifest */
@@ -39,7 +39,7 @@ export function loadAssets(env, pageUrl) {
   return cached;
 }
 
-/* Walks `imports` transitively to gather every CSS file the entry pulls
+/* Walk `imports` transitively to gather every CSS file the entry pulls
    in via shared chunks. Vite only lists `css` on the chunk that owns it,
    so an entry that imports a shared chunk needs this resolution. */
 /** @param {Manifest} manifest @param {string} entryKey @returns {string[]} */
