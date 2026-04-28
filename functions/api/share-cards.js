@@ -13,11 +13,27 @@ import { d1ShareCards } from "../_shared/d1.js";
 const ID_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz"; // unambiguous
 const ID_LEN = 8;
 
+/* Generate an unbiased ID from a 31-char alphabet using rejection
+   sampling. Naive `byte % 31` biases the first 8 chars upward by ~3.1%
+   each because 256 isn't a multiple of 31; the upper [248..255] range
+   maps onto chars 0..7 a second time. We discard those bytes and pull
+   more from `crypto.getRandomValues` until we have ID_LEN unbiased
+   draws. The over-allocation by 4 bytes amortizes the rare reloop. */
 function shortId() {
-  const bytes = crypto.getRandomValues(new Uint8Array(ID_LEN));
-  let out = "";
-  for (let i = 0; i < ID_LEN; i++) out += ID_ALPHABET[bytes[i] % ID_ALPHABET.length];
-  return out;
+  const A = ID_ALPHABET.length;       // 31
+  const REJECT = 256 - (256 % A);     // 248 — bytes >= REJECT are in the biased tail
+  const out = new Array(ID_LEN);
+  let filled = 0;
+  while (filled < ID_LEN) {
+    const buf = new Uint8Array(ID_LEN - filled + 4);
+    crypto.getRandomValues(buf);
+    for (let i = 0; i < buf.length && filled < ID_LEN; i++) {
+      const b = buf[i];
+      if (b >= REJECT) continue;
+      out[filled++] = ID_ALPHABET[b % A];
+    }
+  }
+  return out.join("");
 }
 
 export const onRequestPost = async ({ request, env }) => {
