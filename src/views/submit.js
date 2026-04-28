@@ -39,6 +39,7 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
     autocomplete: "off",
     autocapitalize: "characters",
     placeholder: "Pick or add a category",
+    "aria-describedby": "lb-cat-hint",
     onInput: (e) => category.set(e.target.value.toUpperCase()),
   });
   effect(() => { catInput.value = category(); });
@@ -50,6 +51,7 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
     autocorrect: "off",
     spellcheck: "false",
     placeholder: "2–10 words · letters only",
+    "aria-describedby": "lb-phrase-hint",
     onInput: (e) => phrase.set(e.target.value),
   });
 
@@ -88,6 +90,7 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
         catInput,
         datalist,
         h("span", {
+          id: "lb-cat-hint",
           class: "lb-fhint",
           text: () => existingCategories()?.length > 0
             ? `Tap to pick from ${existingCategories().length} existing categories, or type a new one.`
@@ -98,6 +101,7 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
         h("label", { class: "lb-flabel", for: "lb-phrase" }, "Phrase"),
         phraseInput,
         h("span", {
+          id: "lb-phrase-hint",
           class: "lb-fhint",
           text: () => `${words().length} word${words().length === 1 ? "" : "s"} · ${totalLetters()} letters · max 36`,
         }),
@@ -118,9 +122,15 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
       class: "lb-btn lb-bp",
       type: "button",
       disabled: () => busy() || !category() || !phrase(),
-      text: () => busy() ? "…" : "SUBMIT FOR REVIEW",
       onClick: submit,
-    }),
-    h("button", { class: "lb-btn lb-bs", type: "button", onClick: onCancel }, "Cancel"),
+    },
+      () => busy() ? "Submitting…" : "Submit"
+    ),
+    h("button", {
+      class: "lb-btn lb-bs",
+      type: "button",
+      disabled: () => busy(),
+      onClick: onCancel,
+    }, "Cancel"),
   );
 }
