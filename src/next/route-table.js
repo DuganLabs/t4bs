@@ -22,13 +22,18 @@ export function matchRoute(pathname) {
   return "not-found";
 }
 
+/* SSR is the default. `?legacy=1` is the escape hatch back to the
+   client-only SPA shell at dist/index.html. Asset / API / OG / share
+   paths always fall through to their own handlers so the SSR worker
+   never intercepts them. */
 /** @param {string} pathname @param {URLSearchParams} search */
-export function shouldRenderNext(pathname, search) {
-  if (search.get("next") !== "1") return false;
+export function shouldRenderSsr(pathname, search) {
+  if (search.get("legacy") === "1") return false;
   if (pathname.startsWith("/api/")) return false;
   if (pathname.startsWith("/og/"))  return false;
   if (pathname.startsWith("/s/"))   return false;
   if (pathname.startsWith("/assets/")) return false;
+  if (pathname === "/asset-manifest.json") return false;
   if (pathname === "/favicon.svg" || pathname === "/robots.txt" || pathname === "/sitemap.xml") return false;
   return true;
 }

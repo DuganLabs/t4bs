@@ -6,7 +6,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { esc, escJson, join } from "./util/escape.js";
-import { matchRoute, shouldRenderNext } from "./route-table.js";
+import { matchRoute, shouldRenderSsr } from "./route-table.js";
 import { renderPage } from "./server/render.js";
 
 const ASSETS = { js: "/assets/next-hydrate.js", css: ["/assets/app.css"] };
@@ -58,18 +58,34 @@ describe("matchRoute", () => {
   });
 });
 
-describe("shouldRenderNext", () => {
-  it("requires ?next=1", () => {
-    assert.equal(shouldRenderNext("/", new URLSearchParams()), false);
-    assert.equal(shouldRenderNext("/", new URLSearchParams("next=1")), true);
+describe("shouldRenderSsr", () => {
+  it("defaults to SSR for routable views (no flag needed)", () => {
+    assert.equal(shouldRenderSsr("/",         new URLSearchParams()), true);
+    assert.equal(shouldRenderSsr("/play",     new URLSearchParams()), true);
+    assert.equal(shouldRenderSsr("/submit",   new URLSearchParams()), true);
+    assert.equal(shouldRenderSsr("/moderate", new URLSearchParams()), true);
+    assert.equal(shouldRenderSsr("/admin",    new URLSearchParams()), true);
   });
-  it("opts out for API/OG/share/asset paths", () => {
-    const qs = new URLSearchParams("next=1");
-    assert.equal(shouldRenderNext("/api/puzzles",   qs), false);
-    assert.equal(shouldRenderNext("/og/default.png",qs), false);
-    assert.equal(shouldRenderNext("/s/abc",         qs), false);
-    assert.equal(shouldRenderNext("/assets/x.js",   qs), false);
-    assert.equal(shouldRenderNext("/favicon.svg",   qs), false);
+  it("opts out when ?legacy=1 is set", () => {
+    assert.equal(shouldRenderSsr("/",     new URLSearchParams("legacy=1")), false);
+    assert.equal(shouldRenderSsr("/play", new URLSearchParams("legacy=1")), false);
+  });
+  it("ignores unrelated query params", () => {
+    assert.equal(shouldRenderSsr("/",     new URLSearchParams("foo=bar")),     true);
+    assert.equal(shouldRenderSsr("/play", new URLSearchParams("play=42")),     true);
+    assert.equal(shouldRenderSsr("/",     new URLSearchParams("legacy=true")), true);
+    assert.equal(shouldRenderSsr("/",     new URLSearchParams("legacy=0")),    true);
+  });
+  it("never intercepts API / OG / share / asset paths, even without ?legacy", () => {
+    const empty = new URLSearchParams();
+    assert.equal(shouldRenderSsr("/api/puzzles",        empty), false);
+    assert.equal(shouldRenderSsr("/og/default.png",     empty), false);
+    assert.equal(shouldRenderSsr("/s/abc",              empty), false);
+    assert.equal(shouldRenderSsr("/assets/x.js",        empty), false);
+    assert.equal(shouldRenderSsr("/asset-manifest.json",empty), false);
+    assert.equal(shouldRenderSsr("/favicon.svg",        empty), false);
+    assert.equal(shouldRenderSsr("/robots.txt",         empty), false);
+    assert.equal(shouldRenderSsr("/sitemap.xml",        empty), false);
   });
 });
 

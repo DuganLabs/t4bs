@@ -89,17 +89,6 @@ const router = createRouter([
 ]);
 interceptLinks(document, router);
 
-// Strip ?next=1 from internal navigations so the SSR-vs-SPA gate is
-// orthogonal to the URL the user sees after the first paint.
-const stripNext = () => {
-  const url = new URL(window.location.href);
-  if (url.searchParams.has("next")) {
-    url.searchParams.delete("next");
-    window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
-  }
-};
-stripNext();
-
 effect(() => {
   const r = router.currentRoute();
   if (r.name === "lobby")         view.set("lobby");
