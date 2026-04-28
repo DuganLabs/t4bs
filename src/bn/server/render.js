@@ -60,16 +60,27 @@ function safeJson(value) {
     .replace(/\u2029/g, "\\u2029");
 }
 
-/** @param {{ category: string, submittedBy: string }[] | null} lobby */
+/** @param {{ id: number, category: string, submittedBy: string }[] | null} lobby */
 function lobbyGroups(lobby) {
   const groups = groupLobby(lobby) || [];
-  return groups.map(group => ({
-    category: group.category,
-    puzzleIds: group.puzzles.map(p => p.id).join(","),
-    credit: group.puzzles.length === 1
-      ? `by ${group.puzzles[0].submittedBy}`
-      : `${group.puzzles.length} puzzles`,
-  }));
+  return groups.map(group => {
+    /* For the no-JS case we need a deterministic single round per
+       category — pick the lowest puzzle id. The hydrated SPA uses a
+       random pick within the group instead, but that re-bind happens
+       after mount() replaces the SSR markup, so the link target only
+       affects browsers without JS or before the bundle has executed. */
+    const firstPuzzleId = group.puzzles
+      .map(p => p.id)
+      .reduce((min, id) => (id < min ? id : min), group.puzzles[0].id);
+    return {
+      category: group.category,
+      puzzleIds: group.puzzles.map(p => p.id).join(","),
+      playHref: `/play?play=${firstPuzzleId}`,
+      credit: group.puzzles.length === 1
+        ? `by ${group.puzzles[0].submittedBy}`
+        : `${group.puzzles.length} puzzles`,
+    };
+  });
 }
 
 /** @param {import('./ssr-context.js').PlaySessionSsr | null} play */
