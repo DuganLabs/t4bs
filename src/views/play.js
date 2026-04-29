@@ -36,8 +36,9 @@ export function createPlay({
 }) {
   /* ── per-round UI signals ──────────────────────────────────────────── */
   const active     = signal(null);
-  const typed      = signal(session.peek().words.map(() => []));
-  const wagers     = signal(session.peek().words.map(() => []));
+  const s0         = session.peek() || { words: [] };
+  const typed      = signal(s0.words.map(() => []));
+  const wagers     = signal(s0.words.map(() => []));
   const allInMode  = signal(false);
   const casc       = signal(false);
   const feedback   = signal({});       // wi -> [{idx, letter, status}]
@@ -60,8 +61,9 @@ export function createPlay({
     if (phase() !== "playing") return "";
     if (active() === null) return "";
     const s = session();
-    const slots = openSlots(s.words[active()], locked()[active()]);
-    const room = slots.length - typed()[active()].length;
+    if (!s?.words) return "";
+    const slots = openSlots(s.words[active()], locked()[active()] || {});
+    const room = slots.length - (typed()[active()]?.length || 0);
     if (room === 0) return "Word complete. Press enter to submit or tap a tile to stake 2× points.";
     return `Type ${room} more letter${room === 1 ? "" : "s"} for word ${active() + 1}.`;
   });
@@ -72,7 +74,11 @@ export function createPlay({
     return "";
   });
 
-  const allInBonus = computed(() => fullCount(session().words, locked()) * 8);
+  const allInBonus = computed(() => {
+    const s = session();
+    if (!s?.words) return 0;
+    return fullCount(s.words, locked()) * 8;
+  });
 
   const stakeText = computed(() => {
     const wagerCount = allInMode()
@@ -113,11 +119,11 @@ export function createPlay({
   /* ── typing primitives ─────────────────────────────────────────────── */
   const findGlobalNextSlot = () => {
     const s = session();
-    if (!s) return null;
+    if (!s?.words) return null;
     for (let wi = 0; wi < s.words.length; wi++) {
       if (wordSolved()[wi]) continue;
-      const slots = openSlots(s.words[wi], locked()[wi]);
-      if (typed()[wi].length < slots.length) return { wi, slotIdx: typed()[wi].length };
+      const slots = openSlots(s.words[wi], locked()[wi] || {});
+      if ((typed()[wi]?.length || 0) < slots.length) return { wi, slotIdx: typed()[wi]?.length || 0 };
     }
     return null;
   };
@@ -133,8 +139,10 @@ export function createPlay({
     const a = active();
     if (a === null) return;
     if (wordSolved()[a]) return;
-    const slots = openSlots(session().words[a], locked()[a]);
-    if (typed()[a].length >= slots.length) return;
+    const s = session();
+    if (!s?.words) return;
+    const slots = openSlots(s.words[a], locked()[a] || {});
+    if ((typed()[a]?.length || 0) >= slots.length) return;
     typed.set(prev => prev.map((t, i) => i !== a ? t : [...t, letter]));
   };
 
@@ -142,7 +150,9 @@ export function createPlay({
     if (phase() !== "playing" || casc()) return;
     if (allInMode()) {
       const t = typed();
-      for (let wi = session().words.length - 1; wi >= 0; wi--) {
+      const s = session();
+      if (!s?.words) return;
+      for (let wi = s.words.length - 1; wi >= 0; wi--) {
         if ((t[wi]?.length || 0) > 0) {
           typed.set(prev => prev.map((row, i) => i !== wi ? row : row.slice(0, -1)));
           wagers.set(prev => prev.map((w, i) => i !== wi ? w : w.filter(s => s < (t[wi].length - 1))));
@@ -178,8 +188,9 @@ export function createPlay({
   async function submit(wi) {
     if (phase() !== "playing" || casc() || wordSolved()[wi]) return;
     const s = session();
+    if (!s?.words) return;
     const wordLen = s.words[wi];
-    const lm = locked()[wi];
+    const lm = locked()[wi] || {};
     const slots = openSlots(wordLen, lm);
     if (typed()[wi].length < slots.length) {
       shaking.set(wi); setTimeout(() => shaking.set(null), 480);
@@ -243,9 +254,11 @@ export function createPlay({
 
   async function pickCascade(wi, li) {
     if (!casc() || tokens() <= 0 || wordSolved()[wi]) return;
-    if (locked()[wi][li] !== undefined) return;
+    if ((locked()[wi] || {})[li] !== undefined) return;
+    const s = session();
+    if (!s) return;
     try {
-      const result = await api.cascade(session().sessionId, wi, li);
+      const result = await api.cascade(s.sessionId, wi, li);
       locked.set(prev => prev.map((m, i) => i !== wi ? m : { ...result.locked }));
       tokens.set(result.tokens);
       presentGlobal.set(result.presentGlobal);
@@ -266,8 +279,10 @@ export function createPlay({
       announcement.set("Fold. Returned to normal play.");
       return;
     }
-    typed.set(session().words.map(() => []));
-    wagers.set(session().words.map(() => []));
+    const s = session();
+    if (!s?.words) return;
+    typed.set(s.words.map(() => []));
+    wagers.set(s.words.map(() => []));
     active.set(null);
     allInMode.set(true);
     announcement.set("All-in mode. Type the rest of the phrase to shove.");
@@ -275,9 +290,9 @@ export function createPlay({
 
   async function submitAllIn() {
     const s = session();
-    if (!s || !allInMode()) return;
+    if (!s?.words || !allInMode()) return;
     const guesses = s.words.map((len, wi) => {
-      const lm = locked()[wi];
+      const lm = locked()[wi] || {};
       const slots = openSlots(len, lm);
       let str = "";
       for (let i = 0; i < len; i++) {
@@ -351,19 +366,26 @@ export function createPlay({
 
   /* Header / summary — mirrors SSR <header data-bn-region="play-summary">. */
   const titleEl = h("h1", { id: "play-title", class: "sr-only" });
-  bindText(titleEl, () => `${session().category} — round #${session().id}`);
+  bindText(titleEl, () => {
+    const s = session();
+    return s ? `${s.category} — round #${s.id}` : "Loading…";
+  });
 
   const numEl = h("small", { class: "lb-num" });
-  bindText(numEl, () => `#${session().id} · ${session().category.toLowerCase()}`);
+  bindText(numEl, () => {
+    const s = session();
+    return s ? `#${s.id} · ${s.category.toLowerCase()}` : "";
+  });
 
   const stickyEl = h("p", { class: "lb-sticky", "data-bn-region": "play-sticky" });
-  bindText(stickyEl, () => session().category);
+  bindText(stickyEl, () => session()?.category || "");
 
   const subBy = h("strong");
-  bindText(subBy, () => session().submittedBy || "?");
+  bindText(subBy, () => session()?.submittedBy || "?");
   const subEl = h("p", { class: "lb-sub" });
   effect(() => {
     const s = session();
+    if (!s?.words) { subEl.replaceChildren(); return; }
     subEl.replaceChildren(
       document.createTextNode(`${s.words.length} words · ${s.totalLetters} letters · by `),
       subBy,
@@ -410,22 +432,22 @@ export function createPlay({
   effect(() => {
     const s = session();
     const lockedAll = locked();
-    if (!s || lockedAll.length !== s.words.length) return;
+    if (!s?.words || lockedAll.length !== s.words.length) return;
 
     let allInNext = null;
     if (allInMode()) {
       for (let w = 0; w < s.words.length; w++) {
         if (wordSolved()[w]) continue;
-        const ss = openSlots(s.words[w], lockedAll[w]);
-        if (typed()[w].length < ss.length) {
-          allInNext = { wi: w, slotIdx: typed()[w].length };
+        const ss = openSlots(s.words[w], lockedAll[w] || {});
+        if ((typed()[w]?.length || 0) < ss.length) {
+          allInNext = { wi: w, slotIdx: typed()[w]?.length || 0 };
           break;
         }
       }
     }
 
     const wordEls = s.words.map((wordLen, wi) => {
-      const lm = lockedAll[wi];
+      const lm = lockedAll[wi] || {};
       const slots = openSlots(wordLen, lm);
       const isAct = !allInMode() && active() === wi && !wordSolved()[wi] && !casc();
       const wagerSet = new Set(wagers()[wi] || []);
@@ -452,14 +474,14 @@ export function createPlay({
       for (let li = 0; li < wordLen; li++) {
         const lockedLetter = lm[li];
         const slotIdx = slots.indexOf(li);
-        const typedLetter = slotIdx >= 0 ? typed()[wi][slotIdx] : null;
+        const typedLetter = slotIdx >= 0 ? (typed()[wi]?.[slotIdx] ?? null) : null;
         const fbForTile = fbW?.find(f => f.idx === li);
         const isCascDrop = cascDrop() === `${wi}-${li}`;
         const isCascPick = casc() && lockedLetter === undefined && !wordSolved()[wi];
         const isWagered = slotIdx >= 0 && wagerSet.has(slotIdx) && typedLetter;
         const isCursor = allInMode()
           ? (allInNext?.wi === wi && allInNext?.slotIdx === slotIdx)
-          : (isAct && slotIdx === typed()[wi].length);
+          : (isAct && slotIdx === (typed()[wi]?.length || 0));
 
         const cls = ["lb-tile"];
         let display = "";
@@ -639,10 +661,10 @@ export function createPlay({
   bindText(endScore, () => String(score()));
   bindAttr(endScore, "aria-label", () => `Final score ${score()} points`);
   bindText(endShare, () => shareLbl() || "Share result");
-  bindText(endBy, () => session().submittedBy || "?");
+  bindText(endBy, () => session()?.submittedBy || "?");
   bindText(endTitle, () => phase() === "won" ? "Solved" : "House Wins");
   bindClassName(endTitle, () => `lb-ct ${phase() === "won" ? "win" : "lose"}`);
-  bindText(endSub, () => `${session().category}${phase() === "lost" ? " · the answer was" : ""}`);
+  bindText(endSub, () => `${session()?.category || ""}${phase() === "lost" ? " · the answer was" : ""}`);
   bindText(endReveal, () => (reveal() || []).join(" "));
   bindText(endPrimary, () => phase() === "won" ? "Pick another" : "Try again");
   endSecondary.textContent = "Pick another";

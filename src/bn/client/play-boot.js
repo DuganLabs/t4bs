@@ -18,8 +18,9 @@
 /**
  * @typedef {{ kind: "start", puzzleId: number }} StartIntent
  * @typedef {{ kind: "resume", sessionId: string }} ResumeIntent
+ * @typedef {{ kind: "daily" }} DailyIntent
  * @typedef {{ kind: "home" }} HomeIntent
- * @typedef {StartIntent | ResumeIntent | HomeIntent} BootIntent
+ * @typedef {StartIntent | ResumeIntent | DailyIntent | HomeIntent} BootIntent
  */
 
 /**
