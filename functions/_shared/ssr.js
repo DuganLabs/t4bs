@@ -31,74 +31,101 @@ export async function renderSsr({ request, env }) {
   const url = new URL(request.url);
   const route = matchRoute(url.pathname);
 
-  // Resolve current user once — header + admin/mod gates all need it.
+  /* Run the user lookup, the route-specific data fetch, and the asset
+     manifest read in parallel — they're all independent on a cold
+     request and were sequential before, costing one D1 round-trip per
+     hop on Lighthouse's TTFB. The user lookup is the only one we need
+     resolved before deciding whether moderate/admin are forbidden, so
+     we await the user-promise inside those branches but kick all
+     three off together. */
+
+  /** @type {Promise<typeof user>} */
+  const userPromise = (async () => {
+    try {
+      const u = await currentUser(request, env);
+      if (!u) return null;
+      return {
+        handle: u.handle,
+        role: getRole(u),
+        isAdmin: isAdmin(u),
+        isModerator: isModerator(u),
+      };
+    } catch { return null; }
+  })();
+
+  const assetsPromise = loadAssets(env, url);
+
+  /** @type {{ lobby: any[] | null, play: any, modPending: any[] | null, adminElevated: any[] | null }} */
+  const fetched = { lobby: null, play: null, modPending: null, adminElevated: null };
+  let dataError = null;
+
+  /** @type {Promise<unknown>} */
+  let dataPromise = Promise.resolve();
+
+  if (route === "lobby" || route === "submit") {
+    dataPromise = (async () => {
+      const engine = createEngine({
+        puzzles: d1Puzzles(env.DB),
+        sessions: d1Sessions(env.DB),
+      });
+      fetched.lobby = await engine.listPuzzles();
+    })();
+  } else if (route === "play") {
+    dataPromise = resolvePlay(env, url.searchParams).then(p => { fetched.play = p; });
+  } else if (route === "moderate") {
+    dataPromise = (async () => {
+      const u = await userPromise;
+      if (u && u.isModerator) fetched.modPending = await d1Submissions(env.DB).listPending();
+    })();
+  } else if (route === "admin") {
+    dataPromise = (async () => {
+      const u = await userPromise;
+      if (u && u.isAdmin) fetched.adminElevated = await d1Users(env.DB).listByRoles(["moderator", "admin"]);
+    })();
+  }
+
   let user = null;
   try {
-    const u = await currentUser(request, env);
-    if (u) user = {
-      handle: u.handle,
-      role: getRole(u),
-      isAdmin: isAdmin(u),
-      isModerator: isModerator(u),
-    };
-  } catch { /* anonymous */ }
+    [user] = await Promise.all([userPromise, dataPromise.catch(e => { dataError = e; })]);
+  } catch (e) {
+    dataError = e;
+  }
 
   const ctx = {
     route,
     pathname: url.pathname,
     user,
-    lobby: null,
-    error: null,
-    play: null,
-    submit: { existingCategories: [] },
-    moderate: { pending: null, forbidden: false },
-    admin: { elevated: null, currentHandle: null, forbidden: false },
+    lobby: fetched.lobby,
+    error: dataError ? String(dataError?.message || dataError) : null,
+    play: fetched.play,
+    submit: {
+      existingCategories: route === "submit" ? uniqueCategories(fetched.lobby) : [],
+    },
+    moderate: {
+      pending: fetched.modPending,
+      forbidden: route === "moderate" && !(user && user.isModerator),
+    },
+    admin: {
+      elevated: fetched.adminElevated,
+      currentHandle: user?.handle || null,
+      forbidden: route === "admin" && !(user && user.isAdmin),
+    },
   };
 
-  try {
-    if (route === "lobby" || route === "submit") {
-      const engine = createEngine({
-        puzzles: d1Puzzles(env.DB),
-        sessions: d1Sessions(env.DB),
-      });
-      ctx.lobby = await engine.listPuzzles();
-      if (route === "submit") {
-        ctx.submit.existingCategories = uniqueCategories(ctx.lobby);
-      }
-    }
-
-    if (route === "play") {
-      ctx.play = await resolvePlay(env, url.searchParams);
-    }
-
-    if (route === "moderate") {
-      if (!user || !user.isModerator) {
-        ctx.moderate.forbidden = true;
-      } else {
-        ctx.moderate.pending = await d1Submissions(env.DB).listPending();
-      }
-    }
-
-    if (route === "admin") {
-      ctx.admin.currentHandle = user?.handle || null;
-      if (!user || !user.isAdmin) {
-        ctx.admin.forbidden = true;
-      } else {
-        ctx.admin.elevated = await d1Users(env.DB).listByRoles(["moderator", "admin"]);
-      }
-    }
-  } catch (e) {
-    ctx.error = String(e?.message || e);
-  }
-
-  const assets = await loadAssets(env, url);
+  const assets = await assetsPromise;
   const html = renderPage(ctx, assets);
 
   return new Response(html, {
     status: route === "not-found" ? 404 : 200,
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "no-store",
+      /* `private` keeps shared caches (CDN, ISP) out so per-user
+         header content stays user-private; `no-cache` forces the
+         browser to revalidate before reuse; `must-revalidate`
+         disallows serving stale on revalidation failure. Unlike
+         `no-store`, this set still permits the back/forward cache,
+         which Lighthouse flagged as a perf regression on t4bs.com. */
+      "Cache-Control": "private, no-cache, must-revalidate",
       "X-T4BS-SSR": "bn",
     },
   });

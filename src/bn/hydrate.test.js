@@ -220,6 +220,20 @@ describe("renderPage — emits a complete BaseNative-rendered HTML document for 
     const json = JSON.parse(html.slice(start, end).split(">")[1]);
     assert.equal(json.route, "play");
   });
+
+  /* Lighthouse network-dependency-tree-insight flagged the hydrate
+     bundle as a late-discovered critical-path resource. The fix
+     emits a <link rel="modulepreload"> in the head so the browser
+     can start the fetch in parallel with stylesheet + font requests. */
+  it("preloads the hydrate bundle via <link rel=\"modulepreload\">", () => {
+    const assets = { js: "/assets/bn-hydrate-abc123.js", css: [] };
+    const html = renderPage(baseCtx(), assets);
+    assert.match(
+      html,
+      /<link[^>]*rel="modulepreload"[^>]*href="\/assets\/bn-hydrate-abc123\.js"/,
+      "expected a modulepreload link for the hydrate bundle in <head>",
+    );
+  });
 });
 
 describe("decidePlayBoot", () => {

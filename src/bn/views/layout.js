@@ -57,6 +57,13 @@ export default `<!DOCTYPE html>
       <link rel="stylesheet" :href="href" />
     </template>
 
+    <!-- The hydrate bundle is the longest critical-path JS request.
+         Discovered late by the browser (script tag is at end of body),
+         which Lighthouse flags as a network-dependency-tree depth
+         problem. modulepreload lets the browser start fetching as soon
+         as the head is parsed, parallel with stylesheet + font fetches. -->
+    <link rel="modulepreload" :href="jsAsset" />
+
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
