@@ -130,6 +130,44 @@ describe("renderPage — emits a complete BaseNative-rendered HTML document for 
     assert.match(html, /data-puzzle-ids="3"/);
   });
 
+  /* issue #24 — the lobby must work with JavaScript disabled. Each
+     puzzle group renders an <a href="/play?play=ID"> the SPA can
+     enhance after hydration, plus a <noscript> hint pitched at the
+     no-JS user. */
+  it("lobby renders anchor links to /play?play=<id> for each group", () => {
+    const lobby = [
+      { id: 7, category: "ANIMALS", submittedBy: "wmd" },
+      { id: 3, category: "ANIMALS", submittedBy: "warren" },
+      { id: 4, category: "FOODS",   submittedBy: "wmd" },
+    ];
+    const html = renderPage(baseCtx({ lobby }), ASSETS);
+    /* Multi-puzzle group: deterministic lowest-id pick (3 not 7). */
+    assert.match(html, /href="\/play\?play=3"/);
+    /* Single-puzzle group: the only id is the link target. */
+    assert.match(html, /href="\/play\?play=4"/);
+    /* No <button> for picking a round in the SSR markup — the
+       degradation contract is anchors only. */
+    const lobbyHtml = html.split("data-bn-view=\"lobby\"")[1] ?? "";
+    assert.ok(
+      !/<button[^>]*data-bn-action="lobby-pick"/.test(lobbyHtml),
+      "lobby SSR must not emit a <button> for picking — anchors only",
+    );
+  });
+
+  it("lobby includes a <noscript> hint about JS-optional play", () => {
+    const html = renderPage(baseCtx({
+      lobby: [{ id: 1, category: "ANIMALS", submittedBy: "wmd" }],
+    }), ASSETS);
+    assert.match(html, /<noscript>[\s\S]*JavaScript enhances[\s\S]*<\/noscript>/);
+  });
+
+  it("submit FAB degrades to an anchor for no-JS users", () => {
+    const html = renderPage(baseCtx({
+      lobby: [{ id: 1, category: "ANIMALS", submittedBy: "wmd" }],
+    }), ASSETS);
+    assert.match(html, /<a[^>]*href="\/submit"[^>]*data-bn-action="lobby-submit"/);
+  });
+
   it("play view shows word-length skeleton with anchor letters", () => {
     const play = {
       id: 42,
