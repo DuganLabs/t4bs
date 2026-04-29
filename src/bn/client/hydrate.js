@@ -23,7 +23,7 @@ import {
 import { nativeShare, mintShareCard, composeShareText } from "@basenative/share/client";
 
 import { api } from "../../lib/api.js";
-import { groupLobby } from "../../lib/game.js";
+import { groupLobby, dailyPuzzle } from "../../lib/game.js";
 import { mount, h } from "../../lib/dom.js";
 import { createHeader }    from "../../components/header.js";
 import { createToast, makeToaster } from "../../components/toast.js";
@@ -213,6 +213,23 @@ if (!SSR.user) {
   }
 })();
 
+/* ── Daily auto-start ────────────────────────────────────────────────
+   When the lobby finishes loading and the user isn't already in a
+   round, auto-start today's daily puzzle so every visitor sees the
+   same puzzle per day (Wordle-style). Only fires once. */
+let dailyFired = false;
+effect(() => {
+  const lb = lobby();
+  if (!lb || dailyFired) return;
+  /* Don't interrupt an active game or a resume in progress */
+  if (session() || playLoading()) return;
+  /* Only auto-start from the lobby — respect deep-links to other views */
+  if (view() !== "lobby") return;
+  dailyFired = true;
+  const pick = dailyPuzzle(lb);
+  if (pick) start(pick.id);
+});
+
 function hydrateSession(s, fresh) {
   const lm = s.words.map(() => ({}));
   s.anchors.forEach(a => { lm[a.wi][a.li] = a.letter; });
@@ -259,6 +276,7 @@ async function start(puzzleId) {
 async function shareResult({ won }) {
   try {
     const s = session();
+    if (!s?.words) return "Couldn't share";
     const sLocked = locked();
     const sPos = posFeedback();
     const grid = s.words.map((len, wi) => {

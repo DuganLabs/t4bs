@@ -324,6 +324,25 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
   font-size: 10px; letter-spacing: 1.2px; color: #9A9590; text-transform: uppercase;
 }
 
+/* DAILY */
+.lb-daily {
+  width: 100%; max-width: 480px;
+  display: flex; flex-direction: column; gap: 6px;
+  margin-bottom: 18px; text-align: center;
+}
+.lb-daily-label {
+  font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+  color: #E8920A; font-weight: 700;
+}
+.lb-daily-item {
+  border-color: #E8920A !important;
+  background: #1A1714 !important;
+}
+.lb-lobby-daily {
+  border-color: #E8920A;
+  position: relative;
+}
+
 .lb-tagline { font-size: 11px; color: #9A9590; letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 18px; text-align: center; }
 
 .lb-stats {

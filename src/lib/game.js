@@ -52,4 +52,32 @@ export function groupLobby(lobby) {
   return [...map.values()].sort((a, b) => a.category.localeCompare(b.category));
 }
 
+/* Date-seeded deterministic selection — everyone sees the same puzzle
+   for a given day. Uses a simple hash of the YYYY-MM-DD string to pick
+   an index from the available puzzle list. */
+export function dailySeed(date = new Date()) {
+  const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  let h = 0;
+  for (let i = 0; i < key.length; i++) {
+    h = ((h << 5) - h + key.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+/** Pick today's puzzle from a flat list of puzzles. Returns null if the list is empty. */
+export function dailyPuzzle(puzzles, date = new Date()) {
+  if (!puzzles || puzzles.length === 0) return null;
+  const seed = dailySeed(date);
+  return puzzles[seed % puzzles.length];
+}
+
+/** Pick today's category and puzzle from grouped lobby data. */
+export function dailyFromGroups(groups, date = new Date()) {
+  if (!groups || groups.length === 0) return null;
+  const seed = dailySeed(date);
+  const group = groups[seed % groups.length];
+  const puzzle = group.puzzles[seed % group.puzzles.length];
+  return { group, puzzle };
+}
+
 export const isDev = () => !!(import.meta && import.meta.env && import.meta.env.DEV);
