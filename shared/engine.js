@@ -3,9 +3,17 @@
 
 import { evalWord, scoreGuess, openSlots, publicShape, initialState } from "./pure.js";
 
+/* Session IDs are an authentication token in everything but name —
+   anyone holding one can call /api/guess and progress that round. They
+   need to be from a CSPRNG. crypto.randomUUID is available in every
+   runtime t4bs targets (Cloudflare Workers, Node ≥18, modern browsers
+   for the Vite dev mock); the previous Math.random() fallback was
+   dead code that CodeQL still flagged because the lexical reachability
+   analysis can't prove that. Drop the fallback so the analyser stops
+   tripping and so a hypothetical future runtime without crypto fails
+   loudly instead of silently issuing weak IDs. */
 function newId() {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
-  return Array.from({length:32}, () => Math.floor(Math.random()*16).toString(16)).join("");
+  return crypto.randomUUID();
 }
 
 export function createEngine({ puzzles, sessions }) {
