@@ -1,10 +1,15 @@
-/* MODERATE view. Lists /api/moderate/pending submissions; approve / reject
-   in place. Uses @basenative/admin's shared queue renderer so the markup
-   matches the SSR first paint (and PendingBusiness once it migrates). */
+/* MODERATE view — semantic mirror of src/bn/views/moderate.js (SSR).
+
+   <main data-bn-view="moderate"> with <header>, <section data-bn-region="queue">,
+   and a back-to-lobby button. The queue list itself is rendered by
+   @basenative/admin's renderAdminQueueList (shared across BaseNative
+   admin surfaces), so its inner markup is owned by that package; this
+   file only wires the outer shell + click delegation. */
 
 import { signal, effect } from "@basenative/runtime";
 import { renderAdminQueueList } from "@basenative/admin/components";
 import { h } from "../lib/dom.js";
+import { bindHidden, bindText } from "../lib/bind.js";
 import { api } from "../lib/api.js";
 
 export function createModerate({ toaster, onLobbyChange, goLobby }) {
@@ -28,14 +33,23 @@ export function createModerate({ toaster, onLobbyChange, goLobby }) {
     }
   }
 
-  const errBox = h("div", { class: "lb-ferror", text: () => err() || "", hidden: () => !err() });
+  const errBox = h("p", { class: "lb-ferror", role: "alert", "data-bn-region": "error" });
+  bindText(errBox, () => err() || "");
+  bindHidden(errBox, () => !err());
 
-  const queueRoot = h("div");
+  const queueRoot = h("section", {
+    class: "bn-admin-queue-host",
+    "aria-label": "Pending submissions",
+    "data-bn-region": "queue",
+    "data-bn-bind": "moderate-list",
+  });
   effect(() => {
+    if (err()) { queueRoot.replaceChildren(); return; }
     const items = list();
-    if (err()) { queueRoot.innerHTML = ""; return; }
     if (items === null) {
-      queueRoot.innerHTML = `<div class="lb-cred">loading…</div>`;
+      queueRoot.replaceChildren(
+        h("p", { class: "lb-cred", role: "status", "aria-live": "polite" }, "loading…"),
+      );
       return;
     }
     queueRoot.innerHTML = renderAdminQueueList({ items, actionHandler: "mod-decide" });
@@ -47,12 +61,22 @@ export function createModerate({ toaster, onLobbyChange, goLobby }) {
     decide(Number(btn.dataset.id), btn.dataset.decision);
   });
 
-  return h("main", { "aria-labelledby": "lb-mod-title" },
-    h("h1", { id: "lb-mod-title", class: "sr-only" }, "Moderation queue"),
-    h("div", { class: "lb-sticky lb-sticky-narrow" }, "Moderation queue"),
-    h("div", { class: "lb-tagline" }, "Approve or reject pending phrases"),
+  return h("main", {
+    "aria-labelledby": "moderate-title",
+    "data-bn-view": "moderate",
+  },
+    h("header", null,
+      h("h1", { id: "moderate-title", class: "sr-only" }, "Moderation queue"),
+      h("p", { class: "lb-sticky lb-sticky-narrow" }, "Moderation queue"),
+      h("p", { class: "lb-tagline" }, "Approve or reject pending phrases"),
+    ),
     errBox,
     queueRoot,
-    h("button", { class: "lb-btn lb-bs lb-bs-back", type: "button", onClick: goLobby }, "← Back"),
+    h("button", {
+      type: "button",
+      class: "lb-btn lb-bs lb-bs-back",
+      "data-bn-action": "back",
+      onClick: goLobby,
+    }, "← Back"),
   );
 }

@@ -1,48 +1,53 @@
-/* Single-file component: PLAY view.
-   All game state is signal-driven. Calls into shared/engine.js indirectly via
-   /api endpoints. The on-screen keyboard is @basenative/keyboard. */
+/* PLAY view — semantic, signal-driven mirror of src/bn/views/play.js (SSR).
+
+   Same shape the SSR template produces (<main data-bn-view="play"> with
+   <header data-bn-region="play-summary">, <section data-bn-region="grid">,
+   <section data-bn-region="bank">, <section data-bn-region="keyboard">,
+   <dialog data-bn-region="end-overlay">). The bind helpers in lib/bind.js
+   wire signals into the existing nodes — no class-soup div builders, no
+   imperative children-replace except for the phrase grid and letter bank
+   where the cell count is inherently dynamic. */
 
 import { signal, computed, effect } from "@basenative/runtime";
 import { Keyboard } from "@basenative/keyboard";
-import { h, reactiveList } from "../lib/dom.js";
+import { h } from "../lib/dom.js";
+import { bindAttr, bindClassName, bindHidden, bindText } from "../lib/bind.js";
 import { api } from "../lib/api.js";
 import { openSlots, fullCount, computeKeyStatus } from "../lib/game.js";
 import { confetti } from "../lib/confetti.js";
 
 export function createPlay({
-  session,        // signal<object>      — initial public shape from /api/session
-  locked,         // signal<array<map>>  — wi -> { li -> letter }
-  presentGlobal,  // signal<string[]>
-  absentByWord,   // signal<string[][]>
-  wordSolved,     // signal<boolean[]>
-  posFeedback,    // signal<(green|yellow|absent|null)[][]>
-  score,          // signal<number>
-  lives,          // signal<number>
-  tokens,         // signal<number>
-  phase,          // signal<'playing'|'won'|'lost'>
-  reveal,         // signal<string[] | null>
-  toaster,        // (text, type) => void
-  onResultRecorded, // (won, score, category) => void
-  onShare,        // ({ won }) => Promise<string>  — returns label
+  session,
+  locked,
+  presentGlobal,
+  absentByWord,
+  wordSolved,
+  posFeedback,
+  score,
+  lives,
+  tokens,
+  phase,
+  reveal,
+  toaster,
+  onResultRecorded,
+  onShare,
   goLobby,
-  retry,          // () => void  — restart the same puzzle
+  retry,
 }) {
-  // ── per-render UI signals ──────────────────────────────────────────────
-  const active    = signal(null);
-  const typed     = signal(session.peek().words.map(() => []));
-  const wagers    = signal(session.peek().words.map(() => []));
-  const allInMode = signal(false);
-  const casc      = signal(false);
-  const feedback  = signal({});       // wi -> [{idx, letter, status}]
-  const shaking   = signal(null);
-  const cascDrop  = signal(null);
-  const shareLbl  = signal(null);
+  /* ── per-round UI signals ──────────────────────────────────────────── */
+  const active     = signal(null);
+  const typed      = signal(session.peek().words.map(() => []));
+  const wagers     = signal(session.peek().words.map(() => []));
+  const allInMode  = signal(false);
+  const casc       = signal(false);
+  const feedback   = signal({});       // wi -> [{idx, letter, status}]
+  const shaking    = signal(null);
+  const cascDrop   = signal(null);
+  const shareLbl   = signal(null);
+  const announcement = signal("");
   let resultRecorded = false;
 
-  // ── accessibility announcements ────────────────────────────────────────
-  const announcement = signal("");
-
-  // ── derived ────────────────────────────────────────────────────────────
+  /* ── derived ───────────────────────────────────────────────────────── */
   const keyStatus = computed(() => computeKeyStatus({
     session: session(),
     locked: locked(),
@@ -61,9 +66,24 @@ export function createPlay({
     return `Type ${room} more letter${room === 1 ? "" : "s"} for word ${active() + 1}.`;
   });
 
+  const cbarText = computed(() => {
+    if (casc()) return "⚡ Earned reveal — pick any tile in any unsolved word";
+    if (allInMode()) return `ALL IN — type the rest of the phrase · SHOVE to commit · +${allInBonus()} pts if right · 0 lives if wrong`;
+    return "";
+  });
+
   const allInBonus = computed(() => fullCount(session().words, locked()) * 8);
 
-  // ── auto-pick the first unsolved word when phase changes / a word solves ──
+  const stakeText = computed(() => {
+    const wagerCount = allInMode()
+      ? wagers().reduce((acc, w) => acc + (w?.length || 0), 0)
+      : (active() !== null ? (wagers()[active()]?.length || 0) : 0);
+    if (wagerCount > 0) return `${wagerCount}× STAKED`;
+    if (allInMode()) return "TYPE THE REST";
+    return "";
+  });
+
+  /* ── effects: word focus + result recording ───────────────────────── */
   effect(() => {
     if (phase() !== "playing" || casc()) return;
     const ws = wordSolved();
@@ -74,7 +94,6 @@ export function createPlay({
     }
   });
 
-  // ── record result + confetti when round ends ──
   effect(() => {
     const p = phase();
     if (resultRecorded) return;
@@ -91,7 +110,7 @@ export function createPlay({
     }
   });
 
-  // ── typing primitives ──────────────────────────────────────────────────
+  /* ── typing primitives ─────────────────────────────────────────────── */
   const findGlobalNextSlot = () => {
     const s = session();
     if (!s) return null;
@@ -155,7 +174,7 @@ export function createPlay({
     }));
   };
 
-  // ── submit one word ────────────────────────────────────────────────────
+  /* ── submit one word ──────────────────────────────────────────────── */
   async function submit(wi) {
     if (phase() !== "playing" || casc() || wordSolved()[wi]) return;
     const s = session();
@@ -197,11 +216,8 @@ export function createPlay({
       if (won) {
         wordSolved.set(prev => prev.map((v, i) => i !== wi ? v : true));
         active.set(null);
-        const wagerCount = wagers().length > 0 ? 0 : 0; // wagers reset above
-        const wagerNote = wagerCount > 0 ? ` · ${wagerCount}× STAKE WON` : "";
-        const msg = `Correct! Word ${wi + 1} solved. ${result.lives} lives remaining.`;
-        announcement.set(msg);
-        toaster(`+${result.scoreDelta}pts${wagerNote}`, "great");
+        announcement.set(`Correct! Word ${wi + 1} solved. ${result.lives} lives remaining.`);
+        toaster(`+${result.scoreDelta}pts`, "great");
         if (result.cascadeEarned) {
           setTimeout(() => {
             casc.set(true);
@@ -210,8 +226,7 @@ export function createPlay({
         }
       } else {
         shaking.set(wi); setTimeout(() => shaking.set(null), 480);
-        const msg = `Incorrect. ${result.lives} lives remaining.`;
-        announcement.set(msg);
+        announcement.set(`Incorrect. ${result.lives} lives remaining.`);
         toaster(`${result.scoreDelta}pts`, "bad");
       }
       setTimeout(() => {
@@ -226,7 +241,6 @@ export function createPlay({
     }
   }
 
-  // ── cascade pick ────
   async function pickCascade(wi, li) {
     if (!casc() || tokens() <= 0 || wordSolved()[wi]) return;
     if (locked()[wi][li] !== undefined) return;
@@ -246,7 +260,6 @@ export function createPlay({
     }
   }
 
-  // ── all-in ────
   function openAllIn() {
     if (allInMode()) {
       allInMode.set(false);
@@ -259,6 +272,7 @@ export function createPlay({
     allInMode.set(true);
     announcement.set("All-in mode. Type the rest of the phrase to shove.");
   }
+
   async function submitAllIn() {
     const s = session();
     if (!s || !allInMode()) return;
@@ -310,7 +324,7 @@ export function createPlay({
     }
   }
 
-  // ── physical keyboard ──
+  /* ── physical keyboard ────────────────────────────────────────────── */
   effect(() => {
     if (phase() !== "playing" || casc() || (active() === null && !allInMode())) return;
     const onKey = (e) => {
@@ -325,60 +339,110 @@ export function createPlay({
     return () => document.removeEventListener("keydown", onKey);
   });
 
-  // ── Accessibility: visually-hidden announcement region ──
-  const ariaLive = h("div", {
+  /* ── DOM build ────────────────────────────────────────────────────── */
+
+  const announceEl = h("output", {
     class: "sr-only",
-    role: "status",
     "aria-live": "polite",
     "aria-atomic": "true",
-    text: announcement,
+    "data-bn-region": "play-announce",
+  });
+  bindText(announceEl, announcement);
+
+  /* Header / summary — mirrors SSR <header data-bn-region="play-summary">. */
+  const titleEl = h("h1", { id: "play-title", class: "sr-only" });
+  bindText(titleEl, () => `${session().category} — round #${session().id}`);
+
+  const numEl = h("small", { class: "lb-num" });
+  bindText(numEl, () => `#${session().id} · ${session().category.toLowerCase()}`);
+
+  const stickyEl = h("p", { class: "lb-sticky", "data-bn-region": "play-sticky" });
+  bindText(stickyEl, () => session().category);
+
+  const subBy = h("strong");
+  bindText(subBy, () => session().submittedBy || "?");
+  const subEl = h("p", { class: "lb-sub" });
+  effect(() => {
+    const s = session();
+    subEl.replaceChildren(
+      document.createTextNode(`${s.words.length} words · ${s.totalLetters} letters · by `),
+      subBy,
+    );
   });
 
-  // ── DOM build ──────────────────────────────────────────────────────────
-  const cbar = h("div", {
-    class: () => `lb-cbar${allInMode() && !casc() ? " lb-cbar-allin" : ""}`,
+  const hintEl = h("p", {
     role: "status",
     "aria-live": "polite",
-    text: () => {
-      if (casc()) return "⚡ Earned reveal — pick any tile in any unsolved word";
-      if (allInMode()) return `ALL IN — type the rest of the phrase · SHOVE to commit · +${allInBonus()} pts if right · 0 lives if wrong`;
-      return "";
-    },
-    hidden: () => !casc() && !allInMode(),
+    "data-bn-region": "play-hint",
+  });
+  bindText(hintEl, hintText);
+  bindClassName(hintEl, () => `lb-hint${active() !== null ? " on" : ""}`);
+
+  const cbarEl = h("p", {
+    role: "status",
+    "aria-live": "polite",
+    "data-bn-region": "play-cbar",
+  });
+  bindText(cbarEl, cbarText);
+  bindClassName(cbarEl, () => `lb-cbar${allInMode() && !casc() ? " lb-cbar-allin" : ""}`);
+  bindHidden(cbarEl, () => !casc() && !allInMode());
+
+  const summary = h("header", { "data-bn-region": "play-summary" },
+    titleEl,
+    h("p", { "data-bn-region": "play-meta" }, numEl),
+    stickyEl,
+    subEl,
+    hintEl,
+    cbarEl,
+  );
+
+  /* Phrase grid — single effect rebuilds on every relevant signal change.
+     One effect (rather than per-tile effects) is the same pattern PB's
+     bindList uses: when state changes, replaceChildren atomically.
+     Avoids the leaked-effects bug that per-tile subscriptions would
+     introduce when the session swaps to a different word count. */
+  const grid = h("section", {
+    class: "lb-phrase",
+    "aria-label": "Phrase grid",
+    "data-bn-region": "grid",
   });
 
-  const phraseGrid = h("div", { class: "lb-phrase" });
-  reactiveList(phraseGrid, () => {
+  effect(() => {
     const s = session();
-    const words = s.words;
+    const lockedAll = locked();
+    if (!s || lockedAll.length !== s.words.length) return;
+
     let allInNext = null;
     if (allInMode()) {
-      for (let wi = 0; wi < words.length; wi++) {
-        if (wordSolved()[wi]) continue;
-        const ss = openSlots(words[wi], locked()[wi]);
-        if (typed()[wi].length < ss.length) { allInNext = { wi, slotIdx: typed()[wi].length }; break; }
+      for (let w = 0; w < s.words.length; w++) {
+        if (wordSolved()[w]) continue;
+        const ss = openSlots(s.words[w], lockedAll[w]);
+        if (typed()[w].length < ss.length) {
+          allInNext = { wi: w, slotIdx: typed()[w].length };
+          break;
+        }
       }
     }
 
-    return words.map((wordLen, wi) => {
-      const lm = locked()[wi];
+    const wordEls = s.words.map((wordLen, wi) => {
+      const lm = lockedAll[wi];
       const slots = openSlots(wordLen, lm);
       const isAct = !allInMode() && active() === wi && !wordSolved()[wi] && !casc();
-      const cascOn = casc() && !wordSolved()[wi];
+      const wagerSet = new Set(wagers()[wi] || []);
       const fbW = feedback()[wi];
-      const wagerSet = new Set(wagers()[wi]);
 
-      const wordCls = [
-        "lb-word",
-        isAct ? "active" : "",
-        allInMode() && !wordSolved()[wi] ? "allin" : "",
-        wordSolved()[wi] ? "solved" : "",
-        shaking() === wi ? "shake" : "",
-        cascOn ? "casc-on" : "",
-      ].filter(Boolean).join(" ");
+      const wordCls = ["lb-word"];
+      if (isAct) wordCls.push("active");
+      if (allInMode() && !wordSolved()[wi]) wordCls.push("allin");
+      if (wordSolved()[wi]) wordCls.push("solved");
+      if (shaking() === wi) wordCls.push("shake");
+      if (casc() && !wordSolved()[wi]) wordCls.push("casc-on");
 
-      const wordEl = h("div", {
-        class: wordCls,
+      const word = h("div", {
+        role: "group",
+        class: wordCls.join(" "),
+        "aria-label": `Word ${wi + 1}`,
+        "data-word-index": wi,
         onClick: () => {
           if (casc() || allInMode()) return;
           if (!wordSolved()[wi]) active.set(wi);
@@ -389,26 +453,23 @@ export function createPlay({
         const lockedLetter = lm[li];
         const slotIdx = slots.indexOf(li);
         const typedLetter = slotIdx >= 0 ? typed()[wi][slotIdx] : null;
-        const isCursor = allInMode()
-          ? (allInNext?.wi === wi && allInNext?.slotIdx === slotIdx)
-          : (isAct && slotIdx === typed()[wi].length);
         const fbForTile = fbW?.find(f => f.idx === li);
         const isCascDrop = cascDrop() === `${wi}-${li}`;
         const isCascPick = casc() && lockedLetter === undefined && !wordSolved()[wi];
         const isWagered = slotIdx >= 0 && wagerSet.has(slotIdx) && typedLetter;
+        const isCursor = allInMode()
+          ? (allInNext?.wi === wi && allInNext?.slotIdx === slotIdx)
+          : (isAct && slotIdx === typed()[wi].length);
 
         const cls = ["lb-tile"];
-        let display;
-
-        if (wordSolved()[wi]) { cls.push("solved-tile"); display = lockedLetter; }
-        else if (lockedLetter !== undefined) {
-          cls.push("locked-green"); display = lockedLetter;
-        }
+        let display = "";
+        if (wordSolved()[wi]) { cls.push("solved-tile"); display = lockedLetter || ""; }
+        else if (lockedLetter !== undefined) { cls.push("locked-green"); display = lockedLetter; }
         else if (typedLetter) {
-          cls.push(allInMode() ? "typed allin-typed" : "typed");
+          cls.push("typed");
+          if (allInMode()) cls.push("allin-typed");
           display = typedLetter;
-        }
-        else { if (isCursor) cls.push("cursor"); display = ""; }
+        } else if (isCursor) cls.push("cursor");
 
         if (fbForTile) { cls.push("fb-flip", `fb-${fbForTile.status}`); display = fbForTile.letter; }
         if (isWagered) cls.push("wagered");
@@ -416,66 +477,84 @@ export function createPlay({
         if (isCascDrop) cls.push("casc-drop");
 
         const pos = `position ${li + 1} of word ${wi + 1}`;
-        let tileLabel;
-        if (wordSolved()[wi]) tileLabel = `${lockedLetter} at ${pos}, word solved`;
-        else if (lockedLetter !== undefined) tileLabel = `${lockedLetter} at ${pos}, locked`;
+        let label;
+        if (wordSolved()[wi]) label = `${lockedLetter} at ${pos}, word solved`;
+        else if (lockedLetter !== undefined) label = `${lockedLetter} at ${pos}, locked`;
         else if (typedLetter) {
           let state = "typed";
           if (isWagered) state += ", staked 2 times";
           if (isCursor) state += ", cursor here";
-          tileLabel = `${typedLetter} at ${pos}, ${state}`;
+          label = `${typedLetter} at ${pos}, ${state}`;
+        } else {
+          label = `Empty at ${pos}`;
+          if (isCursor) label += ", cursor here";
+          if (isCascPick) label += ", cascade reveal available";
         }
-        else {
-          tileLabel = `Empty at ${pos}`;
-          if (isCursor) tileLabel += ", cursor here";
-          if (isCascPick) tileLabel += ", cascade reveal available";
-        }
-        if (fbForTile) tileLabel = `${fbForTile.letter} at ${pos}, ${fbForTile.status}`;
+        if (fbForTile) label = `${fbForTile.letter} at ${pos}, ${fbForTile.status}`;
 
-        wordEl.append(h("div", {
-          class: cls.join(" "),
+        const tileProps = {
           role: "img",
-          "aria-label": tileLabel,
+          class: cls.join(" "),
+          "aria-label": label,
+          "data-word-index": wi,
+          "data-cell-index": li,
           onClick: (e) => {
             e.stopPropagation();
             if (isCascPick) { pickCascade(wi, li); return; }
             if ((isAct || allInMode()) && typedLetter) { toggleWager(wi, slotIdx); return; }
             if (!wordSolved()[wi] && !casc() && !allInMode()) active.set(wi);
           },
-        }, display));
+        };
+        if (lockedLetter !== undefined) tileProps["data-locked"] = "true";
+        word.append(h("span", tileProps, display));
       }
-      return wordEl;
+      return word;
     });
+
+    grid.replaceChildren(...wordEls);
   });
 
-  // Knowledge bank
-  const bankPresentRow = h("div", { class: "lb-bank-row" });
-  reactiveList(bankPresentRow, () => {
-    const out = [h("span", { class: "lb-bank-label" }, "in phrase:")];
+  /* Letter bank — present / absent chips. */
+  const presentRow = h("p", { class: "lb-bank-row", "data-bn-region": "bank-present" });
+  effect(() => {
     const pg = presentGlobal();
-    if (pg.length === 0) out.push(h("span", { class: "lb-bank-label" }, "—"));
-    else for (const L of pg) out.push(h("span", { class: "lb-chip yellow" }, L));
-    return out;
+    if (pg.length === 0) {
+      presentRow.replaceChildren(
+        h("span", { class: "lb-bank-label" }, "in phrase:"),
+        h("span", { class: "lb-bank-label" }, "—"),
+      );
+      return;
+    }
+    presentRow.replaceChildren(
+      h("span", { class: "lb-bank-label" }, "in phrase:"),
+      ...pg.map(L => h("span", { class: "lb-chip yellow" }, L)),
+    );
   });
-  const bankAbsentRow = h("div", { class: "lb-bank-row" });
-  reactiveList(bankAbsentRow, () => {
+
+  const absentRow = h("p", { class: "lb-bank-row", "data-bn-region": "bank-absent" });
+  effect(() => {
     const a = active();
-    if (a === null) return [];
+    if (a === null) { absentRow.replaceChildren(); return; }
     const abs = absentByWord()[a] || [];
-    if (abs.length === 0) return [];
-    return [
+    if (abs.length === 0) { absentRow.replaceChildren(); return; }
+    absentRow.replaceChildren(
       h("span", { class: "lb-bank-label" }, `not in word ${a + 1}:`),
       ...abs.map(L => h("span", { class: "lb-chip absent" }, L)),
-    ];
+    );
   });
-  const bank = h("div", { class: "lb-bank" }, bankPresentRow, bankAbsentRow);
 
-  // ── @basenative/keyboard wiring ──
+  const bank = h("section", {
+    class: "lb-bank",
+    "aria-label": "Letter bank",
+    "data-bn-region": "bank",
+  }, presentRow, absentRow);
+
+  /* Keyboard region — @basenative/keyboard mounts here. */
   const kb = Keyboard({
     layout: "qwerty",
     primary: "ENTER",
     label: "On-screen keyboard",
-    state: keyStatus,                  // computed → re-applies on signal change
+    state: keyStatus,
     runtime: { effect },
     onKey: typeLetter,
     onAction: (a) => {
@@ -483,59 +562,57 @@ export function createPlay({
       else if (a === "BACKSPACE") backspace();
     },
     haptic: true,
-    bindHardware: false,               // we have our own Esc/letter listener above
+    bindHardware: false,
   });
 
-  const kbWrap = h("div", {
-    class: () => `lb-kb-wrap${allInMode() ? " allin" : ""}`,
-    "aria-label": () => allInMode() ? "Keyboard in all-in mode" : "On-screen keyboard for game play",
-    role: "region",
-    hidden: () => phase() !== "playing",
-  });
-
-  // All-in toggle row
   const allInBtn = h("button", {
-    class: () => `lb-kb-allin${allInMode() ? " on" : ""}`,
+    class: "lb-kb-allin",
     type: "button",
+    "data-bn-action": "all-in",
     onClick: openAllIn,
-    "aria-label": () => allInMode() ? "Fold and resume normal play mode" : "Enter all-in mode: type all remaining letters and submit for bonus points or lose all lives",
-    text: () => allInMode() ? "FOLD" : "ALL IN",
-    disabled: () => casc() && !allInMode(),
   });
-  const stakeLbl = h("span", {
+  bindText(allInBtn, () => allInMode() ? "FOLD" : "ALL IN");
+  bindAttr(allInBtn, "aria-label", () => allInMode()
+    ? "Fold and resume normal play mode"
+    : "Enter all-in mode: type all remaining letters and submit for bonus points or lose all lives");
+  effect(() => {
+    allInBtn.classList.toggle("on", allInMode());
+    allInBtn.disabled = casc() && !allInMode();
+  });
+
+  const stakeLbl = h("output", {
     class: "lb-kb-stake",
     "aria-live": "polite",
-    "aria-label": () => {
-      const wagerCount = allInMode()
-        ? wagers().reduce((acc, w) => acc + (w?.length || 0), 0)
-        : (active() !== null ? (wagers()[active()]?.length || 0) : 0);
-      if (wagerCount > 0) return `${wagerCount} positions staked for 2 times points`;
-      if (allInMode()) return "Type the remaining letters of the phrase";
-      return "";
-    },
-    text: () => {
-      const wagerCount = allInMode()
-        ? wagers().reduce((acc, w) => acc + (w?.length || 0), 0)
-        : (active() !== null ? (wagers()[active()]?.length || 0) : 0);
-      if (wagerCount > 0) return `${wagerCount}× STAKED`;
-      if (allInMode()) return "TYPE THE REST";
-      return "";
-    },
+    "data-bn-region": "stake-label",
+  });
+  bindText(stakeLbl, stakeText);
+  bindAttr(stakeLbl, "aria-label", () => {
+    const wagerCount = allInMode()
+      ? wagers().reduce((acc, w) => acc + (w?.length || 0), 0)
+      : (active() !== null ? (wagers()[active()]?.length || 0) : 0);
+    if (wagerCount > 0) return `${wagerCount} positions staked for 2 times points`;
+    if (allInMode()) return "Type the remaining letters of the phrase";
+    return null;
   });
 
-  const kbActions = h("div", { class: "lb-kb-actions" }, allInBtn, stakeLbl);
+  const kbActions = h("footer", { class: "lb-kb-actions" }, allInBtn, stakeLbl);
   const kbHost = h("div", { html: kb.html });
-  kbWrap.append(kbActions, kbHost);
-  // Hydrate the keyboard once it's in the tree.
+
+  const keyboard = h("section", {
+    class: "lb-kb-wrap",
+    "aria-label": "On-screen keyboard",
+    "data-bn-region": "keyboard",
+  }, kbActions, kbHost);
+  bindClassName(keyboard, () => `lb-kb-wrap${allInMode() ? " allin" : ""}`);
+  bindHidden(keyboard, () => phase() !== "playing");
+
   queueMicrotask(() => {
     const root = kbHost.querySelector('[data-bn="keyboard"]');
     if (!root) return;
     kb.hydrate(root);
-    // iPhone workaround: @basenative/keyboard@1.0.0's preventFocusSteal
-    // calls preventDefault on touchstart, which on iOS Safari suppresses
-    // the synthetic click that the keyboard's dispatch handler relies on.
-    // Synthesize a click on touchend so the dispatch fires on iPhone.
-    // Drop this once the package bumps to 1.0.1 (fix lands upstream).
+    /* iOS Safari: @basenative/keyboard@1.0.0 calls preventDefault on
+       touchstart, suppressing the synthetic click the dispatcher relies
+       on. Synthesize the click on touchend until the upstream fix lands. */
     root.addEventListener("touchend", (e) => {
       const btn = e.target && e.target.closest && e.target.closest("[data-bn-kb-key]");
       if (!btn || btn.disabled) return;
@@ -544,99 +621,65 @@ export function createPlay({
     }, { passive: false });
   });
 
-  // ── End-state overlays ──
-  const wonOverlay = createEndOverlay({
-    open: () => phase() === "won" && !!reveal(),
-    title: "Solved",
-    titleClass: "lb-ct win",
-    session,
-    score,
-    reveal,
-    onShare: () => onShare({ won: true }).then(label => shareLbl.set(label)),
-    shareLbl,
-    primaryLabel: "Pick another",
-    onPrimary: goLobby,
-    secondary: null,
+  /* End-of-round dialog — single <dialog> element, contents swap by phase. */
+  const endTitle  = h("h2", { class: "lb-ct" });
+  const endSub    = h("p", { class: "lb-cs" });
+  const endReveal = h("p", { class: "lb-reveal" });
+  const endBy     = h("strong");
+  const endCredit = h("p", { class: "lb-cred" }, "submitted by ", endBy);
+  const endScore  = h("output", { class: "lb-cf", "data-bn-region": "end-score" });
+  const endShare  = h("button", {
+    class: "lb-btn lb-bp",
+    type: "button",
+    "data-bn-action": "share",
   });
+  const endPrimary   = h("button", { class: "lb-btn lb-bs", type: "button", "data-bn-action": "primary" });
+  const endSecondary = h("button", { class: "lb-btn", type: "button", "data-bn-action": "secondary" });
 
-  const lostOverlay = createEndOverlay({
-    open: () => phase() === "lost" && !!reveal(),
-    title: "House Wins",
-    titleClass: "lb-ct lose",
-    session,
-    score,
-    reveal,
-    onShare: () => onShare({ won: false }).then(label => shareLbl.set(label)),
-    shareLbl,
-    primaryLabel: "Try again",
-    onPrimary: () => retry(),
-    secondaryLabel: "Pick another",
-    onSecondary: goLobby,
-    subtitleSuffix: " · the answer was",
+  bindText(endScore, () => String(score()));
+  bindAttr(endScore, "aria-label", () => `Final score ${score()} points`);
+  bindText(endShare, () => shareLbl() || "Share result");
+  bindText(endBy, () => session().submittedBy || "?");
+  bindText(endTitle, () => phase() === "won" ? "Solved" : "House Wins");
+  bindClassName(endTitle, () => `lb-ct ${phase() === "won" ? "win" : "lose"}`);
+  bindText(endSub, () => `${session().category}${phase() === "lost" ? " · the answer was" : ""}`);
+  bindText(endReveal, () => (reveal() || []).join(" "));
+  bindText(endPrimary, () => phase() === "won" ? "Pick another" : "Try again");
+  endSecondary.textContent = "Pick another";
+  bindHidden(endSecondary, () => phase() !== "lost");
+
+  endShare.addEventListener("click", () => {
+    onShare({ won: phase() === "won" }).then(label => shareLbl.set(label));
   });
+  endPrimary.addEventListener("click", () => {
+    if (phase() === "won") goLobby();
+    else retry();
+  });
+  endSecondary.addEventListener("click", goLobby);
 
-  return h("div", { class: "lb-play-host" },
-    ariaLive,
-    h("main", { "aria-labelledby": "lb-play-title" },
-      h("h1", { id: "lb-play-title", class: "sr-only", text: () => `${session().category} — round #${session().id}` }),
-      h("div", { class: "lb-num", text: () => `#${session().id} · ${session().category.toLowerCase()}` }),
-      h("div", { class: "lb-sticky", text: () => session().category }),
-      h("div", { class: "lb-sub" },
-        () => `${session().words.length} words · ${session().totalLetters} letters · by `,
-        h("b", { text: () => session().submittedBy || "?" }),
-      ),
-      h("div", {
-        class: () => `lb-hint ${active() !== null ? "on" : ""}`,
-        "aria-live": "polite",
-        text: hintText,
-      }),
-      cbar,
-      phraseGrid,
-      bank,
-    ),
-    kbWrap,
-    wonOverlay,
-    lostOverlay,
-  );
-}
-
-function createEndOverlay({
-  open, title, titleClass,
-  session, score, reveal,
-  onShare, shareLbl,
-  primaryLabel, onPrimary,
-  secondaryLabel, onSecondary,
-  subtitleSuffix = "",
-}) {
-  const card = h("div", {
+  const endCard = h("article", {
     class: "lb-card",
-    role: "dialog",
-    "aria-modal": "true",
+    role: "document",
     onClick: (e) => e.stopPropagation(),
   },
-    h("div", { class: titleClass, text: title }),
-    h("div", { class: "lb-cs", text: () => `${session().category}${subtitleSuffix}` }),
-    h("div", { class: "lb-reveal", text: () => (reveal() || []).join(" ") }),
-    h("div", { class: "lb-cred" },
-      "submitted by ",
-      h("b", { text: () => session().submittedBy || "?" })
-    ),
-    h("div", { class: "lb-cf", "aria-label": () => `Final score ${score()} points`, text: () => String(score()) }),
-    h("div", { class: "lb-cfl" }, "points"),
-    h("button", {
-      class: "lb-btn lb-bp",
-      type: "button",
-      text: () => shareLbl() || "Share result",
-      onClick: onShare,
-    }),
-    secondaryLabel
-      ? h("button", { class: "lb-btn", type: "button", onClick: onSecondary }, secondaryLabel)
-      : null,
-    h("button", { class: "lb-btn lb-bs", type: "button", onClick: onPrimary }, primaryLabel),
+    endTitle, endSub, endReveal, endCredit,
+    endScore, h("p", { class: "lb-cfl" }, "points"),
+    endShare, endSecondary, endPrimary,
   );
 
-  return h("div", {
+  const endOverlay = h("div", {
     class: "lb-ov",
-    hidden: () => !open(),
-  }, card);
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-labelledby": "play-end-title",
+    "data-bn-region": "end-overlay",
+  }, endCard);
+  endTitle.id = "play-end-title";
+  bindHidden(endOverlay, () => !((phase() === "won" || phase() === "lost") && !!reveal()));
+
+  /* ── Root <main>: same shape as src/bn/views/play.js SSR template. ── */
+  return h("main", {
+    "aria-labelledby": "play-title",
+    "data-bn-view": "play",
+  }, announceEl, summary, grid, bank, keyboard, endOverlay);
 }

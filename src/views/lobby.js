@@ -1,108 +1,117 @@
-/* Single-file component: LOBBY view.
-   Pulls /api/puzzles, groups by category, lets the player tap into a round.
-   Shows personal stats from @basenative/persist (formerly src/lib/persist.js). */
+/* LOBBY view — semantic mirror of src/bn/views/lobby.js (SSR).
 
-import { computed, effect } from "@basenative/runtime";
-import { h, reactiveList } from "../lib/dom.js";
+   <main data-bn-view="lobby"> with <header>, <section data-bn-region="stats">,
+   <section data-bn-region="list">, and a "submit" CTA. The shape matches the
+   SSR template so crawlers and the SPA produce the same DOM. */
+
+import { computed } from "@basenative/runtime";
+import { h } from "../lib/dom.js";
+import { bindHidden, bindList, bindText } from "../lib/bind.js";
 import { groupLobby } from "../lib/game.js";
 
 export function createLobby({
-  lobby,        // signal<array | null>
-  stats,        // signal<object>
-  error,        // signal<string | null>
-  user,         // signal<object | null>
-  onPick,       // (puzzleId) => void
-  onSubmit,     // () => void  (opens submit view or auth modal)
+  lobby,
+  stats,
+  error,
+  user,
+  onPick,
+  onSubmit,
 }) {
+  void user; // accepted for parity with hydrate.js wiring; unused right now
+
   const groups = computed(() => groupLobby(lobby()));
+  const hasStats = computed(() => (stats()?.played || 0) > 0);
 
-  const errorRow = h("div", {
-    class: "lb-cred lb-cred-error",
-    role: "alert",
-    text: () => `error: ${error() || ""}`,
-    hidden: () => !error(),
-  });
+  /* Stats — three little chips, only visible after the first played round. */
+  const winsB    = h("strong");
+  const bestB    = h("strong");
+  const streakB  = h("strong");
+  bindText(winsB,   () => String(stats()?.wins || 0));
+  bindText(bestB,   () => String(stats()?.best || 0));
+  bindText(streakB, () => (stats()?.streak || 0) > 0 ? `🔥${stats().streak}` : "—");
 
-  const statsRow = h("div", {
+  const statsSection = h("section", {
     class: "lb-stats",
     "aria-label": "Personal stats",
-    hidden: () => !(stats()?.played > 0),
+    "data-bn-region": "stats",
+  },
+    h("p", { class: "lb-stat" }, winsB,   h("small", null, "WINS")),
+    h("p", { class: "lb-stat" }, bestB,   h("small", null, "BEST")),
+    h("p", { class: "lb-stat" }, streakB, h("small", null, "STREAK")),
+  );
+  bindHidden(statsSection, () => !hasStats());
+
+  /* Error — single status paragraph, hidden by default. */
+  const errorEl = h("p", {
+    class: "lb-cred lb-cred-error",
+    role: "alert",
+    "data-bn-region": "error",
   });
-  effect(() => {
-    const s = stats() || {};
-    statsRow.replaceChildren(
-      h("span", { class: "lb-stat" },
-        h("b", { text: () => String(s.wins || 0) }),
-        h("span", null, "WINS"),
-      ),
-      h("span", { class: "lb-stat" },
-        h("b", { text: () => String(s.best || 0) }),
-        h("span", null, "BEST"),
-      ),
-      h("span", { class: "lb-stat" },
-        h("b", { text: () => s.streak > 0 ? `🔥${s.streak}` : "—" }),
-        h("span", null, "STREAK"),
+  bindText(errorEl, () => `error: ${error() || ""}`);
+  bindHidden(errorEl, () => !error());
+
+  /* Puzzle list — bindList over groups. */
+  const list = h("ul", {
+    class: "lb-lobby",
+    role: "list",
+    "aria-label": "Available puzzles",
+    "data-bn-region": "list",
+  });
+  bindList(list, groups, (group) => {
+    const credit = group.puzzles.length === 1
+      ? `by ${group.puzzles[0].submittedBy}`
+      : `${group.puzzles.length} puzzles`;
+    return h("li", null,
+      h("button", {
+        type: "button",
+        class: "lb-lobby-item",
+        "data-bn-action": "lobby-pick",
+        "data-puzzle-ids": group.puzzles.map(p => p.id).join(","),
+        onClick: () => {
+          const pick = group.puzzles[Math.floor(Math.random() * group.puzzles.length)];
+          onPick(pick.id);
+        },
+      },
+        h("span", { class: "sr-only" }, "Play "),
+        h("strong", { class: "lb-lobby-cat" }, group.category),
+        h("small", { class: "lb-lobby-by" }, credit),
       ),
     );
-  });
-
-  const list = h("ul", { class: "lb-lobby", "aria-label": "Available puzzles" });
-  reactiveList(list, () => {
-    const g = groups();
-    if (!g) {
-      // Skeleton — six placeholder rows
-      return Array.from({ length: 6 }).map(() =>
-        h("li", null, h("div", { class: "lb-lobby-skel", "aria-hidden": "true" }))
-      );
+  }, () => {
+    /* Skeleton — six placeholder rows while /api/puzzles is in flight. */
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < 6; i++) {
+      frag.append(h("li", null, h("div", { class: "lb-lobby-skel", "aria-hidden": "true" })));
     }
-    return g.map(group => {
-      const credit = group.puzzles.length === 1
-        ? `by ${group.puzzles[0].submittedBy}`
-        : `${group.puzzles.length} puzzles`;
-      /* axe `label-content-name-mismatch`: previously aria-label
-         overrode the visible category + credit text. Now the
-         accessible name is built from the visible text plus a
-         sr-only "Play " prefix, so it matches what the user sees. */
-      return h("li", null,
-        h("button", {
-          type: "button",
-          class: "lb-lobby-item",
-          onClick: () => {
-            const pick = group.puzzles[Math.floor(Math.random() * group.puzzles.length)];
-            onPick(pick.id);
-          },
-        },
-          h("span", { class: "sr-only" }, "Play "),
-          h("span", { class: "lb-lobby-cat" }, group.category),
-          h("span", { class: "lb-lobby-by" }, credit),
-        ),
-      );
-    });
+    return frag;
   });
 
+  /* Floating "submit a phrase" CTA. */
   const fab = h("button", {
     class: "lb-fab",
     type: "button",
+    "data-bn-action": "lobby-submit",
     "aria-label": "Submit a phrase",
     onClick: onSubmit,
   }, "+ SUBMIT A PHRASE");
 
-  // Surface user state to suppress unused-var warnings; FAB handler reads
-  // current user via the consumer's onSubmit; we accept the signal for
-  // future reactivity (e.g. a "sign in to submit" hint).
-  void user;
-
-  return h("main", { "aria-labelledby": "lb-page-title" },
-    h("h1", { id: "lb-page-title", class: "sr-only" }, "T4BS — pick a round"),
-    h("div", { class: "lb-sticky lb-sticky-narrow" },
-      "One subject. One phrase.",
-      h("br"),
-      "No mercy."
+  return h("main", {
+    "aria-labelledby": "lobby-title",
+    "data-bn-view": "lobby",
+  },
+    h("header", null,
+      h("h1", { id: "lobby-title", class: "sr-only" }, "Tabs — pick a round"),
+      h("p", { class: "lb-sticky lb-sticky-narrow" },
+        "One subject. One phrase.", h("br"), "No mercy.",
+      ),
+      h("p", { class: "lb-tagline" }, "Pick a round"),
     ),
-    h("div", { class: "lb-tagline" }, "Pick a round"),
-    statsRow,
-    errorRow,
-    list,
+    statsSection,
+    errorEl,
+    h("section", { "aria-labelledby": "lobby-list-title" },
+      h("h2", { id: "lobby-list-title", class: "sr-only" }, "Available puzzles"),
+      list,
+    ),
     fab,
   );
 }
