@@ -34,6 +34,7 @@ import { createPlay }     from "../../views/play.js";
 import { createSubmit }   from "../../views/submit.js";
 import { createModerate } from "../../views/moderate.js";
 import { createAdmin }    from "../../views/admin.js";
+import { decidePlayBoot, withTimeout, isResumable } from "./play-boot.js";
 
 /** @typedef {import("../route-table.js").RouteName} RouteName */
 
@@ -90,6 +91,19 @@ const lives         = signal(4);
 const tokens        = signal(0);
 const phase         = signal("lobby");
 const reveal        = signal(null);
+
+/* Distinguishes "we are actively trying to resolve a session" from
+   "we definitively have no session". Without this the view effect can't
+   tell whether to show "Loading round…" or to bounce home, and a stalled
+   resume leaves the user staring at the loader forever. Seeded `true`
+   only when the SSR-rendered route is /play; every other entry point
+   starts the user away from the play view. */
+const playLoading = signal(SSR.route === "play");
+
+/* Bound on resume failure so the resume timeout / network error etc.
+   can be communicated as a toast without coupling the boot routine to
+   the toaster's lifetime. */
+const RESUME_TIMEOUT_MS = 8000;
 
 const toaster = makeToaster(toast);
 
@@ -150,47 +164,52 @@ if (!SSR.user) {
 }
 
 /* Reload-safe play-route resume.
-   On a fresh GET to /play (e.g. browser refresh, deep-link), the
-   server has no session context. We resolve it client-side, in
-   priority order:
-     1. ?play=<id> query param — start a new round on that puzzle.
-     2. A persisted session id — resume it via /api/sessions/:id.
-     3. Nothing → bounce to / so the user picks something.
-   Without this block, refreshing /play used to show "loading round…"
-   indefinitely (or bounce silently to /), which is what the user
-   reported as "page reload broken". */
+
+   Boot policy (decidePlayBoot) is a pure function in play-boot.js —
+   easier to test and harder to leave in the half-finished state that
+   PR #43 shipped. Every failure path here MUST end with either a
+   hydrated session or a navigate-home; falling through with both
+   `session()` null and `playLoading()` true is the bug we're fixing. */
 (async () => {
-  const url = new URL(window.location.href);
-  const playParam = url.searchParams.get("play");
-  const playId = playParam ? Number(playParam) : NaN;
-  if (Number.isFinite(playId) && playId > 0) {
-    url.searchParams.delete("play");
-    window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
-    await start(playId);
-    return;
-  }
+  try {
+    const saved = await loadPersisted(SESSION_KEY).catch(() => null);
+    const intent = decidePlayBoot(window.location, saved);
 
-  const saved = await loadPersisted(SESSION_KEY);
-  if (saved?.sessionId) {
-    try {
-      const s = await api.resumeSession(saved.sessionId);
-      if (s.error || s.finished) {
-        await clearPersisted(SESSION_KEY);
-      } else {
-        hydrateSession(s, /* fresh */ false);
-        if (window.location.pathname !== "/play") {
-          router.navigate("/play");
-        }
-        toaster("RESUMED — pick up where you left off", "good");
-        return;
-      }
-    } catch {
-      await clearPersisted(SESSION_KEY);
+    if (intent.kind === "start") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("play");
+      window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
+      await start(intent.puzzleId);
+      return;
     }
-  }
 
-  if (window.location.pathname === "/play" && !session()) {
-    router.navigate("/");
+    if (intent.kind === "resume") {
+      try {
+        const s = await withTimeout(
+          api.resumeSession(intent.sessionId),
+          RESUME_TIMEOUT_MS,
+          "resume-timeout",
+        );
+        if (isResumable(s)) {
+          hydrateSession(s, /* fresh */ false);
+          if (window.location.pathname !== "/play") router.navigate("/play");
+          toaster("RESUMED — pick up where you left off", "good");
+          return;
+        }
+        await clearPersisted(SESSION_KEY).catch(() => {});
+      } catch (e) {
+        await clearPersisted(SESSION_KEY).catch(() => {});
+        const code = /** @type {{ code?: string }} */ (e)?.code;
+        if (code === "ETIMEOUT") toaster("Couldn't reach the server — try again.", "bad");
+      }
+    }
+
+    /* "home" intent OR resume failed/expired: get the user off /play.
+       Previously this relied on a fall-through `if (!session()) navigate("/")`
+       check that never ran when the resume promise stalled forever. */
+    if (window.location.pathname === "/play") router.navigate("/");
+  } finally {
+    playLoading.set(false);
   }
 })();
 
@@ -225,12 +244,15 @@ function hydrateSession(s, fresh) {
 async function start(puzzleId) {
   error.set(null);
   try {
-    const s = await api.startSession(puzzleId);
+    const s = await withTimeout(api.startSession(puzzleId), RESUME_TIMEOUT_MS, "start-timeout");
     hydrateSession(s, true);
     await savePersisted(SESSION_KEY, { sessionId: s.sessionId }, 12 * 3600);
     router.navigate("/play");
   } catch (e) {
-    error.set(String(e.message || e));
+    error.set(String(/** @type {Error} */ (e)?.message || e));
+    /* Don't strand the user on /play with no session — surface the
+       error on the lobby where the message + retry are visible. */
+    if (window.location.pathname === "/play") router.navigate("/");
   }
 }
 
@@ -358,7 +380,16 @@ effect(() => {
     }));
   } else if (v === "playing") {
     if (!session()) {
-      mount(viewSlot, h("p", { role: "status", "aria-live": "polite" }, "Loading round…"));
+      if (playLoading()) {
+        mount(viewSlot,
+          h("p", { role: "status", "aria-live": "polite" }, "Loading round…"),
+        );
+      } else {
+        /* Boot resolver gave up but route still says /play — flip back
+           to the lobby instead of dead-ending here. */
+        mount(viewSlot);
+        if (window.location.pathname === "/play") router.navigate("/");
+      }
       return;
     }
     mount(viewSlot, createPlay({

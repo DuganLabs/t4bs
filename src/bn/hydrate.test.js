@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 
 import { matchRoute, shouldRenderSsr } from "./route-table.js";
 import { renderPage } from "./server/render.js";
+import { decidePlayBoot, withTimeout, isResumable } from "./client/play-boot.js";
 
 const ASSETS = { js: "/assets/bn-hydrate.js", css: ["/assets/app.css"] };
 
@@ -172,5 +173,111 @@ describe("renderPage — emits a complete BaseNative-rendered HTML document for 
     assert.match(html, /\/assets\/bn-hydrate-abc123\.js/);
     assert.match(html, /\/assets\/app-def\.css/);
     assert.match(html, /\/assets\/bundle-456\.css/);
+  });
+
+  it("inlines the route name in SSR state for the hydrator", () => {
+    const html = renderPage(baseCtx({ route: "play", pathname: "/play" }), ASSETS);
+    const start = html.indexOf('<script type="application/json" id="bn-ssr-state">');
+    const end = html.indexOf("</script>", start);
+    const json = JSON.parse(html.slice(start, end).split(">")[1]);
+    assert.equal(json.route, "play");
+  });
+});
+
+describe("decidePlayBoot", () => {
+  it("starts a new round on ?play=<id>", () => {
+    const intent = decidePlayBoot({ search: "?play=42" }, null);
+    assert.deepEqual(intent, { kind: "start", puzzleId: 42 });
+  });
+
+  it("ignores ?play=<not-a-positive-int>", () => {
+    assert.equal(decidePlayBoot({ search: "?play=0" }, null).kind, "home");
+    assert.equal(decidePlayBoot({ search: "?play=-3" }, null).kind, "home");
+    assert.equal(decidePlayBoot({ search: "?play=abc" }, null).kind, "home");
+    assert.equal(decidePlayBoot({ search: "?play=" }, null).kind, "home");
+  });
+
+  it("resumes when a saved session id is present", () => {
+    const intent = decidePlayBoot({ search: "" }, { sessionId: "abc-123" });
+    assert.deepEqual(intent, { kind: "resume", sessionId: "abc-123" });
+  });
+
+  it("?play=<id> beats a saved session — explicit user intent wins", () => {
+    const intent = decidePlayBoot({ search: "?play=7" }, { sessionId: "abc-123" });
+    assert.deepEqual(intent, { kind: "start", puzzleId: 7 });
+  });
+
+  it("treats empty / malformed saved state as no resume", () => {
+    assert.equal(decidePlayBoot({ search: "" }, null).kind, "home");
+    assert.equal(decidePlayBoot({ search: "" }, undefined).kind, "home");
+    assert.equal(decidePlayBoot({ search: "" }, {}).kind, "home");
+    assert.equal(decidePlayBoot({ search: "" }, { sessionId: "" }).kind, "home");
+    assert.equal(decidePlayBoot({ search: "" }, { sessionId: 42 }).kind, "home");
+  });
+});
+
+describe("withTimeout", () => {
+  it("resolves when the inner promise resolves first", async () => {
+    const result = await withTimeout(Promise.resolve("ok"), 1000);
+    assert.equal(result, "ok");
+  });
+
+  it("rejects with code=ETIMEOUT when the deadline elapses", async () => {
+    const stalled = new Promise(() => { /* never resolves */ });
+    await assert.rejects(
+      () => withTimeout(stalled, 20, "test-timeout"),
+      (err) => {
+        assert.equal(err.code, "ETIMEOUT");
+        assert.equal(err.message, "test-timeout");
+        return true;
+      },
+    );
+  });
+
+  it("propagates inner-promise rejection unchanged", async () => {
+    const inner = Promise.reject(new Error("boom"));
+    await assert.rejects(
+      () => withTimeout(inner, 1000),
+      /boom/,
+    );
+  });
+});
+
+describe("isResumable", () => {
+  const valid = {
+    sessionId: "x",
+    words: [5, 5],
+    anchors: [{ wi: 0, li: 0, letter: "H" }],
+    lives: 4,
+    score: 0,
+    locked: { 0: { 0: "H" } },
+    presentGlobal: [],
+    absentByWord: [[], []],
+    wordSolved: [false, false],
+    finished: false,
+  };
+
+  it("accepts an in-progress session", () => {
+    assert.equal(isResumable(valid), true);
+  });
+
+  it("rejects engine errors", () => {
+    assert.equal(isResumable({ error: "no-session" }), false);
+    assert.equal(isResumable({ error: "puzzle-gone" }), false);
+  });
+
+  it("rejects finished sessions (game already over)", () => {
+    assert.equal(isResumable({ ...valid, finished: "won" }), false);
+    assert.equal(isResumable({ ...valid, finished: "lost" }), false);
+    assert.equal(isResumable({ ...valid, finished: true }), false);
+  });
+
+  it("rejects malformed shapes", () => {
+    assert.equal(isResumable(null), false);
+    assert.equal(isResumable(undefined), false);
+    assert.equal(isResumable("nope"), false);
+    assert.equal(isResumable({ ...valid, words: undefined }), false);
+    assert.equal(isResumable({ ...valid, words: [] }), false);
+    assert.equal(isResumable({ ...valid, anchors: undefined }), false);
   });
 });
