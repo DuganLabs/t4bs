@@ -42,6 +42,8 @@ export default `<!DOCTYPE html>
     <meta name="apple-mobile-web-app-title" content="Tabs" />
     <meta name="format-detection" content="telephone=no" />
 
+    <style data-bn-critical>:where(svg):not([width]):not([height]){width:1em;height:1em}svg{display:block}</style>
+
     <link rel="canonical" :href="canonicalUrl" />
     <link rel="preload" as="image" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
