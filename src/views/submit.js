@@ -1,11 +1,14 @@
-/* Single-file component: SUBMIT view.
-   Posts to /api/submit with category + phrase. Live tile preview.
-   Existing categories drive the @basenative/combobox typeahead, with
-   `allowCreate` for new categories. */
+/* SUBMIT view — semantic mirror of src/bn/views/submit.js (SSR).
+
+   <main data-bn-view="submit"> with a real <form>, <fieldset>, <legend>,
+   <label>, <input>, <datalist>, and <output role="alert">. The combobox
+   from @basenative/combobox sits inside the category <label>; the live
+   tile preview is a <section data-bn-region="preview">. */
 
 import { signal, computed, effect } from "@basenative/runtime";
 import { Combobox } from "@basenative/combobox";
-import { h, reactiveList } from "../lib/dom.js";
+import { h } from "../lib/dom.js";
+import { bindDisabled, bindHidden, bindList, bindText } from "../lib/bind.js";
 import { api } from "../lib/api.js";
 
 export function createSubmit({ existingCategories, onCancel, onSubmitted, toaster }) {
@@ -15,127 +18,156 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
   const err      = signal(null);
 
   const cleaned = computed(() =>
-    phrase().trim().toUpperCase().replace(/[^A-Z ]/g, "").replace(/\s+/g, " ")
+    phrase().trim().toUpperCase().replace(/[^A-Z ]/g, "").replace(/\s+/g, " "),
   );
   const words = computed(() => cleaned() ? cleaned().split(" ") : []);
   const totalLetters = computed(() => words().reduce((a, w) => a + w.length, 0));
 
-  async function submit() {
+  async function submit(e) {
+    if (e) e.preventDefault();
     busy.set(true); err.set(null);
     try {
       await api.submit({ category: category().trim(), phrase: cleaned(), anchors: [] });
       toaster("SUBMITTED — pending review", "great");
       onSubmitted();
-    } catch (e) {
-      err.set(String(e.data?.detail || e.message || e));
+    } catch (e2) {
+      err.set(String(e2.data?.detail || e2.message || e2));
     } finally {
       busy.set(false);
     }
   }
 
-  // Combobox: signal-driven, allowCreate, runtime.effect hooks the
-  // input value back to the category signal.
+  /* Combobox lives inside the category <label>. */
   const cb = Combobox({
-    id: "lb-cat",
+    id: "submit-category",
     name: "category",
     options: existingCategories() || [],
     value: category,
     allowCreate: true,
     createLabel: (input) => `+ NEW CATEGORY "${input.toUpperCase()}"`,
     placeholder: "Pick or add a category",
-    ariaDescribedBy: "lb-cat-hint",
+    ariaDescribedBy: "submit-cat-hint",
     onChange: (v) => category.set(String(v).toUpperCase()),
     onCreate: (label) => category.set(String(label).toUpperCase()),
     runtime: { effect },
   });
 
-  // Wrapper element receives the combobox HTML; hydrate after the
-  // wrapper is appended to the DOM (bind: ref runs synchronously,
-  // before mount, so we wait one microtask via queueMicrotask).
-  const cbWrapper = h("div", {
-    class: "lb-cat-combobox",
+  const cbWrapper = h("span", {
+    "data-bn-bind": "submit-combobox",
+    "data-suggestions-id": "submit-categories",
     html: cb.html,
     bind: (el) => {
       const handle = cb.hydrate(el);
-      // Mirror existingCategories changes back into the listbox.
       effect(() => handle.setOptions(existingCategories() || []));
     },
   });
 
+  /* Hint texts. */
+  const catHint = h("small", { id: "submit-cat-hint" });
+  bindText(catHint, () => existingCategories()?.length > 0
+    ? `Tap to pick from ${existingCategories().length} existing categories, or type a new one.`
+    : "Type a category name. New categories show up here once approved.",
+  );
+
+  const phraseHint = h("small", { id: "submit-phrase-hint", "data-bn-bind": "submit-phrase-hint" });
+  bindText(phraseHint, () => `${words().length} word${words().length === 1 ? "" : "s"} · ${totalLetters()} letters · max 36`);
+
+  /* Live tile preview. */
+  const preview = h("section", {
+    class: "lb-preview",
+    "aria-label": "Phrase preview",
+    "aria-hidden": "true",
+    "data-bn-region": "preview",
+    "data-bn-bind": "submit-preview",
+  });
+  bindList(preview, words, (word) =>
+    h("div", { class: "lb-pword", role: "group" },
+      ...word.split("").map(() => h("span", { class: "lb-ptile", role: "img", "aria-label": "tile" })),
+    ),
+  () => h("p", null, "Type a phrase to see how it'll render."));
+
+  const previewHint = h("small", { class: "lb-fhint" });
+  bindText(previewHint, () => words().length === 0
+    ? "Type a phrase above to see how it'll render."
+    : "No starting hints. Players solve it cold.",
+  );
+
+  /* Error output. */
+  const errBox = h("output", {
+    class: "lb-ferror",
+    role: "alert",
+    "data-bn-bind": "submit-error",
+  });
+  bindText(errBox, () => err() || "");
+  bindHidden(errBox, () => !err());
+
+  /* Phrase input. */
   const phraseInput = h("input", {
-    id: "lb-phrase",
+    id: "submit-phrase",
+    name: "phrase",
     class: "lb-finput",
     autocapitalize: "characters",
     autocorrect: "off",
     spellcheck: "false",
     placeholder: "2–10 words · letters only",
-    "aria-describedby": "lb-phrase-hint",
+    "aria-describedby": "submit-phrase-hint",
     onInput: (e) => phrase.set(e.target.value),
   });
 
-  const preview = h("div", {
-    class: () => `lb-preview${words().length === 0 ? " empty" : ""}`,
-    "aria-hidden": "true",
+  const submitBtn = h("button", {
+    type: "submit",
+    class: "lb-btn lb-bp",
+    "data-bn-action": "submit-confirm",
   });
-  reactiveList(preview, () => {
-    const w = words();
-    if (w.length === 0) return [document.createTextNode("Tiles preview as you type")];
-    return w.map(word =>
-      h("div", { class: "lb-pword" },
-        ...word.split("").map(() => h("div", { class: "lb-ptile" })),
-      )
-    );
-  });
+  bindText(submitBtn, () => busy() ? "…" : "SUBMIT FOR REVIEW");
+  bindDisabled(submitBtn, () => busy() || !category() || !phrase());
 
-  const errBox = h("div", {
-    class: "lb-ferror",
-    text: () => err() || "",
-    hidden: () => !err(),
-  });
+  const cancelBtn = h("button", {
+    type: "button",
+    class: "lb-btn lb-bs",
+    "data-bn-action": "submit-cancel",
+    onClick: onCancel,
+  }, "Cancel");
 
-  return h("main", { "aria-labelledby": "lb-submit-title" },
-    h("h1", { id: "lb-submit-title", class: "sr-only" }, "Submit a phrase"),
-    h("div", { class: "lb-sticky lb-sticky-narrow" }, "Submit a phrase"),
-    h("div", { class: "lb-tagline" }, "It enters the moderation queue"),
-    h("div", { class: "lb-form" },
-      h("div", { class: "lb-field" },
+  const form = h("form", {
+    class: "lb-form",
+    "data-bn-action": "submit-form",
+    "aria-describedby": "submit-hint",
+    novalidate: "",
+    onSubmit: submit,
+  },
+    h("fieldset", null,
+      h("legend", null, "New round"),
+      h("p", { class: "lb-field" },
+        h("label", { for: "submit-category" }, "Category"),
         cbWrapper,
-        h("span", {
-          id: "lb-cat-hint",
-          class: "lb-fhint",
-          text: () => existingCategories()?.length > 0
-            ? `Tap to pick from ${existingCategories().length} existing categories, or type a new one.`
-            : "Type a category name. New categories show up here once approved.",
-        }),
+        catHint,
       ),
-      h("div", { class: "lb-field" },
-        h("label", { class: "lb-flabel", for: "lb-phrase" }, "Phrase"),
+      h("p", { class: "lb-field" },
+        h("label", { for: "submit-phrase" }, "Phrase"),
         phraseInput,
-        h("span", {
-          id: "lb-phrase-hint",
-          class: "lb-fhint",
-          text: () => `${words().length} word${words().length === 1 ? "" : "s"} · ${totalLetters()} letters · max 36`,
-        }),
+        phraseHint,
       ),
-      h("div", { class: "lb-field" },
+      h("p", { class: "lb-field" },
         h("span", { class: "lb-flabel" }, "Preview"),
         preview,
-        h("span", {
-          class: "lb-fhint",
-          text: () => words().length === 0
-            ? "Type a phrase above to see how it'll render."
-            : "No starting hints. Players solve it cold.",
-        }),
+        previewHint,
       ),
       errBox,
     ),
-    h("button", {
-      class: "lb-btn lb-bp",
-      type: "button",
-      disabled: () => busy() || !category() || !phrase(),
-      text: () => busy() ? "…" : "SUBMIT FOR REVIEW",
-      onClick: submit,
-    }),
-    h("button", { class: "lb-btn lb-bs", type: "button", onClick: onCancel }, "Cancel"),
+    submitBtn,
+    cancelBtn,
+  );
+
+  return h("main", {
+    "aria-labelledby": "submit-title",
+    "data-bn-view": "submit",
+  },
+    h("header", null,
+      h("h1", { id: "submit-title", class: "sr-only" }, "Submit a phrase"),
+      h("p", { class: "lb-sticky lb-sticky-narrow" }, "Submit a phrase"),
+      h("p", { class: "lb-tagline" }, "It enters the moderation queue"),
+    ),
+    form,
   );
 }
