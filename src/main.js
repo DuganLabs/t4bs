@@ -77,6 +77,13 @@ const reveal        = signal(null);
    "still loading" from "definitively no session". */
 const playLoading   = signal(window.location.pathname === "/play");
 
+/* Daily-done flag — accepted by createLobby() since #51. The SSR boot
+   path (src/bn/client/hydrate.js) computes this from a persisted
+   `dailyDate` stamp; the legacy `?legacy=1` SPA shell has no such
+   tracking, so the daily picker is always live here. Without this
+   signal, lobby.js hits `dailyDone is not a function`. */
+const dailyDone     = signal(false);
+
 const RESUME_TIMEOUT_MS = 8000;
 
 const toaster = makeToaster(toast);
@@ -295,7 +302,7 @@ effect(() => {
   const v = view();
   if (v === "lobby") {
     mount(viewSlot, createLobby({
-      lobby, stats, error, user,
+      lobby, stats, error, user, dailyDone,
       onPick: start,
       onSubmit: () => {
         if (user()) router.navigate("/submit");

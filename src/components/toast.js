@@ -16,7 +16,6 @@ export function createToast(toastSignal) {
       return;
     }
     const el = h("p", {
-      class: `lb-toast ${t.type || "good"}`,
       role: "status",
       "aria-live": "polite",
       "data-bn-region": "toast",

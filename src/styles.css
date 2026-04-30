@@ -88,18 +88,20 @@ main[data-bn-view="play"] [data-bn-region="play-sticky"] {
 }
 .lb-sticky-narrow { max-width: 380px; }
 
-/* TOAST */
-.lb-toast {
+/* TOAST — attribute-driven. Markup is
+   <p data-bn-region="toast" data-tone="good|bad|great|cascade"> from
+   src/components/toast.js. */
+[data-bn-region="toast"] {
   position: fixed; top: calc(72px + env(safe-area-inset-top,0px)); left: 50%;
   transform: translateX(-50%);
   border-radius: 100px; padding: 8px 24px;
   font-family: 'Bebas Neue', sans-serif; font-size: 16px; letter-spacing: 2px;
   z-index: 90; white-space: nowrap; pointer-events: none;
 }
-.lb-toast.good   { background: #1E1C16; color: #E8920A; border: 1px solid rgba(232,146,10,.4); }
-.lb-toast.bad    { background: #1E1518; color: #E84444; border: 1px solid rgba(232,68,68,.4); }
-.lb-toast.great  { background: #1E1C10; color: #FFD700; border: 1px solid rgba(255,215,0,.5); box-shadow: 0 0 28px rgba(255,215,0,.2); }
-.lb-toast.cascade{ background: #121E17; color: #4EAF7C; border: 1px solid rgba(78,175,124,.5); }
+[data-bn-region="toast"][data-tone="good"]    { background: #1E1C16; color: #E8920A; border: 1px solid rgba(232,146,10,.4); }
+[data-bn-region="toast"][data-tone="bad"]     { background: #1E1518; color: #E84444; border: 1px solid rgba(232,68,68,.4); }
+[data-bn-region="toast"][data-tone="great"]   { background: #1E1C10; color: #FFD700; border: 1px solid rgba(255,215,0,.5); box-shadow: 0 0 28px rgba(255,215,0,.2); }
+[data-bn-region="toast"][data-tone="cascade"] { background: #121E17; color: #4EAF7C; border: 1px solid rgba(78,175,124,.5); }
 
 /* OVERLAYS */
 .lb-ov {
@@ -126,15 +128,16 @@ main[data-bn-view="play"] [data-bn-region="play-sticky"] {
 .lb-reveal { font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 3px; color: #E8920A; margin-bottom: 6px; line-height: 1.2; }
 .lb-cred { font-size: 11px; text-transform: uppercase; letter-spacing: 1.8px; color: #9A9590; margin-bottom: 18px; }
 .lb-cred b { color: #7EC49A; }
-.lb-cred-error { color: #FF6E6E; }
 
-.lb-help-body { text-align: left; font-size: 13px; line-height: 1.5; color: #C0BBB5; margin: 8px 0 18px; }
-.lb-help-body p { margin-bottom: 10px; }
-.lb-help-body p:last-child { margin-bottom: 0; }
-.lb-help-body b { color: #F0EDE4; }
-.lb-help-body b.green  { color: #4EAF7C; }
-.lb-help-body b.yellow { color: #FFD700; }
-.lb-help-body b.red    { color: #FF4D4D; }
+/* Help-modal body — attribute-driven. Markup is
+   <div data-bn-region="help-body"> from src/components/help-modal.js. */
+[data-bn-region="help-body"] { text-align: left; font-size: 13px; line-height: 1.5; color: #C0BBB5; margin: 8px 0 18px; }
+[data-bn-region="help-body"] p { margin-bottom: 10px; }
+[data-bn-region="help-body"] p:last-child { margin-bottom: 0; }
+[data-bn-region="help-body"] b { color: #F0EDE4; }
+[data-bn-region="help-body"] b[data-tone="green"]  { color: #4EAF7C; }
+[data-bn-region="help-body"] b[data-tone="yellow"] { color: #FFD700; }
+[data-bn-region="help-body"] b[data-tone="red"]    { color: #FF4D4D; }
 
 .lb-btn {
   display: block; width: 100%; padding: 13px; border-radius: 8px; border: none;
@@ -149,96 +152,10 @@ main[data-bn-view="play"] [data-bn-region="play-sticky"] {
 .lb-bs-back { max-width: 300px; margin-top: 14px; }
 .lb-share-fail { background: #1A1815; color: #E8920A; border: 1px solid #E8920A; }
 
-/* LOBBY */
-.lb-lobby {
-  width: 100%; max-width: 480px;
-  display: flex; flex-direction: column; gap: 8px; margin-top: 6px;
-  list-style: none; padding: 0;
-}
-.lb-lobby > li { list-style: none; }
-.lb-lobby-item {
-  width: 100%; background: #161412; border: 1.5px solid #222; border-radius: 10px;
-  padding: 14px 16px; cursor: pointer;
-  display: flex; justify-content: space-between; align-items: center;
-  gap: 10px; transition: border-color .2s, transform .1s, background .15s;
-  min-height: 56px; text-align: left;
-  font-family: 'DM Sans', sans-serif; color: inherit;
-}
-.lb-lobby-item:hover { border-color: #E8920A; transform: translateY(-1px); background: #1A1714; }
-.lb-lobby-item:active { transform: scale(.985); }
-.lb-lobby-cat {
-  flex: 1 1 auto; min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2.5px;
-  color: #F0EDE4;
-}
-.lb-lobby-by {
-  flex: 0 0 auto; white-space: nowrap;
-  font-size: 10px; letter-spacing: 1.2px; color: #9A9590; text-transform: uppercase;
-}
-
-/* DAILY */
-.lb-daily {
-  width: 100%; max-width: 480px;
-  display: flex; flex-direction: column; gap: 6px;
-  margin-bottom: 18px; text-align: center;
-}
-.lb-daily-label {
-  font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
-  color: #E8920A; font-weight: 700;
-}
-.lb-daily-item {
-  border-color: #E8920A !important;
-  background: #1A1714 !important;
-}
-.lb-lobby-daily {
-  border-color: #E8920A;
-  position: relative;
-}
-.lb-daily-done {
-  background: #161412; border: 1.5px solid #E8920A; border-radius: 10px;
-  padding: 24px 16px; text-align: center;
-}
-.lb-daily-result {
-  font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 3px;
-  color: #E8920A;
-}
-.lb-daily-score {
-  font-size: 18px; color: #F0EDE4; margin-top: 4px;
-}
-.lb-daily-cat {
-  font-size: 11px; color: #9A9590; letter-spacing: 1.2px; text-transform: uppercase;
-  margin-top: 8px;
-}
-.lb-daily-next {
-  font-size: 12px; color: #9A9590; letter-spacing: 1px; margin-top: 8px;
-}
-
-.lb-tagline { font-size: 11px; color: #9A9590; letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 18px; text-align: center; }
-
-.lb-stats {
-  display: flex; gap: 8px; justify-content: center; margin-bottom: 18px;
-  width: 100%; max-width: 320px;
-}
-.lb-stat {
-  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: 8px 4px; background: #100F0D; border: 1px solid #1F1C18; border-radius: 8px;
-}
-.lb-stat b { font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 1.5px; color: #F0EDE4; font-weight: 400; }
-.lb-stat span { font-size: 9px; letter-spacing: 1.2px; color: #9A9590; text-transform: uppercase; }
-
-.lb-fab {
-  position: fixed; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom,0px)); z-index: 50;
-  background: #E8920A; color: #1A0A00; border: none; border-radius: 100px;
-  font-family: 'Bebas Neue', sans-serif; font-size: 14px; letter-spacing: 1.5px;
-  padding: 14px 22px; cursor: pointer;
-  box-shadow: 0 8px 24px rgba(232,146,10,.4); min-height: 48px;
-  transition: transform .1s, box-shadow .15s;
-}
-.lb-fab:active { transform: scale(.95); }
-.lb-fab:hover { box-shadow: 0 8px 32px rgba(232,146,10,.6); }
-
-/* FORMS */
+/* FORMS — shared between submit.js and auth-modal.js. The .lb-form /
+   .lb-field / .lb-flabel / .lb-finput / .lb-fhint / .lb-ferror classes
+   are still in use by both consumers; migrating them is a follow-up
+   when auth-modal goes through its own attribute-driven sweep. */
 .lb-form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; text-align: left; }
 .lb-field { display: flex; flex-direction: column; gap: 5px; }
 .lb-flabel { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #9A9590; }
@@ -256,19 +173,14 @@ main[data-bn-view="play"] [data-bn-region="play-sticky"] {
   border: 1px solid rgba(255,77,77,.3);
 }
 
-.lb-preview {
-  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
-  gap: 10px 16px; margin: 12px 0; padding: 14px 8px;
-  background: #100F0D; border-radius: 8px; border: 1px solid #1F1C18;
-  min-height: 74px;
-}
-.lb-preview.empty { color: #988570; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; }
-.lb-pword { display: flex; gap: 3px; }
-.lb-ptile {
-  width: 30px; height: 34px; border-radius: 4px;
-  display: flex; align-items: center; justify-content: center;
-  font-family: 'Bebas Neue', sans-serif; font-size: 18px;
-  background: #1E1C18; border: 1px solid #2A2724; color: #F0EDE4;
+/* TAGLINE — small uppercase muted subheading. Used by lobby/submit/
+   moderate/admin headers. Attribute-driven; the .lb-tagline class is
+   kept on moderate.js + admin.js until those views go through their
+   own sweep, hence the dual selector. */
+[data-bn-region="tagline"],
+.lb-tagline {
+  font-size: 11px; color: #9A9590; letter-spacing: 1.2px; text-transform: uppercase;
+  margin-bottom: 18px; text-align: center;
 }
 
 /* MODERATION & ADMIN — markup from @basenative/admin/components.
@@ -347,14 +259,23 @@ main[data-bn-view="play"] [data-bn-region="play-sticky"] {
   background: #2C2925; color: #FF6E6E; border: 1px solid rgba(255,77,77,.3);
 }
 
-/* AUTH TABS */
-.lb-tabs { display: flex; gap: 6px; margin-bottom: 16px; background: #100F0D; padding: 4px; border-radius: 8px; }
-.lb-tabs button {
+/* AUTH TABS — semantic <menu role="tablist"><li role="presentation">
+   <button role="tab"> chain inside the auth dialog. Active tab is
+   marked with aria-selected="true"; no parallel class needed. The
+   <li>s are the flex items; buttons fill 100% of their li. */
+dialog menu[role="tablist"] {
+  display: flex; gap: 6px; margin-bottom: 16px;
+  background: #100F0D; padding: 4px; border-radius: 8px;
+}
+dialog menu[role="tablist"] > li { flex: 1; display: flex; }
+dialog menu[role="tablist"] [role="tab"] {
   flex: 1; background: transparent; border: none; color: #6A6560;
   font-family: 'Bebas Neue', sans-serif; font-size: 13px; letter-spacing: 1.5px;
   padding: 10px; border-radius: 6px; cursor: pointer; min-height: 40px;
 }
-.lb-tabs button.on { background: #1C1916; color: #F0EDE4; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+dialog menu[role="tablist"] [role="tab"][aria-selected="true"] {
+  background: #1C1916; color: #F0EDE4; box-shadow: 0 1px 3px rgba(0,0,0,.4);
+}
 
 /* @basenative/keyboard theming */
 .bn-kb {
@@ -461,7 +382,11 @@ header[data-bn-region="header"] [data-bn-action="account"] {
 }
 header[data-bn-region="header"] [aria-current="page"] { color: #E8920A; border-color: rgba(232,146,10,.4); }
 
-/* LOBBY — mirrors .lb-lobby + .lb-sticky + .lb-fab */
+/* LOBBY — attribute-driven daily-only shell. SSR template still emits
+   the old browse-by-category list with section[aria-labelledby=
+   "lobby-list-title"] rules below for graceful no-JS fallback;
+   post-hydration the SPA replaces the tree with the daily card built
+   in src/views/lobby.js. */
 main[data-bn-view="lobby"] {
   width: 100%; max-width: 540px;
   display: flex; flex-direction: column; align-items: center; gap: 12px;
@@ -527,6 +452,7 @@ main[data-bn-view="lobby"] [data-bn-action="lobby-submit"] {
 main[data-bn-view="lobby"] [data-bn-action="lobby-submit"]:hover {
   box-shadow: 0 8px 32px rgba(232,146,10,.6); color: #1A0A00;
 }
+main[data-bn-view="lobby"] [data-bn-action="lobby-submit"]:active { transform: scale(.95); }
 main[data-bn-view="lobby"] [data-bn-region="error"],
 main[data-bn-view="lobby"] [role="alert"] {
   width: 100%; max-width: 540px; text-align: center;
@@ -534,6 +460,67 @@ main[data-bn-view="lobby"] [role="alert"] {
   background: rgba(255,77,77,.08); border: 1px solid rgba(255,77,77,.3);
   padding: 8px 12px; border-radius: 6px;
   font-size: 12px; letter-spacing: .5px;
+}
+
+/* DAILY CARD — markup is <section data-bn-region="daily"> with the
+   three sub-views (done / active / loading) rendered as siblings;
+   the SPA toggles `hidden` on each so only one is visible. The active
+   branch reuses [data-bn-action="lobby-pick"] for the play button so
+   the daily picker shares the lobby item visual; the daily variant
+   gets the highlighted orange border via [data-bn-variant="daily"]. */
+main[data-bn-view="lobby"] [data-bn-region="daily"] {
+  width: 100%; max-width: 480px;
+  display: flex; flex-direction: column; gap: 6px;
+  margin-bottom: 18px; text-align: center;
+}
+main[data-bn-view="lobby"] [data-bn-region="daily-label"] {
+  font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+  color: #E8920A; font-weight: 700;
+}
+main[data-bn-view="lobby"] [data-bn-action="lobby-pick"][data-bn-variant="daily"] {
+  border-color: #E8920A; background: #1A1714;
+}
+main[data-bn-view="lobby"] [data-bn-region="daily-done"] {
+  background: #161412; border: 1.5px solid #E8920A; border-radius: 10px;
+  padding: 24px 16px; text-align: center;
+}
+main[data-bn-view="lobby"] [data-bn-region="daily-result"] {
+  font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 3px;
+  color: #E8920A;
+}
+main[data-bn-view="lobby"] [data-bn-region="daily-score"] {
+  font-size: 18px; color: #F0EDE4; margin-top: 4px;
+}
+main[data-bn-view="lobby"] [data-bn-region="daily-cat"] {
+  font-size: 11px; color: #9A9590; letter-spacing: 1.2px; text-transform: uppercase;
+  margin-top: 8px;
+}
+main[data-bn-view="lobby"] [data-bn-region="daily-next"] {
+  font-size: 12px; color: #9A9590; letter-spacing: 1px; margin-top: 8px;
+}
+main[data-bn-view="lobby"] [data-bn-region="daily-loading"] {
+  width: 100%; min-height: 56px;
+  background: #161412; border: 1.5px solid #222; border-radius: 10px;
+  opacity: .55;
+}
+
+/* STATS — three little cards above the daily section. Markup is
+   <section data-bn-region="stats"> with three <p data-bn-region="stat">
+   children, each containing a <strong> and a <small>. */
+main[data-bn-view="lobby"] [data-bn-region="stats"] {
+  display: flex; gap: 8px; justify-content: center; margin-bottom: 18px;
+  width: 100%; max-width: 320px;
+}
+main[data-bn-view="lobby"] [data-bn-region="stat"] {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 8px 4px; background: #100F0D; border: 1px solid #1F1C18; border-radius: 8px;
+}
+main[data-bn-view="lobby"] [data-bn-region="stat"] > strong {
+  font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 1.5px;
+  color: #F0EDE4; font-weight: 400;
+}
+main[data-bn-view="lobby"] [data-bn-region="stat"] > small {
+  font-size: 9px; letter-spacing: 1.2px; color: #9A9590; text-transform: uppercase;
 }
 
 /* PLAY view — semantic, attribute-driven. Same rules cover the SSR-rendered
@@ -757,6 +744,29 @@ main[data-bn-view="moderate"] > h1,
 main[data-bn-view="admin"] > h1 {
   font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2.5px;
   font-weight: 400;
+}
+
+/* SUBMIT — live tile preview. Markup is
+   <section data-bn-region="preview"> with [role="group"] word rows
+   and [role="img"] tile cells from src/views/submit.js. The empty
+   state is rendered as a single <p>. */
+main[data-bn-view="submit"] [data-bn-region="preview"] {
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: 10px 16px; margin: 12px 0; padding: 14px 8px;
+  background: #100F0D; border-radius: 8px; border: 1px solid #1F1C18;
+  min-height: 74px;
+}
+main[data-bn-view="submit"] [data-bn-region="preview"] > p {
+  color: #988570; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;
+}
+main[data-bn-view="submit"] [data-bn-region="preview"] > [role="group"] {
+  display: flex; gap: 3px;
+}
+main[data-bn-view="submit"] [data-bn-region="preview"] [role="img"] {
+  width: 30px; height: 34px; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Bebas Neue', sans-serif; font-size: 18px;
+  background: #1E1C18; border: 1px solid #2A2724; color: #F0EDE4;
 }
 
 /* DIALOGS — replace .lb-ov + .lb-card div soup with native <dialog>.

@@ -44,12 +44,15 @@ export function createAuthModal({ open, onClose, onAuthed }) {
     hidden: () => !err(),
   });
 
-  const tabsMenu = h("menu", { class: "lb-tabs", role: "tablist" },
+  /* Auth tabs — semantic <menu role="tablist"> styled via that selector
+     pair under dialog. The `aria-selected="true"` attribute marks the
+     active tab; CSS targets [role="tab"][aria-selected="true"] so we
+     don't need a parallel `.on` class. */
+  const tabsMenu = h("menu", { role: "tablist" },
     h("li", { role: "presentation" },
       h("button", {
         type: "button",
         role: "tab",
-        class: () => tab() === "login" ? "on" : "",
         "aria-selected": () => tab() === "login" ? "true" : "false",
         onClick: () => tab.set("login"),
       }, "LOG IN"),
@@ -58,7 +61,6 @@ export function createAuthModal({ open, onClose, onAuthed }) {
       h("button", {
         type: "button",
         role: "tab",
-        class: () => tab() === "register" ? "on" : "",
         "aria-selected": () => tab() === "register" ? "true" : "false",
         onClick: () => tab.set("register"),
       }, "NEW HANDLE"),
