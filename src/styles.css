@@ -63,6 +63,64 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
 }
 :focus-visible { outline: 2px solid #FFD700; outline-offset: 2px; border-radius: 4px; }
 
+/* T4BS design tokens — used by the play view's attribute-driven selectors.
+   Older view-specific class rules still hardcode their colors; future
+   refactors of those views can swap the literals for these vars. */
+:root {
+  --t4bs-bg: #0C0B09;
+  --t4bs-fg: #F0EDE4;
+  --t4bs-accent: #E8920A;
+  --t4bs-accent-rgb: 232,146,10;
+  --t4bs-muted: #988570;
+  --t4bs-muted-2: #7A7570;
+  --t4bs-muted-3: #9A9590;
+  --t4bs-muted-4: #A06020;
+  --t4bs-tile-bg: #161412;
+  --t4bs-tile-border: #2A2724;
+  --t4bs-tile-fg: #F0EDE4;
+  --t4bs-tile-typed-bg: #1E1C18;
+  --t4bs-tile-typed-border: #555;
+  --t4bs-green: #4EAF7C;
+  --t4bs-green-fg: #0A1F12;
+  --t4bs-yellow: #D4B445;
+  --t4bs-yellow-fg: #1F1700;
+  --t4bs-yellow-soft: rgba(212,180,69,.16);
+  --t4bs-yellow-soft-border: rgba(212,180,69,.5);
+  --t4bs-absent: #2C2925;
+  --t4bs-absent-fg: #5A5550;
+  --t4bs-absent-chip-bg: rgba(70,65,60,.35);
+  --t4bs-absent-chip-fg: #6A6560;
+  --t4bs-red: #FF4D4D;
+  --t4bs-red-soft: #FF6E6E;
+  --t4bs-red-bg-soft: rgba(255,77,77,.08);
+  --t4bs-red-border-soft: rgba(255,77,77,.5);
+  --t4bs-red-glow: rgba(255,77,77,.45);
+  --t4bs-red-allin-bg: #1A1815;
+  --t4bs-red-allin-active-fg: #1A0A0A;
+  --t4bs-red-dashed: rgba(255,110,110,.55);
+  --t4bs-gold: #FFD700;
+  --t4bs-gold-fg: #1A0A00;
+  --t4bs-gold-glow: rgba(255,215,0,.55);
+  --t4bs-stickynote: #F5E06A;
+  --t4bs-stickynote-fg: #1E1600;
+  --t4bs-grid-bg: #161412;
+  --t4bs-grid-border: #222;
+  --t4bs-bank-bg: #100F0D;
+  --t4bs-bank-border: #1F1C18;
+  --t4bs-cbar-bg: rgba(78,175,124,.08);
+  --t4bs-cbar-border: rgba(78,175,124,.5);
+  --t4bs-glow: rgba(232,146,10,.18);
+  --t4bs-cursor-glow: rgba(232,146,10,.35);
+  --t4bs-cursor-ring: rgba(232,146,10,.5);
+  --t4bs-font-display: 'Bebas Neue', sans-serif;
+  --t4bs-font-body: 'DM Sans', sans-serif;
+  --t4bs-font-handwritten: 'Caveat', cursive;
+  --t4bs-tile-w: clamp(38px, 9.5vw, 46px);
+  --t4bs-tile-h: clamp(44px, 11.5vw, 52px);
+  --t4bs-tile-font: clamp(22px, 5.5vw, 28px);
+  --t4bs-max-row: 540px;
+}
+
 .lb {
   --rc: #E8920A;
   --rg: 232,146,10;
@@ -121,13 +179,14 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
 .lb-ubtn.primary:hover { background: #FFA830; }
 .lb-uhandle { color: #E8920A; border-color: rgba(232,146,10,.4); font-size: 12px; cursor: default; }
 
-/* META */
-.lb-num {
-  font-size: 10px; text-transform: uppercase; letter-spacing: 2.5px; color: #7A7570;
-  margin-bottom: 10px; width: 100%; max-width: 540px; text-align: center;
-}
-.lb-sticky {
-  background: #F5E06A; color: #1E1600; font-family: 'Caveat', cursive;
+/* META — .lb-sticky kept as a shared visual: lobby, submit, moderate, admin
+   all use the class. The play view's [data-bn-region="category"] piggybacks
+   on the same rule. */
+.lb-sticky,
+main[data-bn-view="play"] [data-bn-region="category"] {
+  background: var(--t4bs-stickynote, #F5E06A);
+  color: var(--t4bs-stickynote-fg, #1E1600);
+  font-family: var(--t4bs-font-handwritten, 'Caveat', cursive);
   font-size: 21px; font-weight: 700; padding: 10px 26px 12px;
   border-radius: 2px; transform: rotate(-1.4deg);
   box-shadow: 2px 4px 16px rgba(0,0,0,.55);
@@ -135,105 +194,6 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
   max-width: 320px; position: relative;
 }
 .lb-sticky-narrow { max-width: 380px; }
-.lb-sub {
-  font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #9A9590;
-  margin-bottom: 18px; text-align: center;
-}
-.lb-sub b { color: #E8920A; font-weight: 600; }
-
-.lb-hint {
-  width: 100%; max-width: 540px; text-align: center;
-  font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
-  color: #7A7570; margin-bottom: 12px; min-height: 14px; transition: color .4s;
-}
-.lb-hint.on { color: #A06020; }
-
-.lb-cbar {
-  width: 100%; max-width: 540px;
-  background: rgba(78,175,124,.08); border: 1px solid rgba(78,175,124,.5);
-  border-radius: 8px; padding: 10px 16px; margin-bottom: 12px;
-  text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
-  color: #4EAF7C; font-weight: 600;
-}
-.lb-cbar-allin {
-  background: rgba(255,77,77,.08); border-color: rgba(255,77,77,.5); color: #FF6E6E;
-}
-
-/* PHRASE GRID */
-.lb-phrase {
-  width: 100%; max-width: 540px;
-  display: flex; flex-wrap: wrap; justify-content: center;
-  gap: 14px 22px; margin-bottom: 14px; padding: 14px 6px;
-  background: #161412; border: 1.5px solid #222; border-radius: 12px;
-  position: relative;
-}
-.lb-word { display: flex; gap: 4px; position: relative; cursor: pointer; }
-.lb-word.active::before {
-  content: ''; position: absolute; left: -6px; right: -6px; top: -6px; bottom: -6px;
-  border: 1.5px solid var(--rc); border-radius: 8px;
-  box-shadow: 0 0 18px rgba(var(--rg),.18); pointer-events: none;
-}
-.lb-word.solved { cursor: default; }
-.lb-word.allin::before {
-  content: ''; position: absolute; left: -6px; right: -6px; top: -6px; bottom: -6px;
-  border: 1.5px dashed rgba(255,110,110,.55); border-radius: 8px; pointer-events: none;
-}
-
-/* TILES */
-.lb-tile {
-  width: clamp(38px, 9.5vw, 46px); height: clamp(44px, 11.5vw, 52px);
-  border-radius: 5px; display: flex; align-items: center; justify-content: center;
-  font-family: 'Bebas Neue', sans-serif; font-size: clamp(22px, 5.5vw, 28px);
-  user-select: none; flex-shrink: 0; transform-origin: center center;
-  transition: background .25s, border-color .2s; position: relative;
-  background: #161412; border: 1.5px solid #2A2724; color: #F0EDE4;
-}
-.lb-tile.locked-green {
-  background: #4EAF7C; color: #0A1F12;
-  box-shadow: 0 2px 5px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.35);
-  border-color: #4EAF7C;
-}
-.lb-tile.solved-tile {
-  background: #4EAF7C; color: #0A1F12;
-  box-shadow: 0 2px 5px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.4);
-  border-color: #4EAF7C;
-}
-.lb-tile.typed { background: #1E1C18; border: 1.5px solid #555; color: #F0EDE4; cursor: pointer; }
-.lb-tile.cursor {
-  border: 2px solid var(--rc);
-  box-shadow: 0 0 0 1px rgba(var(--rg),.5), 0 0 12px rgba(var(--rg),.35);
-}
-.lb-tile.fb-green  { background: #4EAF7C !important; color: #0A1F12 !important; border-color: #4EAF7C !important; }
-.lb-tile.fb-yellow { background: #D4B445 !important; color: #1F1700 !important; border-color: #D4B445 !important; }
-.lb-tile.fb-absent { background: #2C2925 !important; color: #5A5550 !important; border-color: #2C2925 !important; }
-.lb-tile.wagered { box-shadow: 0 0 0 2px #FFD700, 0 0 14px rgba(255,215,0,.55); }
-.lb-tile.wagered::before {
-  content: '2×'; position: absolute; top: -8px; right: -8px;
-  font-size: 9px; letter-spacing: .5px;
-  background: #FFD700; color: #1A0A00; padding: 1px 4px; border-radius: 3px;
-  font-family: 'Bebas Neue', sans-serif;
-  box-shadow: 0 1px 4px rgba(0,0,0,.5); z-index: 2;
-}
-.lb-tile.allin-typed { box-shadow: 0 0 0 1.5px #FF6E6E, 0 0 12px rgba(255,77,77,.35); }
-
-/* KNOWLEDGE BANK */
-.lb-bank {
-  width: 100%; max-width: 540px;
-  display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;
-  padding: 8px 12px; background: #100F0D; border: 1px solid #1F1C18;
-  border-radius: 8px; min-height: 42px;
-}
-.lb-bank-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
-.lb-bank-label {
-  font-size: 9px; letter-spacing: 1.3px; color: #9A9590;
-  text-transform: uppercase; margin-right: 4px;
-}
-.lb-chip {
-  font-family: 'Bebas Neue', sans-serif; font-size: 11px; letter-spacing: 1px;
-  padding: 2px 7px 3px; border-radius: 3px;
-}
-.lb-chip.yellow { background: rgba(212,180,69,.16); color: #D4B445; border: 1px solid rgba(212,180,69,.5); }
-.lb-chip.absent { background: rgba(70,65,60,.35); color: #6A6560; border: 1px solid #2C2925; text-decoration: line-through; }
 
 /* TOAST */
 .lb-toast {
@@ -466,25 +426,6 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
 }
 .lb-tabs button.on { background: #1C1916; color: #F0EDE4; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
 
-/* KEYBOARD WRAPPER */
-.lb-kb-wrap {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  background: #0C0B09; border-top: 1px solid #1F1C18;
-  padding: 8px 6px calc(10px + env(safe-area-inset-bottom,0px));
-}
-.lb-kb-wrap.allin { background: linear-gradient(180deg, rgba(255,77,77,.06) 0%, #0C0B09 30%); border-top-color: rgba(255,77,77,.4); }
-.lb-kb-actions { display: flex; align-items: center; gap: 8px; max-width: 540px; margin: 0 auto 8px; padding: 0 4px; }
-.lb-kb-allin {
-  background: #1A1815; border: 1px solid #FF4D4D; border-radius: 6px; color: #FF4D4D;
-  font-family: 'Bebas Neue', sans-serif; font-size: 12px; letter-spacing: 1.5px;
-  padding: 7px 14px; cursor: pointer; min-height: 34px; transition: all .15s; flex-shrink: 0;
-}
-.lb-kb-allin:hover { background: #FF4D4D; color: #1A0A0A; box-shadow: 0 0 18px rgba(255,77,77,.45); }
-.lb-kb-allin:active { transform: scale(.94); }
-.lb-kb-allin:disabled { opacity: .35; cursor: not-allowed; }
-.lb-kb-allin.on { background: #FF4D4D; color: #1A0A0A; }
-.lb-kb-stake { flex: 1; text-align: right; font-family: 'Bebas Neue', sans-serif; font-size: 12px; letter-spacing: 1.5px; color: #FFD700; min-height: 18px; }
-
 /* @basenative/keyboard theming */
 .bn-kb {
   --kb-bg: #0C0B09;
@@ -508,6 +449,331 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
   color: #F0EDE4; background: #0C0B09;
 }
 .noscript-msg h1 { font-size: 24px; letter-spacing: 4px; margin-bottom: 8px; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PLAY VIEW — semantic + relational + attribute-driven.
+   Component identity rides on data-bn-region / data-bn-bind. Visual states
+   are boolean data-* attributes (data-active, data-solved, data-typed,
+   data-feedback="green"…). The end-of-round overlay still rides on shared
+   .lb-ov / .lb-card / .lb-btn classes since those are reused by auth /
+   help / submit / lobby / admin.
+   ───────────────────────────────────────────────────────────────────────── */
+
+main[data-bn-view="play"] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  --rc: var(--t4bs-accent);
+  --rg: var(--t4bs-accent-rgb);
+}
+
+main[data-bn-view="play"] > header[data-bn-region="meta"] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: var(--t4bs-max-row);
+}
+
+/* "#42 · word search" */
+main[data-bn-view="play"] [data-bn-bind="num"] {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 2.5px;
+  color: var(--t4bs-muted-2);
+  margin-bottom: 10px;
+  width: 100%;
+  max-width: var(--t4bs-max-row);
+  text-align: center;
+}
+
+/* "5 words · 23 letters · by handle" */
+main[data-bn-view="play"] [data-bn-bind="sub"] {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--t4bs-muted-3);
+  margin-bottom: 18px;
+  text-align: center;
+}
+main[data-bn-view="play"] [data-bn-bind="sub"] b {
+  color: var(--t4bs-accent);
+  font-weight: 600;
+}
+
+/* hint line — orange when a word is active */
+main[data-bn-view="play"] [data-bn-bind="hint"] {
+  width: 100%;
+  max-width: var(--t4bs-max-row);
+  text-align: center;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--t4bs-muted-2);
+  margin-bottom: 12px;
+  min-height: 14px;
+  transition: color .4s;
+}
+main[data-bn-view="play"] [data-bn-bind="hint"][data-active] {
+  color: var(--t4bs-muted-4);
+}
+
+/* cbar — green by default, red in all-in mode. <output> is inline by default
+   so we force it block. */
+main[data-bn-view="play"] [data-bn-bind="cbar"] {
+  display: block;
+  width: 100%;
+  max-width: var(--t4bs-max-row);
+  background: var(--t4bs-cbar-bg);
+  border: 1px solid var(--t4bs-cbar-border);
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  text-align: center;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--t4bs-green);
+  font-weight: 600;
+}
+main[data-bn-view="play"] [data-bn-bind="cbar"][data-allin] {
+  background: var(--t4bs-red-bg-soft);
+  border-color: var(--t4bs-red-border-soft);
+  color: var(--t4bs-red-soft);
+}
+
+/* PHRASE GRID */
+main[data-bn-view="play"] section[data-bn-region="grid"] {
+  width: 100%;
+  max-width: var(--t4bs-max-row);
+  margin-bottom: 14px;
+}
+main[data-bn-view="play"] section[data-bn-region="grid"] > ol {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px 22px;
+  padding: 14px 6px;
+  background: var(--t4bs-grid-bg);
+  border: 1.5px solid var(--t4bs-grid-border);
+  border-radius: 12px;
+  position: relative;
+}
+main[data-bn-view="play"] section[data-bn-region="grid"] > ol > li {
+  list-style: none;
+  display: flex;
+  gap: 4px;
+  position: relative;
+  cursor: pointer;
+}
+main[data-bn-view="play"] section[data-bn-region="grid"] > ol > li[data-solved] {
+  cursor: default;
+}
+main[data-bn-view="play"] section[data-bn-region="grid"] > ol > li[data-active]::before {
+  content: '';
+  position: absolute;
+  left: -6px; right: -6px; top: -6px; bottom: -6px;
+  border: 1.5px solid var(--rc);
+  border-radius: 8px;
+  box-shadow: 0 0 18px rgba(var(--rg), .18);
+  pointer-events: none;
+}
+main[data-bn-view="play"] section[data-bn-region="grid"] > ol > li[data-allin]::before {
+  content: '';
+  position: absolute;
+  left: -6px; right: -6px; top: -6px; bottom: -6px;
+  border: 1.5px dashed var(--t4bs-red-dashed);
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+/* TILE — <output> is inline by default; force flex/block. */
+main[data-bn-view="play"] output[data-bn-region="tile"] {
+  width: var(--t4bs-tile-w);
+  height: var(--t4bs-tile-h);
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--t4bs-font-display);
+  font-size: var(--t4bs-tile-font);
+  user-select: none;
+  flex-shrink: 0;
+  transform-origin: center center;
+  transition: background .25s, border-color .2s;
+  position: relative;
+  background: var(--t4bs-tile-bg);
+  border: 1.5px solid var(--t4bs-tile-border);
+  color: var(--t4bs-tile-fg);
+}
+main[data-bn-view="play"] output[data-bn-region="tile"][data-locked],
+main[data-bn-view="play"] output[data-bn-region="tile"][data-solved] {
+  background: var(--t4bs-green);
+  color: var(--t4bs-green-fg);
+  border-color: var(--t4bs-green);
+  box-shadow: 0 2px 5px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.35);
+}
+main[data-bn-view="play"] output[data-bn-region="tile"][data-typed] {
+  background: var(--t4bs-tile-typed-bg);
+  border: 1.5px solid var(--t4bs-tile-typed-border);
+  color: var(--t4bs-tile-fg);
+  cursor: pointer;
+}
+main[data-bn-view="play"] output[data-bn-region="tile"][data-cursor] {
+  border: 2px solid var(--rc);
+  box-shadow: 0 0 0 1px var(--t4bs-cursor-ring), 0 0 12px var(--t4bs-cursor-glow);
+}
+main[data-bn-view="play"] output[data-bn-region="tile"][data-feedback="green"] {
+  background: var(--t4bs-green) !important;
+  color: var(--t4bs-green-fg) !important;
+  border-color: var(--t4bs-green) !important;
+}
+main[data-bn-view="play"] output[data-bn-region="tile"][data-feedback="yellow"] {
+  background: var(--t4bs-yellow) !important;
+  color: var(--t4bs-yellow-fg) !important;
+  border-color: var(--t4bs-yellow) !important;
+}
+main[data-bn-view="play"] output[data-bn-region="tile"][data-feedback="absent"] {
+  background: var(--t4bs-absent) !important;
+  color: var(--t4bs-absent-fg) !important;
+  border-color: var(--t4bs-absent) !important;
+}
+main[data-bn-view="play"] output[data-bn-region="tile"][data-wagered] {
+  box-shadow: 0 0 0 2px var(--t4bs-gold), 0 0 14px var(--t4bs-gold-glow);
+}
+main[data-bn-view="play"] output[data-bn-region="tile"][data-wagered]::before {
+  content: '2×';
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  font-size: 9px;
+  letter-spacing: .5px;
+  background: var(--t4bs-gold);
+  color: var(--t4bs-gold-fg);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: var(--t4bs-font-display);
+  box-shadow: 0 1px 4px rgba(0,0,0,.5);
+  z-index: 2;
+}
+main[data-bn-view="play"] output[data-bn-region="tile"][data-allin-typed] {
+  box-shadow: 0 0 0 1.5px var(--t4bs-red-soft), 0 0 12px rgba(255,77,77,.35);
+}
+
+/* KNOWLEDGE BANK — <aside> with <p> rows of <span> chips. */
+main[data-bn-view="play"] aside[data-bn-region="bank"] {
+  width: 100%;
+  max-width: var(--t4bs-max-row);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: var(--t4bs-bank-bg);
+  border: 1px solid var(--t4bs-bank-border);
+  border-radius: 8px;
+  min-height: 42px;
+}
+main[data-bn-view="play"] aside[data-bn-region="bank"] > p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+main[data-bn-view="play"] aside[data-bn-region="bank"] [data-bn-role="label"] {
+  font-size: 9px;
+  letter-spacing: 1.3px;
+  color: var(--t4bs-muted-3);
+  text-transform: uppercase;
+  margin-right: 4px;
+}
+main[data-bn-view="play"] aside[data-bn-region="bank"] [data-bn-chip] {
+  font-family: var(--t4bs-font-display);
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 2px 7px 3px;
+  border-radius: 3px;
+}
+main[data-bn-view="play"] aside[data-bn-region="bank"] [data-bn-chip="yellow"] {
+  background: var(--t4bs-yellow-soft);
+  color: var(--t4bs-yellow);
+  border: 1px solid var(--t4bs-yellow-soft-border);
+}
+main[data-bn-view="play"] aside[data-bn-region="bank"] [data-bn-chip="absent"] {
+  background: var(--t4bs-absent-chip-bg);
+  color: var(--t4bs-absent-chip-fg);
+  border: 1px solid var(--t4bs-absent);
+  text-decoration: line-through;
+}
+
+/* KEYBOARD WRAP — fixed bottom panel that hosts the @basenative/keyboard
+   instance plus the all-in toggle row. */
+main[data-bn-view="play"] section[data-bn-region="keyboard"] {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  background: var(--t4bs-bg);
+  border-top: 1px solid var(--t4bs-bank-border);
+  padding: 8px 6px calc(10px + env(safe-area-inset-bottom, 0px));
+}
+main[data-bn-view="play"] section[data-bn-region="keyboard"][data-allin] {
+  background: linear-gradient(180deg, rgba(255,77,77,.06) 0%, var(--t4bs-bg) 30%);
+  border-top-color: var(--t4bs-red-border-soft);
+}
+main[data-bn-view="play"] [data-bn-region="kb-actions"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: var(--t4bs-max-row);
+  margin: 0 auto 8px;
+  padding: 0 4px;
+}
+
+main[data-bn-view="play"] button[data-bn-action="allin"] {
+  background: var(--t4bs-red-allin-bg);
+  border: 1px solid var(--t4bs-red);
+  border-radius: 6px;
+  color: var(--t4bs-red);
+  font-family: var(--t4bs-font-display);
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  padding: 7px 14px;
+  cursor: pointer;
+  min-height: 34px;
+  transition: all .15s;
+  flex-shrink: 0;
+}
+main[data-bn-view="play"] button[data-bn-action="allin"]:hover {
+  background: var(--t4bs-red);
+  color: var(--t4bs-red-allin-active-fg);
+  box-shadow: 0 0 18px var(--t4bs-red-glow);
+}
+main[data-bn-view="play"] button[data-bn-action="allin"]:active {
+  transform: scale(.94);
+}
+main[data-bn-view="play"] button[data-bn-action="allin"]:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+main[data-bn-view="play"] button[data-bn-action="allin"][data-on] {
+  background: var(--t4bs-red);
+  color: var(--t4bs-red-allin-active-fg);
+}
+
+main[data-bn-view="play"] [data-bn-bind="stake"] {
+  display: block;
+  flex: 1;
+  text-align: right;
+  font-family: var(--t4bs-font-display);
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  color: var(--t4bs-gold);
+  min-height: 18px;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

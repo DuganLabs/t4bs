@@ -1,6 +1,13 @@
 /* Single-file component: PLAY view.
    All game state is signal-driven. Calls into shared/engine.js indirectly via
-   /api endpoints. The on-screen keyboard is @basenative/keyboard. */
+   /api endpoints. The on-screen keyboard is @basenative/keyboard.
+
+   DOM is semantic + attribute-driven. Component identity is carried on
+   data-bn-* attributes; visual states are boolean data-* attributes
+   (data-active, data-solved, data-typed, data-feedback="green"…). All
+   styling lives in src/styles.css under main[data-bn-view="play"]. The
+   end-of-round overlay still uses the shared .lb-ov/.lb-card/.lb-btn
+   classes since those are cross-view. */
 
 import { signal, computed, effect } from "@basenative/runtime";
 import { Keyboard } from "@basenative/keyboard";
@@ -326,7 +333,7 @@ export function createPlay({
   });
 
   // ── Accessibility: visually-hidden announcement region ──
-  const ariaLive = h("div", {
+  const ariaLive = h("output", {
     class: "sr-only",
     role: "status",
     "aria-live": "polite",
@@ -335,8 +342,9 @@ export function createPlay({
   });
 
   // ── DOM build ──────────────────────────────────────────────────────────
-  const cbar = h("div", {
-    class: () => `lb-cbar${allInMode() && !casc() ? " lb-cbar-allin" : ""}`,
+  const cbar = h("output", {
+    "data-bn-bind": "cbar",
+    "data-allin": () => (allInMode() && !casc()) ? "" : null,
     role: "status",
     "aria-live": "polite",
     text: () => {
@@ -347,7 +355,7 @@ export function createPlay({
     hidden: () => !casc() && !allInMode(),
   });
 
-  const phraseGrid = h("div", { class: "lb-phrase" });
+  const phraseGrid = h("ol", { "data-bn-region": "words" });
   reactiveList(phraseGrid, () => {
     const s = session();
     const words = s.words;
@@ -368,17 +376,14 @@ export function createPlay({
       const fbW = feedback()[wi];
       const wagerSet = new Set(wagers()[wi]);
 
-      const wordCls = [
-        "lb-word",
-        isAct ? "active" : "",
-        allInMode() && !wordSolved()[wi] ? "allin" : "",
-        wordSolved()[wi] ? "solved" : "",
-        shaking() === wi ? "shake" : "",
-        cascOn ? "casc-on" : "",
-      ].filter(Boolean).join(" ");
-
-      const wordEl = h("div", {
-        class: wordCls,
+      const wordEl = h("li", {
+        "data-bn-region": "word",
+        "data-active": isAct ? "" : null,
+        "data-allin": (allInMode() && !wordSolved()[wi]) ? "" : null,
+        "data-solved": wordSolved()[wi] ? "" : null,
+        "data-shake": shaking() === wi ? "" : null,
+        "data-casc-on": cascOn ? "" : null,
+        "aria-label": `Word ${wi + 1}`,
         onClick: () => {
           if (casc() || allInMode()) return;
           if (!wordSolved()[wi]) active.set(wi);
@@ -397,23 +402,28 @@ export function createPlay({
         const isCascPick = casc() && lockedLetter === undefined && !wordSolved()[wi];
         const isWagered = slotIdx >= 0 && wagerSet.has(slotIdx) && typedLetter;
 
-        const cls = ["lb-tile"];
-        let display;
+        let display = "";
+        const tileAttrs = {
+          "data-bn-region": "tile",
+        };
 
-        if (wordSolved()[wi]) { cls.push("solved-tile"); display = lockedLetter; }
-        else if (lockedLetter !== undefined) {
-          cls.push("locked-green"); display = lockedLetter;
-        }
+        if (wordSolved()[wi]) { tileAttrs["data-solved"] = ""; display = lockedLetter; }
+        else if (lockedLetter !== undefined) { tileAttrs["data-locked"] = ""; display = lockedLetter; }
         else if (typedLetter) {
-          cls.push(allInMode() ? "typed allin-typed" : "typed");
+          tileAttrs["data-typed"] = "";
+          if (allInMode()) tileAttrs["data-allin-typed"] = "";
           display = typedLetter;
         }
-        else { if (isCursor) cls.push("cursor"); display = ""; }
+        else if (isCursor) { tileAttrs["data-cursor"] = ""; display = ""; }
 
-        if (fbForTile) { cls.push("fb-flip", `fb-${fbForTile.status}`); display = fbForTile.letter; }
-        if (isWagered) cls.push("wagered");
-        if (isCascPick) cls.push("casc-pick");
-        if (isCascDrop) cls.push("casc-drop");
+        if (fbForTile) {
+          tileAttrs["data-feedback"] = fbForTile.status;
+          tileAttrs["data-fb-flip"] = "";
+          display = fbForTile.letter;
+        }
+        if (isWagered) tileAttrs["data-wagered"] = "";
+        if (isCascPick) tileAttrs["data-casc-pick"] = "";
+        if (isCascDrop) tileAttrs["data-casc-drop"] = "";
 
         const pos = `position ${li + 1} of word ${wi + 1}`;
         let tileLabel;
@@ -431,44 +441,41 @@ export function createPlay({
           if (isCascPick) tileLabel += ", cascade reveal available";
         }
         if (fbForTile) tileLabel = `${fbForTile.letter} at ${pos}, ${fbForTile.status}`;
+        tileAttrs["aria-label"] = tileLabel;
+        tileAttrs.onClick = (e) => {
+          e.stopPropagation();
+          if (isCascPick) { pickCascade(wi, li); return; }
+          if ((isAct || allInMode()) && typedLetter) { toggleWager(wi, slotIdx); return; }
+          if (!wordSolved()[wi] && !casc() && !allInMode()) active.set(wi);
+        };
 
-        wordEl.append(h("div", {
-          class: cls.join(" "),
-          role: "img",
-          "aria-label": tileLabel,
-          onClick: (e) => {
-            e.stopPropagation();
-            if (isCascPick) { pickCascade(wi, li); return; }
-            if ((isAct || allInMode()) && typedLetter) { toggleWager(wi, slotIdx); return; }
-            if (!wordSolved()[wi] && !casc() && !allInMode()) active.set(wi);
-          },
-        }, display));
+        wordEl.append(h("output", tileAttrs, display));
       }
       return wordEl;
     });
   });
 
   // Knowledge bank
-  const bankPresentRow = h("div", { class: "lb-bank-row" });
+  const bankPresentRow = h("p", { "data-bn-row": "present" });
   reactiveList(bankPresentRow, () => {
-    const out = [h("span", { class: "lb-bank-label" }, "in phrase:")];
+    const out = [h("span", { "data-bn-role": "label" }, "in phrase:")];
     const pg = presentGlobal();
-    if (pg.length === 0) out.push(h("span", { class: "lb-bank-label" }, "—"));
-    else for (const L of pg) out.push(h("span", { class: "lb-chip yellow" }, L));
+    if (pg.length === 0) out.push(h("span", { "data-bn-role": "label" }, "—"));
+    else for (const L of pg) out.push(h("span", { "data-bn-chip": "yellow" }, L));
     return out;
   });
-  const bankAbsentRow = h("div", { class: "lb-bank-row" });
+  const bankAbsentRow = h("p", { "data-bn-row": "absent" });
   reactiveList(bankAbsentRow, () => {
     const a = active();
     if (a === null) return [];
     const abs = absentByWord()[a] || [];
     if (abs.length === 0) return [];
     return [
-      h("span", { class: "lb-bank-label" }, `not in word ${a + 1}:`),
-      ...abs.map(L => h("span", { class: "lb-chip absent" }, L)),
+      h("span", { "data-bn-role": "label" }, `not in word ${a + 1}:`),
+      ...abs.map(L => h("span", { "data-bn-chip": "absent" }, L)),
     ];
   });
-  const bank = h("div", { class: "lb-bank" }, bankPresentRow, bankAbsentRow);
+  const bank = h("aside", { "data-bn-region": "bank", "aria-label": "Letter bank" }, bankPresentRow, bankAbsentRow);
 
   // ── @basenative/keyboard wiring ──
   const kb = Keyboard({
@@ -486,24 +493,24 @@ export function createPlay({
     bindHardware: false,               // we have our own Esc/letter listener above
   });
 
-  const kbWrap = h("div", {
-    class: () => `lb-kb-wrap${allInMode() ? " allin" : ""}`,
+  const kbWrap = h("section", {
+    "data-bn-region": "keyboard",
+    "data-allin": () => allInMode() ? "" : null,
     "aria-label": () => allInMode() ? "Keyboard in all-in mode" : "On-screen keyboard for game play",
-    role: "region",
     hidden: () => phase() !== "playing",
   });
 
-  // All-in toggle row
   const allInBtn = h("button", {
-    class: () => `lb-kb-allin${allInMode() ? " on" : ""}`,
+    "data-bn-action": "allin",
+    "data-on": () => allInMode() ? "" : null,
     type: "button",
     onClick: openAllIn,
     "aria-label": () => allInMode() ? "Fold and resume normal play mode" : "Enter all-in mode: type all remaining letters and submit for bonus points or lose all lives",
     text: () => allInMode() ? "FOLD" : "ALL IN",
     disabled: () => casc() && !allInMode(),
   });
-  const stakeLbl = h("span", {
-    class: "lb-kb-stake",
+  const stakeLbl = h("output", {
+    "data-bn-bind": "stake",
     "aria-live": "polite",
     "aria-label": () => {
       const wagerCount = allInMode()
@@ -523,8 +530,8 @@ export function createPlay({
     },
   });
 
-  const kbActions = h("div", { class: "lb-kb-actions" }, allInBtn, stakeLbl);
-  const kbHost = h("div", { html: kb.html });
+  const kbActions = h("div", { "data-bn-region": "kb-actions" }, allInBtn, stakeLbl);
+  const kbHost = h("div", { "data-bn-region": "kb-host", html: kb.html });
   kbWrap.append(kbActions, kbHost);
   // Hydrate the keyboard once it's in the tree.
   queueMicrotask(() => {
@@ -545,6 +552,8 @@ export function createPlay({
   });
 
   // ── End-state overlays ──
+  // These keep the shared .lb-ov / .lb-card / .lb-btn classes since those
+  // are reused by auth-modal / help-modal / submit / lobby / admin views.
   const wonOverlay = createEndOverlay({
     open: () => phase() === "won" && !!reveal(),
     title: "Solved",
@@ -575,29 +584,33 @@ export function createPlay({
     subtitleSuffix: " · the answer was",
   });
 
-  return h("div", { class: "lb-play-host" },
+  const playMain = h("main", { "data-bn-view": "play", "aria-labelledby": "play-title" },
+    h("h1", { id: "play-title", class: "sr-only", text: () => `${session().category} — round #${session().id}` }),
     ariaLive,
-    h("main", { "aria-labelledby": "lb-play-title" },
-      h("h1", { id: "lb-play-title", class: "sr-only", text: () => `${session().category} — round #${session().id}` }),
-      h("div", { class: "lb-num", text: () => `#${session().id} · ${session().category.toLowerCase()}` }),
-      h("div", { class: "lb-sticky", text: () => session().category }),
-      h("div", { class: "lb-sub" },
+    h("header", { "data-bn-region": "meta" },
+      h("p", { "data-bn-bind": "num", text: () => `#${session().id} · ${session().category.toLowerCase()}` }),
+      h("p", { "data-bn-region": "category", text: () => session().category }),
+      h("p", { "data-bn-bind": "sub" },
         () => `${session().words.length} words · ${session().totalLetters} letters · by `,
         h("b", { text: () => session().submittedBy || "?" }),
       ),
-      h("div", {
-        class: () => `lb-hint ${active() !== null ? "on" : ""}`,
+      h("p", {
+        "data-bn-bind": "hint",
+        "data-active": () => active() !== null ? "" : null,
         "aria-live": "polite",
+        role: "status",
         text: hintText,
       }),
       cbar,
-      phraseGrid,
-      bank,
     ),
+    h("section", { "data-bn-region": "grid", "aria-label": "Phrase grid" }, phraseGrid),
+    bank,
     kbWrap,
     wonOverlay,
     lostOverlay,
   );
+
+  return playMain;
 }
 
 function createEndOverlay({
