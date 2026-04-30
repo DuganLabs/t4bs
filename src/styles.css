@@ -74,54 +74,6 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
 }
 .lb.is-playing { padding-bottom: calc(232px + env(safe-area-inset-bottom, 0px)); }
 
-/* HEADER */
-.lb-hd {
-  position: sticky; top: 0; z-index: 30; width: 100%; max-width: 540px;
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 14px; padding: 6px 0;
-  background: rgba(12,11,9,.78); backdrop-filter: blur(8px);
-}
-.lb-logo {
-  font-family: 'Bebas Neue', sans-serif; font-size: 23px; letter-spacing: 4px;
-  color: #F0EDE4; display: flex; align-items: center; gap: 8px; cursor: pointer;
-  background: transparent; border: none; padding: 0;
-}
-.lb-logo-box {
-  width: 20px; height: 20px; background: #E8920A; border-radius: 3px;
-  display: flex; align-items: center; justify-content: center;
-}
-.lb-hd-r { display: flex; align-items: center; gap: 8px; }
-
-.lb-tok {
-  font-family: 'Bebas Neue', sans-serif; font-size: 14px; letter-spacing: 1px;
-  padding: 3px 8px; border-radius: 4px; border: 1.5px solid #4EAF7C; color: #4EAF7C;
-  display: flex; align-items: center; gap: 4px;
-  box-shadow: 0 0 10px rgba(78,175,124,.25);
-}
-
-.lb-score {
-  font-family: 'Bebas Neue', sans-serif; font-size: 19px; color: #F0EDE4;
-  letter-spacing: 1px; min-width: 60px; text-align: right;
-}
-
-.lb-lives { display: flex; gap: 5px; align-items: center; }
-.lb-life { width: 9px; height: 9px; border-radius: 50%; background: #E8920A; transition: all .3s; }
-.lb-life.dead { background: #1E1C18; border: 1px solid #2E2C28; transform: scale(.75); }
-
-.lb-uctrl { display: flex; align-items: center; gap: 6px; }
-.lb-ubtn, .lb-uhandle {
-  display: inline-flex; align-items: center; justify-content: center;
-  background: transparent; border: 1px solid #2E2C28; color: #9A9590;
-  font-family: 'Bebas Neue', sans-serif; font-size: 12px; letter-spacing: 1.5px;
-  padding: 0 11px; border-radius: 6px; height: 34px; min-width: 42px;
-  transition: border-color .15s, color .15s, background .15s;
-}
-.lb-ubtn { cursor: pointer; }
-.lb-ubtn:hover { border-color: #E8920A; color: #E8920A; }
-.lb-ubtn.primary { background: #E8920A; color: #1A0A00; border-color: #E8920A; }
-.lb-ubtn.primary:hover { background: #FFA830; }
-.lb-uhandle { color: #E8920A; border-color: rgba(232,146,10,.4); font-size: 12px; cursor: default; }
-
 /* META — .lb-sticky kept as a shared visual: lobby, submit, moderate, admin
    all use the class. The play view's [data-bn-region="play-sticky"]
    piggybacks on the same rule. */
@@ -429,22 +381,15 @@ main[data-bn-view="play"] [data-bn-region="play-sticky"] {
 .noscript-msg h1 { font-size: 24px; letter-spacing: 4px; margin-bottom: 8px; }
 
 /* ──────────────────────────────────────────────────────────────────
-   BASENATIVE SEMANTIC SSR — first-paint styling for the static shell.
+   BASENATIVE SEMANTIC SHELL — drives both the SSR first paint AND the
+   post-hydration SPA tree (createHeader / lobby / play / etc. emit the
+   same data-bn-* shape the SSR templates use, so these selectors apply
+   continuously across the SSR→SPA handoff).
 
-   SSR templates emit semantic markup with [data-bn-*] attributes (no
-   .lb-* classes). The SPA's hydrated tree mounts BACK into #app and
-   carries the .lb-* classes used by the rules above, so the post-
-   hydration paint is unaffected. This block exists only so that the
-   handful of milliseconds between "HTML arrived" and "JS hydrated"
-   doesn't render an unstyled page.
-
-   Selectors here mirror the SSR templates verbatim:
+   Selectors mirror the SSR templates verbatim:
      - <body data-route="…"> with <header data-bn-region="header">
      - <main data-bn-view="…"> with semantic <section>/<ul>/<a> children
      - [data-bn-action="…"] on the interactive hot-spots
-
-   The hydrate.js mount() replaces #app's children, so post-hydration
-   the .lb-* rules above take over for any styling these don't cover.
    ────────────────────────────────────────────────────────────────── */
 
 #app {
@@ -458,7 +403,8 @@ body[data-route="play"] #app {
 }
 body { background: radial-gradient(ellipse 110% 55% at 50% 0%, #1c1810 0%, #0C0B09 60%); }
 
-/* HEADER — mirrors .lb-hd / .lb-logo / .lb-ubtn */
+/* HEADER — semantic shell. Drives both SSR first paint and the
+   post-hydration SPA tree (createHeader emits the same shape). */
 header[data-bn-region="header"] {
   position: sticky; top: 0; z-index: 30; width: 100%; max-width: 540px;
   margin-bottom: 14px; padding: 6px 0;
