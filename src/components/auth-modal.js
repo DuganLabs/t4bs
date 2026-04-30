@@ -1,4 +1,8 @@
-/* Auth modal — native <dialog> with semantic <form> markup. */
+/* Auth modal — native <dialog> with semantic <form> markup. Fully
+   attribute-driven: form/field/input/hint visuals come from
+   [data-bn-region="form|field|input|hint|error"]; the title accent
+   from [data-bn-region="title"][data-tone="auth"]; buttons from
+   [data-bn-button="primary|secondary"]. */
 
 import { signal, effect } from "@basenative/runtime";
 import { h } from "../lib/dom.js";
@@ -28,7 +32,7 @@ export function createAuthModal({ open, onClose, onAuthed }) {
   const handleInput = h("input", {
     id: "lb-auth-handle",
     name: "handle",
-    class: "lb-finput",
+    "data-bn-region": "input",
     autocapitalize: "off",
     autocorrect: "off",
     spellcheck: "false",
@@ -38,7 +42,7 @@ export function createAuthModal({ open, onClose, onAuthed }) {
   });
 
   const errBox = h("p", {
-    class: "lb-ferror",
+    "data-bn-region": "error",
     role: "alert",
     text: () => err() || "",
     hidden: () => !err(),
@@ -68,23 +72,23 @@ export function createAuthModal({ open, onClose, onAuthed }) {
   );
 
   const passkeyBtn = h("button", {
-    class: "lb-btn lb-bp",
     type: "submit",
+    "data-bn-button": "primary",
     disabled: () => busy() || !handle(),
     text: () => busy() ? "…" : tab() === "login" ? "USE PASSKEY" : "CREATE PASSKEY",
   });
 
-  const noPasskeyHint = h("p", { class: "lb-fhint" }, "This browser doesn't support passkeys.");
+  const noPasskeyHint = h("p", { "data-bn-region": "hint" }, "This browser doesn't support passkeys.");
 
   const devBtn = h("button", {
-    class: "lb-btn lb-bs",
     type: "button",
+    "data-bn-button": "secondary",
     disabled: () => busy() || !handle(),
     onClick: () => doIt(devLogin),
   }, "DEV LOGIN (no passkey)");
 
   const form = h("form", {
-    class: "lb-form",
+    "data-bn-region": "form",
     onSubmit: (e) => {
       e.preventDefault();
       if (passkey && !busy() && handle()) {
@@ -92,10 +96,10 @@ export function createAuthModal({ open, onClose, onAuthed }) {
       }
     },
   },
-    h("p", { class: "lb-field" },
-      h("label", { class: "lb-flabel", for: "lb-auth-handle" }, "Handle"),
+    h("p", { "data-bn-region": "field" },
+      h("label", { for: "lb-auth-handle" }, "Handle"),
       handleInput,
-      h("small", { class: "lb-fhint" }, "Public attribution on your puzzles."),
+      h("small", { "data-bn-region": "hint" }, "Public attribution on your puzzles."),
     ),
     errBox,
     passkey ? passkeyBtn : noPasskeyHint,
@@ -106,15 +110,15 @@ export function createAuthModal({ open, onClose, onAuthed }) {
     onClose,
     onClick: (e) => { if (e.target === dlg) onClose(); },
   },
-    h("article", { class: "lb-card", onClick: (e) => e.stopPropagation() },
+    h("article", { onClick: (e) => e.stopPropagation() },
       h("header", null,
-        h("h2", { id: "lb-auth-title", class: "lb-ct auth" }, "SIGN IN"),
-        h("p", { class: "lb-cs" }, "Anonymous play · login only to submit"),
+        h("h2", { id: "lb-auth-title", "data-bn-region": "title", "data-tone": "auth" }, "SIGN IN"),
+        h("p", { "data-bn-region": "subtitle" }, "Anonymous play · login only to submit"),
       ),
       tabsMenu,
       form,
       isDev() ? devBtn : null,
-      h("button", { class: "lb-btn lb-bs", type: "button", onClick: onClose }, "Cancel"),
+      h("button", { type: "button", "data-bn-button": "secondary", onClick: onClose }, "Cancel"),
     ),
   );
 

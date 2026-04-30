@@ -63,13 +63,13 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
   });
 
   /* Hint texts. */
-  const catHint = h("small", { id: "submit-cat-hint" });
+  const catHint = h("small", { id: "submit-cat-hint", "data-bn-region": "hint" });
   bindText(catHint, () => existingCategories()?.length > 0
     ? `Tap to pick from ${existingCategories().length} existing categories, or type a new one.`
     : "Type a category name. New categories show up here once approved.",
   );
 
-  const phraseHint = h("small", { id: "submit-phrase-hint", "data-bn-bind": "submit-phrase-hint" });
+  const phraseHint = h("small", { id: "submit-phrase-hint", "data-bn-region": "hint", "data-bn-bind": "submit-phrase-hint" });
   bindText(phraseHint, () => `${words().length} word${words().length === 1 ? "" : "s"} · ${totalLetters()} letters · max 36`);
 
   /* Live tile preview. Styling is attribute-driven via
@@ -87,7 +87,7 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
     ),
   () => h("p", null, "Type a phrase to see how it'll render."));
 
-  const previewHint = h("small", { class: "lb-fhint" });
+  const previewHint = h("small", { "data-bn-region": "hint" });
   bindText(previewHint, () => words().length === 0
     ? "Type a phrase above to see how it'll render."
     : "No starting hints. Players solve it cold.",
@@ -95,7 +95,7 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
 
   /* Error output. */
   const errBox = h("output", {
-    class: "lb-ferror",
+    "data-bn-region": "error",
     role: "alert",
     "data-bn-bind": "submit-error",
   });
@@ -106,7 +106,7 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
   const phraseInput = h("input", {
     id: "submit-phrase",
     name: "phrase",
-    class: "lb-finput",
+    "data-bn-region": "input",
     autocapitalize: "characters",
     autocorrect: "off",
     spellcheck: "false",
@@ -117,7 +117,7 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
 
   const submitBtn = h("button", {
     type: "submit",
-    class: "lb-btn lb-bp",
+    "data-bn-button": "primary",
     "data-bn-action": "submit-confirm",
   });
   bindText(submitBtn, () => busy() ? "…" : "SUBMIT FOR REVIEW");
@@ -125,13 +125,13 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
 
   const cancelBtn = h("button", {
     type: "button",
-    class: "lb-btn lb-bs",
+    "data-bn-button": "secondary",
     "data-bn-action": "submit-cancel",
     onClick: onCancel,
   }, "Cancel");
 
   const form = h("form", {
-    class: "lb-form",
+    "data-bn-region": "form",
     "data-bn-action": "submit-form",
     "aria-describedby": "submit-hint",
     novalidate: "",
@@ -139,18 +139,18 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
   },
     h("fieldset", null,
       h("legend", null, "New round"),
-      h("p", { class: "lb-field" },
+      h("p", { "data-bn-region": "field" },
         h("label", { for: "submit-category" }, "Category"),
         cbWrapper,
         catHint,
       ),
-      h("p", { class: "lb-field" },
+      h("p", { "data-bn-region": "field" },
         h("label", { for: "submit-phrase" }, "Phrase"),
         phraseInput,
         phraseHint,
       ),
-      h("p", { class: "lb-field" },
-        h("span", { class: "lb-flabel" }, "Preview"),
+      h("p", { "data-bn-region": "field" },
+        h("span", { "data-bn-region": "flabel" }, "Preview"),
         preview,
         previewHint,
       ),

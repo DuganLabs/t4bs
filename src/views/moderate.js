@@ -33,7 +33,7 @@ export function createModerate({ toaster, onLobbyChange, goLobby }) {
     }
   }
 
-  const errBox = h("p", { class: "lb-ferror", role: "alert", "data-bn-region": "error" });
+  const errBox = h("p", { role: "alert", "data-bn-region": "error" });
   bindText(errBox, () => err() || "");
   bindHidden(errBox, () => !err());
 
@@ -48,7 +48,7 @@ export function createModerate({ toaster, onLobbyChange, goLobby }) {
     const items = list();
     if (items === null) {
       queueRoot.replaceChildren(
-        h("p", { class: "lb-cred", role: "status", "aria-live": "polite" }, "loading…"),
+        h("p", { "data-bn-region": "status", role: "status", "aria-live": "polite" }, "loading…"),
       );
       return;
     }
@@ -74,7 +74,8 @@ export function createModerate({ toaster, onLobbyChange, goLobby }) {
     queueRoot,
     h("button", {
       type: "button",
-      class: "lb-btn lb-bs lb-bs-back",
+      "data-bn-button": "secondary",
+      "data-bn-variant": "back",
       "data-bn-action": "back",
       onClick: goLobby,
     }, "← Back"),
