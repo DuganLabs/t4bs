@@ -23,7 +23,7 @@ import {
 import { nativeShare, mintShareCard, composeShareText } from "@basenative/share/client";
 
 import { api } from "../../lib/api.js";
-import { groupLobby, dailyPuzzle } from "../../lib/game.js";
+import { groupLobby, dailyPuzzle, todayKey } from "../../lib/game.js";
 import { mount, h } from "../../lib/dom.js";
 import { createHeader }    from "../../components/header.js";
 import { createToast, makeToaster } from "../../components/toast.js";
@@ -91,6 +91,7 @@ const lives         = signal(4);
 const tokens        = signal(0);
 const phase         = signal("lobby");
 const reveal        = signal(null);
+const dailyDone     = signal(false);  // true when today's daily is already finished
 
 /* Distinguishes "we are actively trying to resolve a session" from
    "we definitively have no session". Without this the view effect can't
@@ -132,7 +133,10 @@ const SESSION_KEY = "t4bs:session";
 
 (async () => {
   const s = await loadPersisted(STATS_KEY);
-  if (s) stats.set(s);
+  if (s) {
+    stats.set(s);
+    if (s.dailyDate === todayKey()) dailyDone.set(true);
+  }
 })();
 
 async function recordResultPersist(won, finalScore, category) {
@@ -150,9 +154,11 @@ async function recordResultPersist(won, finalScore, category) {
   s.lastScore = finalScore;
   s.lastResult = won ? "won" : "lost";
   s.lastAt = Date.now();
+  s.dailyDate = todayKey();           // stamp so we know today's daily is done
   await savePersisted(STATS_KEY, s);
   await clearPersisted(SESSION_KEY);
   stats.set(s);
+  dailyDone.set(true);
 }
 
 /* ── Initial fetches: skipped when SSR pre-populated the signal ───── */
@@ -225,6 +231,8 @@ effect(() => {
   if (session() || playLoading()) return;
   /* Only auto-start from the lobby — respect deep-links to other views */
   if (view() !== "lobby") return;
+  /* Already finished today's daily — stay on lobby to show results */
+  if (dailyDone()) return;
   dailyFired = true;
   const pick = dailyPuzzle(lb);
   if (pick) start(pick.id);
@@ -354,7 +362,7 @@ effect(() => {
   const v = view();
   if (v === "lobby") {
     mount(viewSlot, createLobby({
-      lobby, stats, error, user,
+      lobby, stats, error, user, dailyDone,
       onPick: start,
       onSubmit: () => {
         if (user()) router.navigate("/submit");

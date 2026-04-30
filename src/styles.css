@@ -342,6 +342,24 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
   border-color: #E8920A;
   position: relative;
 }
+.lb-daily-done {
+  background: #161412; border: 1.5px solid #E8920A; border-radius: 10px;
+  padding: 24px 16px; text-align: center;
+}
+.lb-daily-result {
+  font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 3px;
+  color: #E8920A;
+}
+.lb-daily-score {
+  font-size: 18px; color: #F0EDE4; margin-top: 4px;
+}
+.lb-daily-cat {
+  font-size: 11px; color: #9A9590; letter-spacing: 1.2px; text-transform: uppercase;
+  margin-top: 8px;
+}
+.lb-daily-next {
+  font-size: 12px; color: #9A9590; letter-spacing: 1px; margin-top: 8px;
+}
 
 .lb-tagline { font-size: 11px; color: #9A9590; letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 18px; text-align: center; }
 

@@ -80,4 +80,10 @@ export function dailyFromGroups(groups, date = new Date()) {
   return { group, puzzle };
 }
 
+/** YYYY-MM-DD string for today (local time). Used as the persistence
+ *  key so we know whether the player already finished today's daily. */
+export function todayKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 export const isDev = () => !!(import.meta && import.meta.env && import.meta.env.DEV);
