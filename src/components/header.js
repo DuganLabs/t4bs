@@ -1,15 +1,15 @@
-/* Single-file component: page header.
-   Renders the T4BS logo + (game stats | user controls) depending on view.
-   Inputs are signals so the same header re-renders reactively across screens. */
+/* Page header — emits the same semantic shape as src/bn/views/header.js
+   (SSR template). Score / lives / tokens use <output> (matches SSR);
+   user controls live in a real <ul role="list"> with <li> rows. */
 
 import { h } from "../lib/dom.js";
 
 export function createHeader({
-  view,         // signal<string>
-  user,         // signal<object | null>
-  score,        // signal<number>
-  lives,        // signal<number>
-  tokens,       // signal<number>
+  view,
+  user,
+  score,
+  lives,
+  tokens,
   onLogo,
   onHelp,
   onAuth,
@@ -18,122 +18,78 @@ export function createHeader({
   onLogout,
 }) {
   /* axe `label-content-name-mismatch` — when a control has visible
-     text, its accessible name must contain that text. The old
-     aria-label="Back to lobby" overrode the visible "T4BS" entirely
-     (Lighthouse a11y regression). Now the accessible name is
-     "T4BS — back to lobby" via visible text + sr-only suffix. */
-  const logo = h("button", {
-    class: "lb-logo",
-    type: "button",
-    onClick: onLogo,
+     text, its accessible name must contain that text. The accessible
+     name is "T4BS — back to lobby" via visible text + sr-only suffix. */
+  const logo = h("a", {
+    href: "/",
+    "data-bn-action": "logo",
+    onClick: (e) => { e.preventDefault(); onLogo(); },
   },
-    h("span", { class: "lb-logo-box", "aria-hidden": "true" },
-      // Mini Tabs mark — T + accent dot
-      svgMark(),
-    ),
-    "T4BS",
+    h("strong", null, "T", h("em", null, "4"), "BS"),
     h("span", { class: "sr-only" }, " — back to lobby"),
   );
 
-  const right = h("div", { class: "lb-hd-r" });
-
-  // Playing-mode stats
-  const tokenChip = h("div", {
-    class: "lb-tok",
+  // Playing-mode stats — <output> matches the SSR <output aria-label="Score"> shape
+  const tokenOut = h("output", {
+    "aria-label": "Tokens",
+    text: () => `⚡ ${tokens()}`,
     hidden: () => !(view() === "playing" && tokens() > 0),
-  },
-    h("span", { text: () => `⚡ ${tokens()}` })
-  );
-
-  const scoreChip = h("div", {
-    class: "lb-score",
-    role: "status",
-    "aria-live": "polite",
+  });
+  const scoreOut = h("output", {
+    "aria-label": "Score",
+    text: () => `${score()} pts`,
     hidden: () => view() !== "playing",
-  },
-    h("span", { class: "lb-snum", text: () => String(score()) }),
-    " pts"
-  );
-
-  const livesEl = h("div", {
-    class: "lb-lives",
-    role: "status",
-    "aria-live": "polite",
+  });
+  const livesOut = h("output", {
     "aria-label": () => `${lives()} of 4 lives remaining`,
+    text: () => "♥".repeat(Math.max(0, lives())) || "—",
     hidden: () => view() !== "playing",
   });
-  // Render four life dots that toggle "dead" reactively.
-  for (let i = 0; i < 4; i++) {
-    livesEl.append(h("div", {
-      class: () => `lb-life${i >= lives() ? " dead" : ""}`,
-      "aria-hidden": "true",
-    }));
-  }
 
-  // Off-game user controls (lobby / submit / mod / admin)
-  const uctrl = h("div", {
-    class: "lb-uctrl",
-    hidden: () => view() === "playing",
-  });
-  const helpBtn = h("button", {
-    class: "lb-ubtn",
-    type: "button",
-    onClick: onHelp,
-    "aria-label": "How to play",
-  }, "?");
-  const userHandle = h("span", {
-    class: "lb-uhandle",
-    text: () => user()?.handle || "",
-    hidden: () => !user(),
-  });
-  const modBtn = h("button", {
-    class: "lb-ubtn",
-    type: "button",
-    onClick: onMod,
-    hidden: () => !(user()?.isModerator || user()?.isAdmin),
-  }, "MOD");
-  const adminBtn = h("button", {
-    class: "lb-ubtn",
-    type: "button",
-    onClick: onAdmin,
-    hidden: () => !user()?.isAdmin,
-  }, "ADM");
-  const outBtn = h("button", {
-    class: "lb-ubtn",
-    type: "button",
-    onClick: onLogout,
-    hidden: () => !user(),
-  }, "OUT");
-  const inBtn = h("button", {
-    class: "lb-ubtn primary",
-    type: "button",
-    onClick: onAuth,
-    hidden: () => !!user(),
-  }, "LOG IN");
-  uctrl.append(helpBtn, userHandle, modBtn, adminBtn, outBtn, inBtn);
+  // Off-game user controls — match the SSR <ul role="list"><li>… shape
+  const helpItem = h("li", null,
+    h("button", {
+      type: "button",
+      "data-bn-action": "help",
+      "aria-label": "How to play",
+      onClick: onHelp,
+    }, "?"),
+  );
+  const modItem = h("li", { hidden: () => !(user()?.isModerator || user()?.isAdmin) },
+    h("a", { href: "/moderate", onClick: (e) => { e.preventDefault(); onMod(); } }, "MOD"),
+  );
+  const adminItem = h("li", { hidden: () => !user()?.isAdmin },
+    h("a", { href: "/admin", onClick: (e) => { e.preventDefault(); onAdmin(); } }, "ADM"),
+  );
+  const accountItem = h("li", { hidden: () => !user() },
+    h("button", {
+      type: "button",
+      "data-bn-action": "account",
+      onClick: onLogout,
+    },
+      () => user()?.handle || "",
+      h("span", { class: "sr-only" }, " — sign out"),
+    ),
+  );
+  const authItem = h("li", { hidden: () => !!user() },
+    h("button", {
+      type: "button",
+      "data-bn-action": "auth",
+      onClick: onAuth,
+    }, "Sign in"),
+  );
+  const menu = h("ul", { role: "list" }, helpItem, modItem, adminItem, accountItem, authItem);
 
-  right.append(tokenChip, scoreChip, livesEl, uctrl);
+  const nav = h("nav", { "aria-label": "Tabs primary" },
+    logo,
+    scoreOut,
+    livesOut,
+    tokenOut,
+    menu,
+  );
 
-  return h("header", { class: "lb-hd" }, logo, right);
-}
-
-function svgMark() {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("width", "13");
-  svg.setAttribute("height", "13");
-  svg.setAttribute("viewBox", "0 0 14 14");
-  svg.setAttribute("fill", "none");
-  svg.setAttribute("aria-hidden", "true");
-  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute("d", "M2.5 3.5h7M6 3.5v8");
-  path.setAttribute("stroke", "#1A0A00");
-  path.setAttribute("stroke-width", "1.6");
-  path.setAttribute("stroke-linecap", "round");
-  const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-  c.setAttribute("cx", "10.5");
-  c.setAttribute("cy", "10");
-  c.setAttribute("r", "1.4");
-  c.setAttribute("fill", "#1A0A00");
-  svg.append(path, c);
-  return svg;
+  return h("header", {
+    role: "banner",
+    "data-bn-region": "header",
+  }, nav);
 }
