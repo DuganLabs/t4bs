@@ -1,0 +1,32 @@
+name: bundle-size
+
+# Thin caller: delegates to the DuganLabs org reusable workflow that
+# builds the project, measures gzipped JS + CSS output (summed across
+# every chunk in dist/), comments the numbers on the PR, and fails if
+# either total exceeds the budget.
+#
+# Current totals (post-#64): ~31 KB JS gzip, ~6 KB CSS gzip. The 60/40
+# ceiling absorbs reasonable feature growth (~2x headroom on JS, ~6x on
+# CSS) while still catching gross bloat — e.g. adding a heavy dep to
+# the eager graph.
+#
+# Note: this gate measures TOTAL output. The eager-vs-lazy chunk split
+# from #64 is locked separately by tests/build-output.test.js (run via
+# `npm test` from the ci.yml caller), which asserts the lazy view
+# chunks remain dynamic entries and the eager play-boot stays under a
+# 55 KB raw budget.
+#
+# See: https://github.com/DuganLabs/.github/blob/main/.github/workflows/bundle-size.yml
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  size:
+    uses: DuganLabs/.github/.github/workflows/bundle-size.yml@v2
+    with:
+      package-manager: npm
+      js-budget-kb: 60
+      css-budget-kb: 40
