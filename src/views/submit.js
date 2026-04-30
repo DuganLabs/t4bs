@@ -72,17 +72,18 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
   const phraseHint = h("small", { id: "submit-phrase-hint", "data-bn-bind": "submit-phrase-hint" });
   bindText(phraseHint, () => `${words().length} word${words().length === 1 ? "" : "s"} · ${totalLetters()} letters · max 36`);
 
-  /* Live tile preview. */
+  /* Live tile preview. Styling is attribute-driven via
+     [data-bn-region="preview"] under main[data-bn-view="submit"];
+     each word row is a [role="group"] and each tile is a [role="img"]. */
   const preview = h("section", {
-    class: "lb-preview",
     "aria-label": "Phrase preview",
     "aria-hidden": "true",
     "data-bn-region": "preview",
     "data-bn-bind": "submit-preview",
   });
   bindList(preview, words, (word) =>
-    h("div", { class: "lb-pword", role: "group" },
-      ...word.split("").map(() => h("span", { class: "lb-ptile", role: "img", "aria-label": "tile" })),
+    h("div", { role: "group" },
+      ...word.split("").map(() => h("span", { role: "img", "aria-label": "tile" })),
     ),
   () => h("p", null, "Type a phrase to see how it'll render."));
 

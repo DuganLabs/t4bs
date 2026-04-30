@@ -58,8 +58,8 @@ export function bindClassName(idOrEl, source) {
 /* Toggle visibility. Sets both the `hidden` attribute (for assistive
    tech + the no-JS HTML semantic) AND an `is-hidden` class (which
    carries `display: none !important` in styles.css — needed to win
-   against rules like `.lb-stats { display: flex }` that would otherwise
-   defeat the UA `[hidden]` style). */
+   against rules with explicit `display:` (e.g. the lobby stats row's
+   `display: flex`) that would otherwise defeat the UA `[hidden]` style). */
 export function bindHidden(idOrEl, source) {
   const el = resolve(idOrEl);
   if (!el) return;

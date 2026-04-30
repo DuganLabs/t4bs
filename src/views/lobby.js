@@ -5,11 +5,10 @@
    last result if they've already finished today's daily. Submission
    FAB is preserved so users can still contribute new puzzles.
 
-   Structure mirrors the SSR shell where reasonable; the puzzle list
-   that previously lived here has been removed entirely. Browse-and-pick
-   is no longer the player journey — daily auto-start (in hydrate.js)
-   makes the lobby a destination only when today's puzzle is already
-   done. */
+   Markup is attribute-driven: lobby-specific classes have been replaced
+   with semantic elements + data-bn-region / data-bn-action selectors,
+   matching the play.js refactor in #56. Styling lives in styles.css
+   under main[data-bn-view="lobby"]. */
 
 import { computed } from "@basenative/runtime";
 import { h } from "../lib/dom.js";
@@ -40,19 +39,18 @@ export function createLobby({
   bindText(streakB, () => (stats()?.streak || 0) > 0 ? `🔥${stats().streak}` : "—");
 
   const statsSection = h("section", {
-    class: "lb-stats",
     "aria-label": "Personal stats",
     "data-bn-region": "stats",
   },
-    h("p", { class: "lb-stat" }, winsB,   h("small", null, "WINS")),
-    h("p", { class: "lb-stat" }, bestB,   h("small", null, "BEST")),
-    h("p", { class: "lb-stat" }, streakB, h("small", null, "STREAK")),
+    h("p", { "data-bn-region": "stat" }, winsB,   h("small", null, "WINS")),
+    h("p", { "data-bn-region": "stat" }, bestB,   h("small", null, "BEST")),
+    h("p", { "data-bn-region": "stat" }, streakB, h("small", null, "STREAK")),
   );
   bindHidden(statsSection, () => !hasStats());
 
-  /* Error — single status paragraph, hidden by default. */
+  /* Error — single status paragraph, hidden by default. Styled by
+     main[data-bn-view="lobby"] [data-bn-region="error"] in styles.css. */
   const errorEl = h("p", {
-    class: "lb-cred lb-cred-error",
     role: "alert",
     "data-bn-region": "error",
   });
@@ -67,26 +65,26 @@ export function createLobby({
      auto-start has fired. */
 
   // (a) Done — last result + come-back-tomorrow hint.
-  const doneResult = h("p", { class: "lb-daily-result" });
-  const doneScore  = h("p", { class: "lb-daily-score" });
-  const doneCat    = h("p", { class: "lb-daily-cat" });
+  const doneResult = h("p", { "data-bn-region": "daily-result" });
+  const doneScore  = h("p", { "data-bn-region": "daily-score" });
+  const doneCat    = h("p", { "data-bn-region": "daily-cat" });
   bindText(doneResult, () => stats()?.lastResult === "won" ? "Solved" : "Busted");
   bindText(doneScore,  () => `${stats()?.lastScore || 0} pts`);
   bindText(doneCat,    () => stats()?.lastCategory || "");
-  const doneCard = h("div", { class: "lb-daily-done" }, doneResult, doneScore, doneCat);
-  const nextHint = h("p", { class: "lb-daily-next" }, "Come back tomorrow for a new puzzle");
+  const doneCard = h("div", { "data-bn-region": "daily-done" }, doneResult, doneScore, doneCat);
+  const nextHint = h("p", { "data-bn-region": "daily-next" }, "Come back tomorrow for a new puzzle");
   bindHidden(doneCard, () => !dailyDone());
   bindHidden(nextHint, () => !dailyDone());
 
   // (b) Active — today's daily play button.
-  const dailyCat = h("strong", { class: "lb-lobby-cat" });
-  const dailyBy  = h("small", { class: "lb-lobby-by" });
+  const dailyCat = h("strong");
+  const dailyBy  = h("small");
   bindText(dailyCat, () => daily()?.group?.category || "");
   bindText(dailyBy,  () => daily() ? `by ${daily().puzzle.submittedBy}` : "");
   const dailyBtn = h("button", {
     type: "button",
-    class: "lb-lobby-item lb-daily-item",
     "data-bn-action": "lobby-pick",
+    "data-bn-variant": "daily",
     onClick: () => { const d = daily(); if (d) onPick(d.puzzle.id); },
   },
     h("span", { class: "sr-only" }, "Play today's puzzle: "),
@@ -96,24 +94,24 @@ export function createLobby({
   bindHidden(dailyBtn, () => dailyDone() || !daily());
 
   // (c) Loading — skeleton while lobby fetch is in flight.
-  const loadingCard = h("div", { class: "lb-lobby-skel", "aria-hidden": "true" });
+  const loadingCard = h("div", { "data-bn-region": "daily-loading", "aria-hidden": "true" });
   bindHidden(loadingCard, () => dailyDone() || !!daily());
 
   const dailyCard = h("section", {
-    class: "lb-daily",
     "aria-label": "Today's puzzle",
     "data-bn-region": "daily",
   },
-    h("p", { class: "lb-daily-label" }, "Today's puzzle"),
+    h("p", { "data-bn-region": "daily-label" }, "Today's puzzle"),
     doneCard,
     dailyBtn,
     loadingCard,
     nextHint,
   );
 
-  /* Floating "submit a phrase" CTA. */
+  /* Floating "submit a phrase" CTA. The styling for this button is
+     driven entirely by [data-bn-action="lobby-submit"] in styles.css
+     (already in place from #54), so no class is needed. */
   const fab = h("button", {
-    class: "lb-fab",
     type: "button",
     "data-bn-action": "lobby-submit",
     "aria-label": "Submit a phrase",
@@ -129,7 +127,7 @@ export function createLobby({
       h("p", { class: "lb-sticky lb-sticky-narrow" },
         "One subject. One phrase.", h("br"), "No mercy.",
       ),
-      h("p", { class: "lb-tagline" }, "Daily puzzle"),
+      h("p", { "data-bn-region": "tagline" }, "Daily puzzle"),
     ),
     statsSection,
     errorEl,
