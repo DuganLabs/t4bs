@@ -1,0 +1,18 @@
+name: ci
+
+# Thin caller: delegates to the DuganLabs org reusable workflow that
+# runs lint + typecheck + test against the project's package scripts.
+# See: https://github.com/DuganLabs/.github/blob/main/.github/workflows/ci.yml
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  ci:
+    uses: DuganLabs/.github/.github/workflows/ci.yml@v2
+    with:
+      package-manager: npm
