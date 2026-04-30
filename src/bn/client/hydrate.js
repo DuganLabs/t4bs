@@ -92,6 +92,7 @@ const tokens        = signal(0);
 const phase         = signal("lobby");
 const reveal        = signal(null);
 const dailyDone     = signal(false);  // true when today's daily is already finished
+const statsLoaded   = signal(false);  // flips true once the persisted-stats IIFE resolves
 
 /* Distinguishes "we are actively trying to resolve a session" from
    "we definitively have no session". Without this the view effect can't
@@ -132,10 +133,14 @@ const STATS_KEY   = "t4bs:stats";
 const SESSION_KEY = "t4bs:session";
 
 (async () => {
-  const s = await loadPersisted(STATS_KEY);
-  if (s) {
-    stats.set(s);
-    if (s.dailyDate === todayKey()) dailyDone.set(true);
+  try {
+    const s = await loadPersisted(STATS_KEY);
+    if (s) {
+      stats.set(s);
+      if (s.dailyDate === todayKey()) dailyDone.set(true);
+    }
+  } finally {
+    statsLoaded.set(true);
   }
 })();
 
@@ -227,6 +232,11 @@ let dailyFired = false;
 effect(() => {
   const lb = lobby();
   if (!lb || dailyFired) return;
+  /* Wait for persisted stats — under SSR, lobby() is non-null on first
+     tick while loadPersisted() is still in flight. Without this gate the
+     effect fires with dailyDone() === false and bounces a player who has
+     already finished today's daily back into the puzzle on a hard refresh. */
+  if (!statsLoaded()) return;
   /* Don't interrupt an active game or a resume in progress */
   if (session() || playLoading()) return;
   /* Only auto-start from the lobby — respect deep-links to other views */

@@ -123,7 +123,7 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
 
 /* META */
 .lb-num {
-  font-size: 10px; text-transform: uppercase; letter-spacing: 2.5px; color: #7A7570;
+  font-size: 12px; text-transform: uppercase; letter-spacing: 2.5px; color: #7A7570;
   margin-bottom: 10px; width: 100%; max-width: 540px; text-align: center;
 }
 .lb-sticky {
@@ -136,14 +136,14 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
 }
 .lb-sticky-narrow { max-width: 380px; }
 .lb-sub {
-  font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #9A9590;
+  font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: #9A9590;
   margin-bottom: 18px; text-align: center;
 }
 .lb-sub b { color: #E8920A; font-weight: 600; }
 
 .lb-hint {
   width: 100%; max-width: 540px; text-align: center;
-  font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
+  font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;
   color: #7A7570; margin-bottom: 12px; min-height: 14px; transition: color .4s;
 }
 .lb-hint.on { color: #A06020; }
@@ -225,7 +225,7 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
 }
 .lb-bank-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 .lb-bank-label {
-  font-size: 9px; letter-spacing: 1.3px; color: #9A9590;
+  font-size: 12px; letter-spacing: 1.3px; color: #9A9590;
   text-transform: uppercase; margin-right: 4px;
 }
 .lb-chip {
