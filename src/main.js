@@ -29,9 +29,11 @@ import { createHelpModal } from "./components/help-modal.js";
 import { createAuthModal } from "./components/auth-modal.js";
 import { createLobby } from "./views/lobby.js";
 import { createPlay } from "./views/play.js";
-import { createSubmit } from "./views/submit.js";
-import { createModerate } from "./views/moderate.js";
-import { createAdmin } from "./views/admin.js";
+/* submit / moderate / admin are gated behind user actions (clicking the
+   submit FAB, navigating to /moderate or /admin) and are bundled with
+   their own heavy deps (@basenative/admin, @basenative/combobox). They
+   load lazily via dynamic import below — keeping them out of the eager
+   chunk shaves ~10 kB gzipped for the typical play-only journey. */
 import { decidePlayBoot, withTimeout, isResumable } from "./bn/client/play-boot.js";
 
 /* ── error logging (carryover from the React main) ─────────────────────── */
@@ -295,6 +297,29 @@ const authModal = createAuthModal({
 // View slot — replaced reactively when the route or session changes.
 const viewSlot = h("div", { "data-bn-region": "view-slot" });
 
+/* Lazy-mount helper for views that ship in their own chunk. Shows a
+   status placeholder while the import resolves, then mounts only if the
+   user hasn't navigated away in the meantime. The signal read after the
+   await happens outside an effect context, so it doesn't create stray
+   subscriptions on the outer view-mount effect. */
+function mountLazy(label, importFn, build) {
+  mount(viewSlot, h("p", {
+    "data-bn-region": "status",
+    role: "status",
+    "aria-live": "polite",
+  }, `Loading ${label}…`));
+  importFn().then((mod) => {
+    if (view() !== label) return;
+    mount(viewSlot, build(mod));
+  }).catch((err) => {
+    if (view() !== label) return;
+    mount(viewSlot, h("p", {
+      "data-bn-region": "error",
+      role: "alert",
+    }, `Couldn't load ${label}: ${String(err?.message || err)}`));
+  });
+}
+
 // Re-mount the active view when `view` changes. Effects own DOM lifetime;
 // each branch builds its component fresh, so we can safely tear down by
 // just replacing children on `viewSlot`.
@@ -315,7 +340,7 @@ effect(() => {
       authOpen.set(true);
       return;
     }
-    mount(viewSlot, createSubmit({
+    mountLazy("submit", () => import("./views/submit.js"), (mod) => mod.createSubmit({
       existingCategories: () => groupLobby(lobby())?.map(g => g.category) || [],
       onCancel: () => router.navigate("/"),
       onSubmitted: () => {
@@ -330,7 +355,7 @@ effect(() => {
       router.navigate("/");
       return;
     }
-    mount(viewSlot, createModerate({
+    mountLazy("moderate", () => import("./views/moderate.js"), (mod) => mod.createModerate({
       toaster,
       goLobby: () => router.navigate("/"),
       onLobbyChange: () => api.listPuzzles().then(lobby.set).catch(() => {}),
@@ -340,7 +365,7 @@ effect(() => {
       router.navigate("/");
       return;
     }
-    mount(viewSlot, createAdmin({
+    mountLazy("admin", () => import("./views/admin.js"), (mod) => mod.createAdmin({
       currentHandle: user()?.handle,
       toaster,
       goLobby: () => router.navigate("/"),

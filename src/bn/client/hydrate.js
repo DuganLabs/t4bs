@@ -31,9 +31,10 @@ import { createHelpModal } from "../../components/help-modal.js";
 import { createAuthModal } from "../../components/auth-modal.js";
 import { createLobby }    from "../../views/lobby.js";
 import { createPlay }     from "../../views/play.js";
-import { createSubmit }   from "../../views/submit.js";
-import { createModerate } from "../../views/moderate.js";
-import { createAdmin }    from "../../views/admin.js";
+/* submit / moderate / admin are gated behind user actions and pull in
+   their own heavy deps (@basenative/admin ~27 KB raw, combobox ~25 KB
+   raw). Lazy-loading them shaves the eager chunk for the
+   solve-the-daily journey that 95%+ of visitors take. */
 import { decidePlayBoot, withTimeout, isResumable } from "./play-boot.js";
 
 /** @typedef {import("../route-table.js").RouteName} RouteName */
@@ -368,6 +369,27 @@ const authModal = createAuthModal({
 
 const viewSlot = h("div", { "data-bn-region": "view-slot" });
 
+/* Lazy-mount helper for views that ship in their own chunk. Shows a
+   status placeholder while the import resolves, then mounts only if
+   the user hasn't navigated away in the meantime. */
+function mountLazy(label, importFn, build) {
+  mount(viewSlot, h("p", {
+    "data-bn-region": "status",
+    role: "status",
+    "aria-live": "polite",
+  }, `Loading ${label}…`));
+  importFn().then((mod) => {
+    if (view() !== label) return;
+    mount(viewSlot, build(mod));
+  }).catch((err) => {
+    if (view() !== label) return;
+    mount(viewSlot, h("p", {
+      "data-bn-region": "error",
+      role: "alert",
+    }, `Couldn't load ${label}: ${String(err?.message || err)}`));
+  });
+}
+
 effect(() => {
   const v = view();
   if (v === "lobby") {
@@ -385,7 +407,7 @@ effect(() => {
       authOpen.set(true);
       return;
     }
-    mount(viewSlot, createSubmit({
+    mountLazy("submit", () => import("../../views/submit.js"), (mod) => mod.createSubmit({
       existingCategories: () => groupLobby(lobby())?.map(g => g.category) || [],
       onCancel: () => router.navigate("/"),
       onSubmitted: () => {
@@ -399,7 +421,7 @@ effect(() => {
       router.navigate("/");
       return;
     }
-    mount(viewSlot, createModerate({
+    mountLazy("moderate", () => import("../../views/moderate.js"), (mod) => mod.createModerate({
       toaster,
       goLobby: () => router.navigate("/"),
       onLobbyChange: () => api.listPuzzles().then(lobby.set).catch(() => {}),
@@ -409,7 +431,7 @@ effect(() => {
       router.navigate("/");
       return;
     }
-    mount(viewSlot, createAdmin({
+    mountLazy("admin", () => import("../../views/admin.js"), (mod) => mod.createAdmin({
       currentHandle: user()?.handle,
       toaster,
       goLobby: () => router.navigate("/"),
