@@ -124,7 +124,7 @@ export function createLobby({
   },
     h("header", null,
       h("h1", { id: "lobby-title", class: "sr-only" }, "Tabs — daily puzzle"),
-      h("p", { class: "lb-sticky lb-sticky-narrow" },
+      h("p", { "data-bn-region": "sticky", "data-bn-variant": "narrow" },
         "One subject. One phrase.", h("br"), "No mercy.",
       ),
       h("p", { "data-bn-region": "tagline" }, "Daily puzzle"),
