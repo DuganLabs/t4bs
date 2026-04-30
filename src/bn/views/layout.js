@@ -51,12 +51,15 @@ export default `<!DOCTYPE html>
          arrives. The semantic selectors here mirror the SSR templates
          so first paint matches the post-hydration paint. -->
     <style data-bn-critical>
-      *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+      @layer reset, app, keyboard;
+      @layer reset {
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+        ul,ol,menu{list-style:none}
+      }
       html,body{background:#0C0B09;color:#F0EDE4;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
       html,body,#app{min-height:100dvh}
       body{font-family:'DM Sans',system-ui,sans-serif;background:radial-gradient(ellipse 110% 55% at 50% 0%,#1c1810 0%,#0C0B09 60%)}
       #app{display:flex;flex-direction:column;align-items:center;padding:max(env(safe-area-inset-top,0px),16px) 14px calc(40px + env(safe-area-inset-bottom,0px))}
-      ul,ol,menu{list-style:none}
       a{color:inherit;text-decoration:none}
       button{font:inherit;color:inherit}
       :where(svg):not([width]):not([height]){width:1em;height:1em}
