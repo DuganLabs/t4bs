@@ -65,7 +65,7 @@ export default `<!DOCTYPE html>
       :where(svg):not([width]):not([height]){width:1em;height:1em}
       svg{display:block}
       .sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-      header[data-bn-region=header]{position:sticky;top:0;z-index:30;width:100%;max-width:540px;margin-bottom:14px;padding:6px 0;background:rgba(12,11,9,.78);backdrop-filter:blur(8px)}
+      header[data-bn-region=header]{position:sticky;top:0;z-index:30;width:100%;max-width:540px;margin-top:4px;margin-bottom:14px;padding:8px 14px;background:rgba(22,20,18,.92);backdrop-filter:blur(8px);border:1px solid #2C2926;border-radius:12px}
       header[data-bn-region=header]>nav{display:flex;align-items:center;justify-content:space-between;gap:8px}
       [data-bn-action=logo]{font-family:'Bebas Neue',sans-serif;font-size:23px;letter-spacing:4px;color:#F0EDE4;display:inline-flex;align-items:center;gap:8px}
       [data-bn-action=logo] em{font-style:normal;color:#E8920A}

@@ -404,11 +404,17 @@ body[data-route="play"] #app {
 body { background: radial-gradient(ellipse 110% 55% at 50% 0%, #1c1810 0%, #0C0B09 60%); }
 
 /* HEADER — semantic shell. Drives both SSR first paint and the
-   post-hydration SPA tree (createHeader emits the same shape). */
+   post-hydration SPA tree (createHeader emits the same shape).
+   Card-like: rounded, bordered, inline-padded so contents don't crash
+   into the band's edge. Sits 4px below the viewport top so the
+   border-radius is visible on initial render; sticky pin still works. */
 header[data-bn-region="header"] {
   position: sticky; top: 0; z-index: 30; width: 100%; max-width: 540px;
-  margin-bottom: 14px; padding: 6px 0;
-  background: rgba(12,11,9,.78); backdrop-filter: blur(8px);
+  margin-top: 4px; margin-bottom: 14px;
+  padding: 8px 14px;
+  background: rgba(22,20,18,.92); backdrop-filter: blur(8px);
+  border: 1px solid #2C2926;
+  border-radius: 12px;
 }
 header[data-bn-region="header"] > nav {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -697,15 +703,24 @@ main[data-bn-view="play"] section[data-bn-region="bank"] [data-bn-chip="absent"]
   text-decoration: line-through;
 }
 
-/* KEYBOARD WRAP */
+/* KEYBOARD WRAP — fixed-bottom card. Centered, capped at 568px so on
+   wide viewports it reads as a contained surface instead of a black
+   bar floating on the body's near-black gradient. On narrow viewports
+   the calc(100% - 8px) makes it edge-aligned with a 4px hairline
+   margin so the border-radius is visible. */
 main[data-bn-view="play"] section[data-bn-region="keyboard"] {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  background: #0C0B09; border-top: 1px solid #1F1C18;
-  padding: 8px 6px calc(10px + env(safe-area-inset-bottom,0px));
+  position: fixed; left: 50%; bottom: 0; z-index: 30;
+  transform: translateX(-50%);
+  width: calc(100% - 8px); max-width: 568px;
+  background: #161412;
+  border: 1px solid #2C2926; border-bottom: none;
+  border-top-left-radius: 16px; border-top-right-radius: 16px;
+  box-shadow: 0 -8px 24px rgba(0,0,0,.5);
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom,0px));
 }
 main[data-bn-view="play"] section[data-bn-region="keyboard"][data-allin] {
-  background: linear-gradient(180deg, rgba(255,77,77,.06) 0%, #0C0B09 30%);
-  border-top-color: rgba(255,77,77,.4);
+  background: linear-gradient(180deg, rgba(255,77,77,.06) 0%, #161412 30%);
+  border-color: rgba(255,77,77,.4); border-bottom: none;
 }
 main[data-bn-view="play"] [data-bn-region="kb-actions"] {
   display: flex; align-items: center; gap: 8px;
