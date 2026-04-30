@@ -84,14 +84,21 @@ function lobbyGroups(lobby) {
 /** @param {import('./ssr-context.js').PlaySessionSsr | null} play */
 function shapePlay(play) {
   if (!play) return null;
+  /* Defensive: a partial play context (e.g. a row with null anchors
+     or null words leaking through from the DB) used to throw
+     "x is not iterable" here and 500 the whole SSR response. The
+     happy path always provides arrays — these `|| []` guards just
+     keep a malformed input from cascading. */
+  const anchors = play.anchors || [];
+  const wordsIn = play.words || [];
   const anchorMap = new Map();
-  for (const a of play.anchors) anchorMap.set(`${a.wi}-${a.li}`, a.letter);
-  const words = play.words.map((wordLen, wi) => ({
+  for (const a of anchors) anchorMap.set(`${a.wi}-${a.li}`, a.letter);
+  const words = wordsIn.map((wordLen, wi) => ({
     cells: Array.from({ length: wordLen }, (_, li) => ({
       anchor: anchorMap.get(`${wi}-${li}`) ?? "",
     })),
   }));
-  const wordCount = play.words.length;
+  const wordCount = wordsIn.length;
   return {
     id: play.id,
     category: play.category,
