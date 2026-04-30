@@ -56,7 +56,7 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
     }
   }
 
-  const errBox = h("p", { class: "lb-ferror", role: "alert", text: () => err() || "", hidden: () => !err() });
+  const errBox = h("p", { "data-bn-region": "error", role: "alert", text: () => err() || "", hidden: () => !err() });
 
   const search = h("input", {
     class: "bn-admin-search",
@@ -73,7 +73,7 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
     const r = results();
     const u = elevated();
     if (u === null) {
-      lists.innerHTML = `<p class="lb-cred" role="status" aria-live="polite">loading…</p>`;
+      lists.innerHTML = `<p data-bn-region="status" role="status" aria-live="polite">loading…</p>`;
       return;
     }
     // Render the full component then strip the search-wrap so the static
@@ -121,6 +121,11 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
     ),
     errBox,
     root,
-    h("button", { class: "lb-btn lb-bs lb-bs-back", type: "button", onClick: goLobby }, "← Back"),
+    h("button", {
+      type: "button",
+      "data-bn-button": "secondary",
+      "data-bn-variant": "back",
+      onClick: goLobby,
+    }, "← Back"),
   );
 }

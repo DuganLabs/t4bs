@@ -348,7 +348,7 @@ effect(() => {
   } else if (v === "playing") {
     if (!session()) {
       if (playLoading()) {
-        mount(viewSlot, h("div", { class: "lb-cred" }, "loading round…"));
+        mount(viewSlot, h("p", { "data-bn-region": "status", role: "status", "aria-live": "polite" }, "loading round…"));
       } else {
         mount(viewSlot);
         if (window.location.pathname === "/play") router.navigate("/");

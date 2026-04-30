@@ -11,7 +11,7 @@
 import { signal, computed, effect } from "@basenative/runtime";
 import { Keyboard } from "@basenative/keyboard";
 import { h } from "../lib/dom.js";
-import { bindAttr, bindClassName, bindHidden, bindText } from "../lib/bind.js";
+import { bindAttr, bindHidden, bindText } from "../lib/bind.js";
 import { api } from "../lib/api.js";
 import { openSlots, fullCount, computeKeyStatus } from "../lib/game.js";
 import { confetti } from "../lib/confetti.js";
@@ -640,27 +640,39 @@ export function createPlay({
     }, { passive: false });
   });
 
-  /* End-of-round dialog — single <dialog> element, contents swap by phase. */
-  const endTitle  = h("h2", { class: "lb-ct" });
-  const endSub    = h("p", { class: "lb-cs" });
-  const endReveal = h("p", { class: "lb-reveal" });
+  /* End-of-round dialog — overlay <div role="dialog"> wrapping a single
+     <article> card. Markup is purely attribute-driven; styling is in
+     styles.css under [data-bn-region="end-overlay"] and the shared
+     dialog/card selectors. The <h2>'s data-tone toggles the win/lose
+     accent color via [data-bn-region="title"][data-tone="..."]. */
+  const endTitle  = h("h2", { "data-bn-region": "title" });
+  const endSub    = h("p", { "data-bn-region": "subtitle" });
+  const endReveal = h("p", { "data-bn-region": "reveal" });
   const endBy     = h("strong");
-  const endCredit = h("p", { class: "lb-cred" }, "submitted by ", endBy);
-  const endScore  = h("output", { class: "lb-cf", "data-bn-region": "end-score" });
+  const endCredit = h("p", { "data-bn-region": "credit" }, "submitted by ", endBy);
+  const endScore  = h("output", { "data-bn-region": "end-score" });
   const endShare  = h("button", {
-    class: "lb-btn lb-bp",
     type: "button",
+    "data-bn-button": "primary",
     "data-bn-action": "share",
   });
-  const endPrimary   = h("button", { class: "lb-btn lb-bs", type: "button", "data-bn-action": "primary" });
-  const endSecondary = h("button", { class: "lb-btn", type: "button", "data-bn-action": "secondary" });
+  const endPrimary   = h("button", {
+    type: "button",
+    "data-bn-button": "secondary",
+    "data-bn-action": "primary",
+  });
+  const endSecondary = h("button", {
+    type: "button",
+    "data-bn-button": "secondary",
+    "data-bn-action": "secondary",
+  });
 
   bindText(endScore, () => String(score()));
   bindAttr(endScore, "aria-label", () => `Final score ${score()} points`);
   bindText(endShare, () => shareLbl() || "Share result");
   bindText(endBy, () => session()?.submittedBy || "?");
   bindText(endTitle, () => phase() === "won" ? "Solved" : "House Wins");
-  bindClassName(endTitle, () => `lb-ct ${phase() === "won" ? "win" : "lose"}`);
+  bindAttr(endTitle, "data-tone", () => phase() === "won" ? "win" : "lose");
   bindText(endSub, () => `${session()?.category || ""}${phase() === "lost" ? " · the answer was" : ""}`);
   bindText(endReveal, () => (reveal() || []).join(" "));
   bindText(endPrimary, () => phase() === "won" ? "Pick another" : "Try again");
@@ -677,17 +689,15 @@ export function createPlay({
   endSecondary.addEventListener("click", goLobby);
 
   const endCard = h("article", {
-    class: "lb-card",
     role: "document",
     onClick: (e) => e.stopPropagation(),
   },
     endTitle, endSub, endReveal, endCredit,
-    endScore, h("p", { class: "lb-cfl" }, "points"),
+    endScore, h("p", { "data-bn-region": "score-label" }, "points"),
     endShare, endSecondary, endPrimary,
   );
 
   const endOverlay = h("div", {
-    class: "lb-ov",
     role: "dialog",
     "aria-modal": "true",
     "aria-labelledby": "play-end-title",

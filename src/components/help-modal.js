@@ -1,24 +1,22 @@
-/* How-to-play — native <dialog> with <article> body. Eliminates the
-   manual overlay/card div soup and gets focus management, ::backdrop
-   styling, and Esc-to-close from the platform. */
+/* How-to-play — native <dialog> with <article> body. Fully attribute-
+   driven: card visuals come from `dialog > article`, the title accent
+   from [data-bn-region="title"][data-tone="help"], the body from
+   [data-bn-region="help-body"], and the close button from
+   [data-bn-button="primary"]. */
 
 import { effect } from "@basenative/runtime";
 import { h } from "../lib/dom.js";
 
 export function createHelpModal({ open, onClose }) {
-  /* No `class="lb-ov"` here — that class was for the old positioned
-     overlay div. <dialog> handles top-layer + backdrop natively, and
-     the `.lb-ov { display: flex }` rule would force render even when
-     closed. CSS targets `dialog[open]` instead. */
   const dlg = h("dialog", {
     "aria-labelledby": "help-title",
     onClose,
     onClick: (e) => { if (e.target === dlg) onClose(); },
   },
-    h("article", { class: "lb-card", onClick: (e) => e.stopPropagation() },
+    h("article", { onClick: (e) => e.stopPropagation() },
       h("header", null,
-        h("h2", { id: "help-title", class: "lb-ct help" }, "HOW TO PLAY"),
-        h("p", { class: "lb-cs" }, "One subject. One phrase. No mercy."),
+        h("h2", { id: "help-title", "data-bn-region": "title", "data-tone": "help" }, "HOW TO PLAY"),
+        h("p", { "data-bn-region": "subtitle" }, "One subject. One phrase. No mercy."),
       ),
       h("div", { "data-bn-region": "help-body" },
         h("p", null,
@@ -42,7 +40,7 @@ export function createHelpModal({ open, onClose }) {
           "Shove the whole phrase. Right = +8 × every unrevealed tile. Wrong = game over.",
         ),
       ),
-      h("button", { class: "lb-btn lb-bp", type: "button", onClick: onClose }, "Got it"),
+      h("button", { type: "button", "data-bn-button": "primary", onClick: onClose }, "Got it"),
     ),
   );
 

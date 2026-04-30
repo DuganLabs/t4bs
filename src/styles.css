@@ -103,31 +103,65 @@ main[data-bn-view="play"] [data-bn-region="play-sticky"] {
 [data-bn-region="toast"][data-tone="great"]   { background: #1E1C10; color: #FFD700; border: 1px solid rgba(255,215,0,.5); box-shadow: 0 0 28px rgba(255,215,0,.2); }
 [data-bn-region="toast"][data-tone="cascade"] { background: #121E17; color: #4EAF7C; border: 1px solid rgba(78,175,124,.5); }
 
-/* OVERLAYS */
-.lb-ov {
+/* DIALOGS / END-OF-ROUND OVERLAY — attribute-driven card visuals.
+   Native <dialog> for help / auth / future; play's end-of-round still
+   uses <div role="dialog" data-bn-region="end-overlay"> because it's
+   gated by signal-driven `hidden` instead of imperative showModal().
+   Both wrap an <article> that gets the same card chrome. */
+[data-bn-region="end-overlay"] {
   position: fixed; inset: 0;
   background: rgba(10,9,7,.92); backdrop-filter: blur(6px);
   display: flex; align-items: center; justify-content: center;
   z-index: 100; padding: 16px;
 }
-.lb-card {
+dialog[open] > article,
+[data-bn-region="end-overlay"] > article {
   background: #1C1916; border: 1px solid #2C2926; border-radius: 14px;
   padding: 24px 22px; width: min(420px, 96vw); text-align: center;
   box-shadow: 0 28px 72px rgba(0,0,0,.7);
   max-height: 92vh; overflow: auto;
 }
-.lb-ct { font-family: 'Bebas Neue', sans-serif; font-size: 38px; letter-spacing: 4px; line-height: 1; margin-bottom: 2px; }
-.lb-ct.win  { color: #E8920A; }
-.lb-ct.lose { color: #E84444; }
-.lb-ct.help { color: #E8920A; font-size: 32px; }
-.lb-ct.auth { color: #E8920A; }
-.lb-cs { font-size: 13px; color: #9A9590; margin-bottom: 18px; }
-.lb-cf { font-family: 'Bebas Neue', sans-serif; font-size: 64px; color: #F0EDE4; line-height: 1; margin-bottom: 2px; }
-.lb-cfl { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #9A9590; margin-bottom: 14px; }
 
-.lb-reveal { font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 3px; color: #E8920A; margin-bottom: 6px; line-height: 1.2; }
-.lb-cred { font-size: 11px; text-transform: uppercase; letter-spacing: 1.8px; color: #9A9590; margin-bottom: 18px; }
-.lb-cred b { color: #7EC49A; }
+/* Card title — <h2 data-bn-region="title"> with optional data-tone for
+   accent color. */
+[data-bn-region="title"] {
+  font-family: 'Bebas Neue', sans-serif; font-size: 38px; letter-spacing: 4px;
+  line-height: 1; margin-bottom: 2px; color: #F0EDE4; font-weight: 400;
+}
+[data-bn-region="title"][data-tone="win"]  { color: #E8920A; }
+[data-bn-region="title"][data-tone="lose"] { color: #E84444; }
+[data-bn-region="title"][data-tone="help"] { color: #E8920A; font-size: 32px; }
+[data-bn-region="title"][data-tone="auth"] { color: #E8920A; }
+
+/* Card subtitle — small muted line under the title. */
+[data-bn-region="subtitle"] { font-size: 13px; color: #9A9590; margin-bottom: 18px; }
+
+/* End-of-round score readout — large display number + small "points" label. */
+[data-bn-region="end-score"] {
+  display: block;
+  font-family: 'Bebas Neue', sans-serif; font-size: 64px; color: #F0EDE4;
+  line-height: 1; margin-bottom: 2px;
+}
+[data-bn-region="score-label"] {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 2px;
+  color: #9A9590; margin-bottom: 14px;
+}
+
+/* Reveal — the answer phrase shown in the end-of-round card. */
+[data-bn-region="reveal"] {
+  font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 3px;
+  color: #E8920A; margin-bottom: 6px; line-height: 1.2;
+}
+
+/* Credit / status — small uppercase muted line. Used for "submitted by"
+   in the end-of-round card and for "loading…" status messages
+   throughout. */
+[data-bn-region="credit"],
+[data-bn-region="status"] {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1.8px;
+  color: #9A9590; margin-bottom: 18px;
+}
+[data-bn-region="credit"] strong { color: #7EC49A; font-weight: 400; }
 
 /* Help-modal body — attribute-driven. Markup is
    <div data-bn-region="help-body"> from src/components/help-modal.js. */
@@ -139,35 +173,44 @@ main[data-bn-view="play"] [data-bn-region="play-sticky"] {
 [data-bn-region="help-body"] b[data-tone="yellow"] { color: #FFD700; }
 [data-bn-region="help-body"] b[data-tone="red"]    { color: #FF4D4D; }
 
-.lb-btn {
+/* SHARED BUTTONS — markup is <button data-bn-button="primary|secondary">.
+   `data-bn-variant="back"` adds the narrower max-width / extra top
+   margin for the "← Back" buttons in moderate / admin views. */
+button[data-bn-button] {
   display: block; width: 100%; padding: 13px; border-radius: 8px; border: none;
   font-family: 'Bebas Neue', sans-serif; font-size: 17px; letter-spacing: 2px;
   cursor: pointer; transition: all .15s; margin-bottom: 9px; min-height: 44px;
 }
-.lb-btn:last-child { margin-bottom: 0; }
-.lb-bp { background: #E8920A; color: #1A0A00; }
-.lb-bp:hover { background: #FFA830; }
-.lb-bs { background: #1C1916; color: #F0EDE4; border: 1px solid #2C2926; }
-.lb-bs:hover { background: #242018; }
-.lb-bs-back { max-width: 300px; margin-top: 14px; }
-.lb-share-fail { background: #1A1815; color: #E8920A; border: 1px solid #E8920A; }
+button[data-bn-button]:last-child { margin-bottom: 0; }
+button[data-bn-button="primary"]   { background: #E8920A; color: #1A0A00; }
+button[data-bn-button="primary"]:hover { background: #FFA830; }
+button[data-bn-button="secondary"] { background: #1C1916; color: #F0EDE4; border: 1px solid #2C2926; }
+button[data-bn-button="secondary"]:hover { background: #242018; }
+button[data-bn-button][data-bn-variant="back"] { max-width: 300px; margin-top: 14px; }
 
-/* FORMS — shared between submit.js and auth-modal.js. The .lb-form /
-   .lb-field / .lb-flabel / .lb-finput / .lb-fhint / .lb-ferror classes
-   are still in use by both consumers; migrating them is a follow-up
-   when auth-modal goes through its own attribute-driven sweep. */
-.lb-form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; text-align: left; }
-.lb-field { display: flex; flex-direction: column; gap: 5px; }
-.lb-flabel { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #9A9590; }
-.lb-finput {
+/* SHARED FORMS — markup is <form data-bn-region="form"> with
+   <p data-bn-region="field"> wrappers. The flabel attribute targets
+   <span> stand-ins for <label> when there's no associated control
+   (e.g. the "Preview" tile-strip label in submit.js). Real <label>
+   elements inside the form get the same treatment via the :is() group. */
+[data-bn-region="form"] { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; text-align: left; }
+[data-bn-region="field"] { display: flex; flex-direction: column; gap: 5px; }
+[data-bn-region="form"] :is(label, [data-bn-region="flabel"]) {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #9A9590;
+}
+[data-bn-region="input"] {
   background: #0F0E0C; border: 1.5px solid #2A2724; border-radius: 6px;
   color: #F0EDE4; font-family: 'DM Sans', sans-serif; font-size: 15px;
   padding: 11px 12px; outline: none; min-height: 44px; width: 100%;
   transition: border-color .15s;
 }
-.lb-finput:focus { border-color: #E8920A; }
-.lb-fhint { font-size: 10px; color: #A09B95; letter-spacing: .5px; }
-.lb-ferror {
+[data-bn-region="input"]:focus { border-color: #E8920A; }
+[data-bn-region="hint"] { font-size: 10px; color: #A09B95; letter-spacing: .5px; }
+
+/* Error output — used standalone (lobby) and inside forms (submit/auth).
+   The lobby variant under main[data-bn-view="lobby"] adds extra padding
+   and width caps; this is the unscoped baseline. */
+[data-bn-region="error"] {
   font-size: 11px; color: #FF6E6E; letter-spacing: .5px;
   background: rgba(255,77,77,.08); padding: 8px 10px; border-radius: 5px;
   border: 1px solid rgba(255,77,77,.3);
@@ -527,9 +570,8 @@ main[data-bn-view="lobby"] [data-bn-region="stat"] > small {
    skeleton (which uses [role="group"] words + [role="img"] tiles + the
    <h1> sticky-note category) and the post-hydration SPA tree (which adds
    data-bn-region="word"/"tile" + boolean state attributes). The shared
-   end-of-round overlay still uses the .lb-ov / .lb-card / .lb-btn / .lb-ct
-   etc. classes since those are reused by auth / help / submit / lobby /
-   moderate / admin. */
+   end-of-round overlay markup is built in src/views/play.js; its visuals
+   come from the shared dialog/card selectors above. */
 main[data-bn-view="play"] {
   width: 100%; max-width: 540px;
   display: flex; flex-direction: column; align-items: center; gap: 12px;
@@ -769,10 +811,10 @@ main[data-bn-view="submit"] [data-bn-region="preview"] [role="img"] {
   background: #1E1C18; border: 1px solid #2A2724; color: #F0EDE4;
 }
 
-/* DIALOGS — replace .lb-ov + .lb-card div soup with native <dialog>.
-   The browser's `display: none` on closed <dialog> Just Works; we only
-   dress the open state. The inner <article class="lb-card"> keeps the
-   existing card visual styling untouched. */
+/* DIALOGS — native <dialog> takes care of `display: none` when closed,
+   so we only dress the open state. The inner <article> picks up its
+   card chrome from the shared `dialog[open] > article,
+   [data-bn-region="end-overlay"] > article` rule earlier in this file. */
 dialog[open] {
   position: fixed; inset: 0; width: 100%; height: 100%;
   background: rgba(10,9,7,.92); backdrop-filter: blur(6px);
@@ -782,9 +824,6 @@ dialog[open] {
   overflow: auto;
 }
 dialog::backdrop { background: rgba(10,9,7,.92); }
-dialog > article {
-  width: min(420px, 96vw); max-height: 92vh; overflow: auto;
-}
 
 /* NOT-FOUND */
 main[data-bn-view="not-found"] {
