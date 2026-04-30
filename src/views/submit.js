@@ -166,8 +166,8 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
   },
     h("header", null,
       h("h1", { id: "submit-title", class: "sr-only" }, "Submit a phrase"),
-      h("p", { class: "lb-sticky lb-sticky-narrow" }, "Submit a phrase"),
-      h("p", { class: "lb-tagline" }, "It enters the moderation queue"),
+      h("p", { "data-bn-region": "sticky", "data-bn-variant": "narrow" }, "Submit a phrase"),
+      h("p", { "data-bn-region": "tagline" }, "It enters the moderation queue"),
     ),
     form,
   );

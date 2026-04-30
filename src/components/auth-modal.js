@@ -30,7 +30,7 @@ export function createAuthModal({ open, onClose, onAuthed }) {
   }
 
   const handleInput = h("input", {
-    id: "lb-auth-handle",
+    id: "auth-handle",
     name: "handle",
     "data-bn-region": "input",
     autocapitalize: "off",
@@ -97,7 +97,7 @@ export function createAuthModal({ open, onClose, onAuthed }) {
     },
   },
     h("p", { "data-bn-region": "field" },
-      h("label", { for: "lb-auth-handle" }, "Handle"),
+      h("label", { for: "auth-handle" }, "Handle"),
       handleInput,
       h("small", { "data-bn-region": "hint" }, "Public attribution on your puzzles."),
     ),
@@ -106,13 +106,13 @@ export function createAuthModal({ open, onClose, onAuthed }) {
   );
 
   const dlg = h("dialog", {
-    "aria-labelledby": "lb-auth-title",
+    "aria-labelledby": "auth-title",
     onClose,
     onClick: (e) => { if (e.target === dlg) onClose(); },
   },
     h("article", { onClick: (e) => e.stopPropagation() },
       h("header", null,
-        h("h2", { id: "lb-auth-title", "data-bn-region": "title", "data-tone": "auth" }, "SIGN IN"),
+        h("h2", { id: "auth-title", "data-bn-region": "title", "data-tone": "auth" }, "SIGN IN"),
         h("p", { "data-bn-region": "subtitle" }, "Anonymous play · login only to submit"),
       ),
       tabsMenu,

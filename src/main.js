@@ -293,7 +293,7 @@ const authModal = createAuthModal({
 });
 
 // View slot — replaced reactively when the route or session changes.
-const viewSlot = h("div", { class: "lb-view-slot" });
+const viewSlot = h("div", { "data-bn-region": "view-slot" });
 
 // Re-mount the active view when `view` changes. Effects own DOM lifetime;
 // each branch builds its component fresh, so we can safely tear down by
@@ -367,9 +367,12 @@ effect(() => {
   }
 });
 
-// Top-level container — toggles the playing-mode class for keyboard padding.
+// Top-level shell — gradient + flex layout. The data-playing attribute
+// toggles the keyboard-mode bottom padding via
+// [data-bn-region="shell"][data-playing] in styles.css.
 const container = h("div", {
-  class: () => `lb${view() === "playing" ? " is-playing" : ""}`,
+  "data-bn-region": "shell",
+  "data-playing": () => view() === "playing" ? "" : null,
 });
 container.append(header, viewSlot);
 

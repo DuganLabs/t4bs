@@ -9,9 +9,9 @@
         dump of the same context for the client hydrator to seed
         signals from.
 
-   No string concatenation, no <span class="lb-…"> soup. The templates
-   own the markup; this file only orchestrates context shaping and the
-   ordered render() calls. */
+   No string concatenation, no class soup. The templates own the markup
+   (purely semantic + data-bn-* attributes); this file only orchestrates
+   context shaping and the ordered render() calls. */
 
 import { render } from "@basenative/server";
 import layoutHtml from "../views/layout.js";

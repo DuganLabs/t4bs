@@ -64,7 +64,12 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
 }
 :focus-visible { outline: 2px solid #FFD700; outline-offset: 2px; border-radius: 4px; }
 
-.lb {
+/* SHELL — top-level wrapper added imperatively by main.js / hydrate.js
+   inside the SSR-rendered <div id="app">. Mirrors #app's flex layout
+   so the SPA tree renders the same as the SSR first paint. The
+   [data-playing] toggle adds the keyboard-mode bottom padding when
+   the play view is mounted. */
+[data-bn-region="shell"] {
   --rc: #E8920A;
   --rg: 232,146,10;
   min-height: 100dvh;
@@ -72,12 +77,14 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
   display: flex; flex-direction: column; align-items: center;
   padding: max(env(safe-area-inset-top, 0px), 16px) 14px calc(40px + env(safe-area-inset-bottom, 0px));
 }
-.lb.is-playing { padding-bottom: calc(232px + env(safe-area-inset-bottom, 0px)); }
+[data-bn-region="shell"][data-playing] { padding-bottom: calc(232px + env(safe-area-inset-bottom, 0px)); }
 
-/* META — .lb-sticky kept as a shared visual: lobby, submit, moderate, admin
-   all use the class. The play view's [data-bn-region="play-sticky"]
-   piggybacks on the same rule. */
-.lb-sticky,
+/* STICKY NOTE — yellow rotated paper visual reused as the page-title
+   marker on lobby, submit, moderate, admin, and play. The "narrow"
+   variant widens the cap from 320px to 380px for the lobby tagline
+   ("One subject. One phrase. No mercy."). The play view's category
+   marker uses [data-bn-region="play-sticky"] and shares this rule. */
+[data-bn-region="sticky"],
 main[data-bn-view="play"] [data-bn-region="play-sticky"] {
   background: #F5E06A; color: #1E1600; font-family: 'Caveat', cursive;
   font-size: 21px; font-weight: 700; padding: 10px 26px 12px;
@@ -86,7 +93,7 @@ main[data-bn-view="play"] [data-bn-region="play-sticky"] {
   margin-bottom: 10px; text-align: center; line-height: 1.2;
   max-width: 320px; position: relative;
 }
-.lb-sticky-narrow { max-width: 380px; }
+[data-bn-region="sticky"][data-bn-variant="narrow"] { max-width: 380px; }
 
 /* TOAST — attribute-driven. Markup is
    <p data-bn-region="toast" data-tone="good|bad|great|cascade"> from
@@ -216,12 +223,9 @@ button[data-bn-button][data-bn-variant="back"] { max-width: 300px; margin-top: 1
   border: 1px solid rgba(255,77,77,.3);
 }
 
-/* TAGLINE — small uppercase muted subheading. Used by lobby/submit/
-   moderate/admin headers. Attribute-driven; the .lb-tagline class is
-   kept on moderate.js + admin.js until those views go through their
-   own sweep, hence the dual selector. */
-[data-bn-region="tagline"],
-.lb-tagline {
+/* TAGLINE — small uppercase muted subheading. Used under the sticky
+   note on lobby / submit / moderate / admin headers. */
+[data-bn-region="tagline"] {
   font-size: 11px; color: #9A9590; letter-spacing: 1.2px; text-transform: uppercase;
   margin-bottom: 18px; text-align: center;
 }
@@ -587,7 +591,7 @@ main[data-bn-view="play"] > header[data-bn-region="play-summary"] {
 
 /* SSR <h1> in summary doubles as the visible sticky-note. Post-hydration the
    <h1> becomes sr-only and the visible category is on [data-bn-region="play-sticky"]
-   (also styled by the .lb-sticky shared rule above). */
+   (also covered by the [data-bn-region="sticky"] rule above). */
 main[data-bn-view="play"] > header[data-bn-region="play-summary"] > h1 {
   font-family: 'Caveat', cursive;
   background: #F5E06A; color: #1E1600;

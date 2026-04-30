@@ -366,7 +366,7 @@ const authModal = createAuthModal({
   onAuthed: (u) => { user.set(u); authOpen.set(false); },
 });
 
-const viewSlot = h("div", { class: "lb-view-slot" });
+const viewSlot = h("div", { "data-bn-region": "view-slot" });
 
 effect(() => {
   const v = view();
@@ -441,7 +441,8 @@ effect(() => {
 });
 
 const container = h("div", {
-  class: () => `lb${view() === "playing" ? " is-playing" : ""}`,
+  "data-bn-region": "shell",
+  "data-playing": () => view() === "playing" ? "" : null,
 });
 container.append(header, viewSlot);
 
