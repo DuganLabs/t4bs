@@ -15,10 +15,12 @@ export function createToast(toastSignal) {
       wrap.replaceChildren();
       return;
     }
-    const el = h("div", {
+    const el = h("p", {
       class: `lb-toast ${t.type || "good"}`,
       role: "status",
       "aria-live": "polite",
+      "data-bn-region": "toast",
+      "data-tone": t.type || "good",
       text: t.text,
     });
     wrap.replaceChildren(el);

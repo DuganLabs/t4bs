@@ -41,6 +41,21 @@
     <meta name="apple-mobile-web-app-title" content="Tabs" />
     <meta name="format-detection" content="telephone=no" />
 
+    <!-- Critical inline styles. Mirrors the SSR layout's <style data-bn-critical>
+         block so the legacy ?legacy=1 SPA also gets a styled first paint
+         before the external stylesheet loads. -->
+    <style data-bn-critical>
+      *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+      html,body{background:#0C0B09;color:#F0EDE4;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+      html,body,#app{min-height:100dvh}
+      body{font-family:'DM Sans',system-ui,sans-serif;background:radial-gradient(ellipse 110% 55% at 50% 0%,#1c1810 0%,#0C0B09 60%)}
+      #app{display:flex;flex-direction:column;align-items:center;padding:max(env(safe-area-inset-top,0px),16px) 14px calc(40px + env(safe-area-inset-bottom,0px))}
+      ul,ol,menu{list-style:none}a{color:inherit;text-decoration:none}
+      button{font:inherit;color:inherit;background:transparent;border:0}
+      :where(svg):not([width]):not([height]){width:1em;height:1em}svg{display:block}
+      .sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+    </style>
+
     <link rel="canonical" href="https://t4bs.com/" />
     <link rel="preload" as="image" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -93,10 +108,9 @@
   <body>
     <div id="app" role="application" aria-label="Tabs word puzzle game"></div>
     <noscript>
-      <div class="noscript-msg" role="alert">
-        <h1>TABS</h1>
-        <p>This game requires JavaScript to run. Please enable it in your browser settings and reload the page.</p>
-      </div>
+      <p class="noscript-msg" role="alert">
+        Tabs needs JavaScript for the interactive game. Enable it and reload the page.
+      </p>
     </noscript>
     <!-- Main bundle: module-loaded for ES2020+ native import support.
          defer is implicit in type=module and ensures DOM is ready before

@@ -1,14 +1,12 @@
-/* Single-file component: passkey sign-in modal.
-   Wires @basenative/auth-webauthn/client via the existing src/lib/auth.js helpers. */
+/* Auth modal — native <dialog> with semantic <form> markup. */
 
 import { signal, effect } from "@basenative/runtime";
 import { h } from "../lib/dom.js";
-import { trapFocus } from "../lib/focus-trap.js";
 import { isPasskeySupported, registerPasskey, loginPasskey, devLogin } from "../lib/auth.js";
 import { isDev } from "../lib/game.js";
 
 export function createAuthModal({ open, onClose, onAuthed }) {
-  const tab    = signal("login"); // 'login' | 'register'
+  const tab    = signal("login");
   const handle = signal("");
   const busy   = signal(false);
   const err    = signal(null);
@@ -29,6 +27,7 @@ export function createAuthModal({ open, onClose, onAuthed }) {
 
   const handleInput = h("input", {
     id: "lb-auth-handle",
+    name: "handle",
     class: "lb-finput",
     autocapitalize: "off",
     autocorrect: "off",
@@ -38,35 +37,42 @@ export function createAuthModal({ open, onClose, onAuthed }) {
     onInput: (e) => handle.set(e.target.value),
   });
 
-  const errBox = h("div", {
+  const errBox = h("p", {
     class: "lb-ferror",
+    role: "alert",
     text: () => err() || "",
     hidden: () => !err(),
   });
 
-  const tabsEl = h("div", { class: "lb-tabs" },
-    h("button", {
-      type: "button",
-      class: () => tab() === "login" ? "on" : "",
-      onClick: () => tab.set("login"),
-    }, "LOG IN"),
-    h("button", {
-      type: "button",
-      class: () => tab() === "register" ? "on" : "",
-      onClick: () => tab.set("register"),
-    }, "NEW HANDLE"),
+  const tabsMenu = h("menu", { class: "lb-tabs", role: "tablist" },
+    h("li", { role: "presentation" },
+      h("button", {
+        type: "button",
+        role: "tab",
+        class: () => tab() === "login" ? "on" : "",
+        "aria-selected": () => tab() === "login" ? "true" : "false",
+        onClick: () => tab.set("login"),
+      }, "LOG IN"),
+    ),
+    h("li", { role: "presentation" },
+      h("button", {
+        type: "button",
+        role: "tab",
+        class: () => tab() === "register" ? "on" : "",
+        "aria-selected": () => tab() === "register" ? "true" : "false",
+        onClick: () => tab.set("register"),
+      }, "NEW HANDLE"),
+    ),
   );
 
   const passkeyBtn = h("button", {
     class: "lb-btn lb-bp",
-    type: "button",
+    type: "submit",
     disabled: () => busy() || !handle(),
     text: () => busy() ? "…" : tab() === "login" ? "USE PASSKEY" : "CREATE PASSKEY",
-    onClick: () => doIt(tab.peek() === "login" ? loginPasskey : registerPasskey),
   });
 
-  const noPasskeyHint = h("div", { class: "lb-fhint" },
-    "This browser doesn't support passkeys.");
+  const noPasskeyHint = h("p", { class: "lb-fhint" }, "This browser doesn't support passkeys.");
 
   const devBtn = h("button", {
     class: "lb-btn lb-bs",
@@ -75,46 +81,51 @@ export function createAuthModal({ open, onClose, onAuthed }) {
     onClick: () => doIt(devLogin),
   }, "DEV LOGIN (no passkey)");
 
-  const card = h("div", {
-    class: "lb-card",
-    role: "dialog",
-    "aria-modal": "true",
-    "aria-labelledby": "lb-auth-title",
-    onClick: (e) => e.stopPropagation(),
+  const form = h("form", {
+    class: "lb-form",
+    onSubmit: (e) => {
+      e.preventDefault();
+      if (passkey && !busy() && handle()) {
+        doIt(tab.peek() === "login" ? loginPasskey : registerPasskey);
+      }
+    },
   },
-    h("div", { class: "lb-ct auth", id: "lb-auth-title" }, "SIGN IN"),
-    h("div", { class: "lb-cs" }, "Anonymous play · login only to submit"),
-    tabsEl,
-    h("div", { class: "lb-form" },
-      h("div", { class: "lb-field" },
-        h("label", { class: "lb-flabel", for: "lb-auth-handle" }, "Handle"),
-        handleInput,
-        h("span", { class: "lb-fhint" }, "Public attribution on your puzzles."),
-      ),
-      errBox,
+    h("p", { class: "lb-field" },
+      h("label", { class: "lb-flabel", for: "lb-auth-handle" }, "Handle"),
+      handleInput,
+      h("small", { class: "lb-fhint" }, "Public attribution on your puzzles."),
     ),
+    errBox,
     passkey ? passkeyBtn : noPasskeyHint,
-    isDev() ? devBtn : null,
-    h("button", { class: "lb-btn lb-bs", type: "button", onClick: onClose }, "Cancel"),
   );
 
-  const overlay = h("div", {
-    class: "lb-ov",
-    onClick: onClose,
-    hidden: () => !open(),
-  }, card);
+  const dlg = h("dialog", {
+    "aria-labelledby": "lb-auth-title",
+    onClose,
+    onClick: (e) => { if (e.target === dlg) onClose(); },
+  },
+    h("article", { class: "lb-card", onClick: (e) => e.stopPropagation() },
+      h("header", null,
+        h("h2", { id: "lb-auth-title", class: "lb-ct auth" }, "SIGN IN"),
+        h("p", { class: "lb-cs" }, "Anonymous play · login only to submit"),
+      ),
+      tabsMenu,
+      form,
+      isDev() ? devBtn : null,
+      h("button", { class: "lb-btn lb-bs", type: "button", onClick: onClose }, "Cancel"),
+    ),
+  );
 
-  trapFocus(overlay, open, onClose);
-
-  // Reset state each time the modal opens so stale errors don't linger.
   let lastOpen = false;
   effect(() => {
     const isOpen = open();
     if (isOpen && !lastOpen) {
       handle.set(""); err.set(null); busy.set(false); tab.set("login");
     }
+    if (isOpen && !dlg.open) dlg.showModal();
+    else if (!isOpen && dlg.open) dlg.close();
     lastOpen = isOpen;
   });
 
-  return overlay;
+  return dlg;
 }

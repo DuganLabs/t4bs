@@ -50,6 +50,7 @@
 
 @layer reset {
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  ul, ol, menu { list-style: none; }
 }
 html, body { background: #0C0B09; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 html, body, #app { min-height: 100dvh; }
@@ -545,6 +546,251 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
   color: #F0EDE4; background: #0C0B09;
 }
 .noscript-msg h1 { font-size: 24px; letter-spacing: 4px; margin-bottom: 8px; }
+
+/* ──────────────────────────────────────────────────────────────────
+   BASENATIVE SEMANTIC SSR — first-paint styling for the static shell.
+
+   SSR templates emit semantic markup with [data-bn-*] attributes (no
+   .lb-* classes). The SPA's hydrated tree mounts BACK into #app and
+   carries the .lb-* classes used by the rules above, so the post-
+   hydration paint is unaffected. This block exists only so that the
+   handful of milliseconds between "HTML arrived" and "JS hydrated"
+   doesn't render an unstyled page.
+
+   Selectors here mirror the SSR templates verbatim:
+     - <body data-route="…"> with <header data-bn-region="header">
+     - <main data-bn-view="…"> with semantic <section>/<ul>/<a> children
+     - [data-bn-action="…"] on the interactive hot-spots
+
+   The hydrate.js mount() replaces #app's children, so post-hydration
+   the .lb-* rules above take over for any styling these don't cover.
+   ────────────────────────────────────────────────────────────────── */
+
+#app {
+  --rc: #E8920A;
+  --rg: 232,146,10;
+  display: flex; flex-direction: column; align-items: center;
+  padding: max(env(safe-area-inset-top, 0px), 16px) 14px calc(40px + env(safe-area-inset-bottom, 0px));
+}
+body[data-route="play"] #app {
+  padding-bottom: calc(232px + env(safe-area-inset-bottom, 0px));
+}
+body { background: radial-gradient(ellipse 110% 55% at 50% 0%, #1c1810 0%, #0C0B09 60%); }
+
+/* HEADER — mirrors .lb-hd / .lb-logo / .lb-ubtn */
+header[data-bn-region="header"] {
+  position: sticky; top: 0; z-index: 30; width: 100%; max-width: 540px;
+  margin-bottom: 14px; padding: 6px 0;
+  background: rgba(12,11,9,.78); backdrop-filter: blur(8px);
+}
+header[data-bn-region="header"] > nav {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+[data-bn-action="logo"] {
+  font-family: 'Bebas Neue', sans-serif; font-size: 23px; letter-spacing: 4px;
+  color: #F0EDE4; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  background: transparent; border: none; padding: 0;
+}
+[data-bn-action="logo"] em { font-style: normal; color: #E8920A; }
+
+header[data-bn-region="header"] output {
+  font-family: 'Bebas Neue', sans-serif; font-size: 14px; letter-spacing: 1px;
+  padding: 3px 8px; border-radius: 4px; color: #F0EDE4;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+header[data-bn-region="header"] output[aria-label="Score"] {
+  font-size: 19px; min-width: 60px; text-align: right; padding: 0;
+}
+header[data-bn-region="header"] output[aria-label="Lives"] { border: 1.5px solid #E8920A; color: #E8920A; }
+header[data-bn-region="header"] output[aria-label="Tokens"] {
+  border: 1.5px solid #4EAF7C; color: #4EAF7C; box-shadow: 0 0 10px rgba(78,175,124,.25);
+}
+
+header[data-bn-region="header"] ul { display: flex; align-items: center; gap: 6px; list-style: none; padding: 0; margin: 0; }
+header[data-bn-region="header"] li { display: inline-flex; }
+header[data-bn-region="header"] button,
+header[data-bn-region="header"] a[href="/moderate"],
+header[data-bn-region="header"] a[href="/admin"] {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid #2E2C28; color: #9A9590;
+  font-family: 'Bebas Neue', sans-serif; font-size: 12px; letter-spacing: 1.5px;
+  padding: 0 11px; border-radius: 6px; height: 34px; min-width: 42px;
+  text-decoration: none; cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+header[data-bn-region="header"] button:hover,
+header[data-bn-region="header"] a[href="/moderate"]:hover,
+header[data-bn-region="header"] a[href="/admin"]:hover { border-color: #E8920A; color: #E8920A; }
+header[data-bn-region="header"] [data-bn-action="auth"] { background: #E8920A; color: #1A0A00; border-color: #E8920A; }
+header[data-bn-region="header"] [data-bn-action="auth"]:hover { background: #FFA830; }
+header[data-bn-region="header"] [data-bn-action="account"] {
+  color: #E8920A; border-color: rgba(232,146,10,.4); cursor: default;
+}
+header[data-bn-region="header"] [aria-current="page"] { color: #E8920A; border-color: rgba(232,146,10,.4); }
+
+/* LOBBY — mirrors .lb-lobby + .lb-sticky + .lb-fab */
+main[data-bn-view="lobby"] {
+  width: 100%; max-width: 540px;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+main[data-bn-view="lobby"] > h1 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 2.5px;
+  color: #9A9590; font-weight: 400;
+}
+main[data-bn-view="lobby"] > p {
+  font-family: 'Caveat', cursive;
+  background: #F5E06A; color: #1E1600;
+  font-size: 21px; font-weight: 700; padding: 10px 26px 12px;
+  border-radius: 2px; transform: rotate(-1.4deg);
+  box-shadow: 2px 4px 16px rgba(0,0,0,.55);
+  text-align: center; line-height: 1.2;
+  max-width: 380px;
+}
+main[data-bn-view="lobby"] [data-bn-region="noscript-hint"] {
+  color: #988570; font-size: 11px; text-align: center;
+  background: transparent; border: none; max-width: 480px;
+}
+main[data-bn-view="lobby"] section[aria-labelledby="lobby-list-title"] { width: 100%; max-width: 480px; }
+main[data-bn-view="lobby"] section[aria-labelledby="lobby-list-title"] > h2 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;
+  color: #9A9590; font-weight: 400; text-align: center; margin-bottom: 8px;
+}
+main[data-bn-view="lobby"] [data-bn-region="list"] {
+  display: flex; flex-direction: column; gap: 8px; list-style: none; padding: 0; margin: 0;
+}
+main[data-bn-view="lobby"] [data-bn-region="list"] > li { list-style: none; }
+main[data-bn-view="lobby"] [data-bn-action="lobby-pick"] {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  width: 100%; padding: 14px 16px;
+  background: #161412; border: 1.5px solid #222; border-radius: 10px;
+  cursor: pointer; min-height: 56px; text-align: left; text-decoration: none;
+  font-family: 'DM Sans', sans-serif; color: inherit;
+  transition: border-color .2s, transform .1s, background .15s;
+}
+main[data-bn-view="lobby"] [data-bn-action="lobby-pick"]:hover {
+  border-color: #E8920A; transform: translateY(-1px); background: #1A1714;
+}
+main[data-bn-view="lobby"] [data-bn-action="lobby-pick"] strong {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2.5px;
+  color: #F0EDE4; font-weight: 400;
+}
+main[data-bn-view="lobby"] [data-bn-action="lobby-pick"] small {
+  flex: 0 0 auto; white-space: nowrap;
+  font-size: 10px; letter-spacing: 1.2px; color: #9A9590; text-transform: uppercase;
+}
+main[data-bn-view="lobby"] [data-bn-action="lobby-submit"] {
+  position: fixed; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom,0px)); z-index: 50;
+  background: #E8920A; color: #1A0A00; border: none; border-radius: 100px;
+  font-family: 'Bebas Neue', sans-serif; font-size: 14px; letter-spacing: 1.5px;
+  padding: 14px 22px; cursor: pointer; min-height: 48px;
+  text-decoration: none; display: inline-flex; align-items: center;
+  box-shadow: 0 8px 24px rgba(232,146,10,.4);
+  transition: transform .1s, box-shadow .15s;
+}
+main[data-bn-view="lobby"] [data-bn-action="lobby-submit"]:hover {
+  box-shadow: 0 8px 32px rgba(232,146,10,.6); color: #1A0A00;
+}
+main[data-bn-view="lobby"] [data-bn-region="error"],
+main[data-bn-view="lobby"] [role="alert"] {
+  width: 100%; max-width: 540px; text-align: center;
+  color: #FF6E6E;
+  background: rgba(255,77,77,.08); border: 1px solid rgba(255,77,77,.3);
+  padding: 8px 12px; border-radius: 6px;
+  font-size: 12px; letter-spacing: .5px;
+}
+
+/* PLAY (SSR-static skeleton — full styling lives in .lb-* rules above
+   for the post-hydration tree). These keep the SSR play view legible. */
+main[data-bn-view="play"] {
+  width: 100%; max-width: 540px;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+main[data-bn-view="play"] > header[data-bn-region="play-summary"] {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  width: 100%; padding: 0 6px;
+}
+main[data-bn-view="play"] > header[data-bn-region="play-summary"] > h1 {
+  font-family: 'Caveat', cursive;
+  background: #F5E06A; color: #1E1600;
+  font-size: 21px; font-weight: 700; padding: 10px 26px 12px;
+  border-radius: 2px; transform: rotate(-1.4deg);
+  box-shadow: 2px 4px 16px rgba(0,0,0,.55);
+  text-align: center; line-height: 1.2;
+  max-width: 320px;
+}
+main[data-bn-view="play"] > header[data-bn-region="play-summary"] > p {
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
+  color: #9A9590;
+}
+main[data-bn-view="play"] [data-bn-region="grid"] {
+  width: 100%;
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 14px 22px; padding: 14px 6px;
+  background: #161412; border: 1.5px solid #222; border-radius: 12px;
+}
+main[data-bn-view="play"] [data-bn-region="grid"] > div[role="group"] {
+  display: flex; gap: 4px; position: relative;
+}
+main[data-bn-view="play"] [data-bn-region="grid"] [role="img"] {
+  width: clamp(38px, 9.5vw, 46px); height: clamp(44px, 11.5vw, 52px);
+  border-radius: 5px; display: flex; align-items: center; justify-content: center;
+  font-family: 'Bebas Neue', sans-serif; font-size: clamp(22px, 5.5vw, 28px);
+  flex-shrink: 0;
+  background: #161412; border: 1.5px solid #2A2724; color: #F0EDE4;
+}
+main[data-bn-view="play"] [data-bn-region="grid"] [data-locked="true"] {
+  background: #4EAF7C; color: #0A1F12; border-color: #4EAF7C;
+}
+
+/* SUBMIT / MODERATE / ADMIN — minimum SSR styling so the static shell
+   for these admin-only routes isn't unstyled while JS loads. */
+main[data-bn-view="submit"],
+main[data-bn-view="moderate"],
+main[data-bn-view="admin"] {
+  width: 100%; max-width: 540px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+main[data-bn-view="submit"] > h1,
+main[data-bn-view="moderate"] > h1,
+main[data-bn-view="admin"] > h1 {
+  font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2.5px;
+  font-weight: 400;
+}
+
+/* DIALOGS — replace .lb-ov + .lb-card div soup with native <dialog>.
+   The browser's `display: none` on closed <dialog> Just Works; we only
+   dress the open state. The inner <article class="lb-card"> keeps the
+   existing card visual styling untouched. */
+dialog[open] {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  background: rgba(10,9,7,.92); backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px; border: none; z-index: 100;
+  color: #F0EDE4; max-width: none; max-height: none;
+  overflow: auto;
+}
+dialog::backdrop { background: rgba(10,9,7,.92); }
+dialog > article {
+  width: min(420px, 96vw); max-height: 92vh; overflow: auto;
+}
+
+/* NOT-FOUND */
+main[data-bn-view="not-found"] {
+  width: 100%; max-width: 540px;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  text-align: center;
+}
+main[data-bn-view="not-found"] > h1 {
+  font-family: 'Bebas Neue', sans-serif; font-size: 32px; letter-spacing: 4px;
+  color: #E8920A;
+}
+
+/* ────────────────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

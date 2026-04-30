@@ -42,6 +42,33 @@ export default `<!DOCTYPE html>
     <meta name="apple-mobile-web-app-title" content="Tabs" />
     <meta name="format-detection" content="telephone=no" />
 
+    <!-- Critical inline styles. The external stylesheet that targets
+         our markup is render-blocking, but it lives at a hashed URL
+         and adds an extra round-trip on cold cache. Inlining the
+         shell-level rules eliminates the unstyled-flash window: by the
+         time the parser reaches <body>, the layout, gradient, and
+         header are already styled — even before the external CSS
+         arrives. The semantic selectors here mirror the SSR templates
+         so first paint matches the post-hydration paint. -->
+    <style data-bn-critical>
+      *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+      html,body{background:#0C0B09;color:#F0EDE4;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+      html,body,#app{min-height:100dvh}
+      body{font-family:'DM Sans',system-ui,sans-serif;background:radial-gradient(ellipse 110% 55% at 50% 0%,#1c1810 0%,#0C0B09 60%)}
+      #app{display:flex;flex-direction:column;align-items:center;padding:max(env(safe-area-inset-top,0px),16px) 14px calc(40px + env(safe-area-inset-bottom,0px))}
+      ul,ol,menu{list-style:none}
+      a{color:inherit;text-decoration:none}
+      button{font:inherit;color:inherit}
+      :where(svg):not([width]):not([height]){width:1em;height:1em}
+      svg{display:block}
+      .sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+      header[data-bn-region=header]{position:sticky;top:0;z-index:30;width:100%;max-width:540px;margin-bottom:14px;padding:6px 0;background:rgba(12,11,9,.78);backdrop-filter:blur(8px)}
+      header[data-bn-region=header]>nav{display:flex;align-items:center;justify-content:space-between;gap:8px}
+      [data-bn-action=logo]{font-family:'Bebas Neue',sans-serif;font-size:23px;letter-spacing:4px;color:#F0EDE4;display:inline-flex;align-items:center;gap:8px}
+      [data-bn-action=logo] em{font-style:normal;color:#E8920A}
+      main{width:100%;max-width:540px;display:flex;flex-direction:column;align-items:center;gap:14px}
+    </style>
+
     <link rel="canonical" :href="canonicalUrl" />
     <link rel="preload" as="image" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />

@@ -56,7 +56,7 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
     }
   }
 
-  const errBox = h("div", { class: "lb-ferror", text: () => err() || "", hidden: () => !err() });
+  const errBox = h("p", { class: "lb-ferror", role: "alert", text: () => err() || "", hidden: () => !err() });
 
   const search = h("input", {
     class: "bn-admin-search",
@@ -68,12 +68,12 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
     onInput: (e) => q.set(e.target.value),
   });
 
-  const lists = h("div");
+  const lists = h("section", { "aria-label": LABELS.currentSection });
   effect(() => {
     const r = results();
     const u = elevated();
     if (u === null) {
-      lists.innerHTML = `<div class="lb-cred">loading…</div>`;
+      lists.innerHTML = `<p class="lb-cred" role="status" aria-live="polite">loading…</p>`;
       return;
     }
     // Render the full component then strip the search-wrap so the static
@@ -105,7 +105,7 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
     setRole(user, role);
   });
 
-  const root = h("div", { class: "bn-admin" },
+  const root = h("section", { class: "bn-admin", "aria-label": "Moderator administration" },
     h("label", { class: "bn-admin-search-wrap" },
       h("span", { class: "bn-sr-only" }, LABELS.search),
       search,
@@ -113,10 +113,12 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
     lists,
   );
 
-  return h("main", { "aria-labelledby": "lb-admin-title" },
-    h("h1", { id: "lb-admin-title", class: "sr-only" }, "Moderator administration"),
-    h("div", { class: "lb-sticky lb-sticky-narrow" }, "Moderators"),
-    h("div", { class: "lb-tagline" }, "Promote or demote · admins only"),
+  return h("main", { "aria-labelledby": "admin-title", "data-bn-view": "admin" },
+    h("header", null,
+      h("h1", { id: "admin-title", class: "sr-only" }, "Moderator administration"),
+      h("p", { class: "lb-sticky lb-sticky-narrow" }, "Moderators"),
+      h("p", { class: "lb-tagline" }, "Promote or demote · admins only"),
+    ),
     errBox,
     root,
     h("button", { class: "lb-btn lb-bs lb-bs-back", type: "button", onClick: goLobby }, "← Back"),
