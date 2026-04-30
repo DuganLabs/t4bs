@@ -340,13 +340,15 @@ dialog menu[role="tablist"] [role="tab"][aria-selected="true"] {
 /* ENGINE-OWNED HIDE/SHOW (used by signal templates) */
 .is-hidden { display: none !important; }
 
-/* No-JS fallback */
+/* No-JS fallback — index.html's <p class="noscript-msg" role="alert">
+   shown when JS is disabled. The h1 child rule that used to live here
+   was a leftover from an older shape (h1 + p chain inside the
+   noscript) — the post-#54 markup is a single <p>, no h1. */
 .noscript-msg {
   padding: 24px; text-align: center;
   font-family: system-ui, sans-serif;
   color: #F0EDE4; background: #0C0B09;
 }
-.noscript-msg h1 { font-size: 24px; letter-spacing: 4px; margin-bottom: 8px; }
 
 /* ──────────────────────────────────────────────────────────────────
    BASENATIVE SEMANTIC SHELL — drives both the SSR first paint AND the
