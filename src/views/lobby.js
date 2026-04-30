@@ -1,12 +1,19 @@
-/* LOBBY view — semantic mirror of src/bn/views/lobby.js (SSR).
+/* LOBBY view — daily-only mode.
 
-   <main data-bn-view="lobby"> with <header>, <section data-bn-region="stats">,
-   <section data-bn-region="list">, and a "submit" CTA. The shape matches the
-   SSR template so crawlers and the SPA produce the same DOM. */
+   One puzzle per day, Wordle-style. Shows today's daily puzzle as the
+   only play target, OR a "come back tomorrow" card with the player's
+   last result if they've already finished today's daily. Submission
+   FAB is preserved so users can still contribute new puzzles.
+
+   Structure mirrors the SSR shell where reasonable; the puzzle list
+   that previously lived here has been removed entirely. Browse-and-pick
+   is no longer the player journey — daily auto-start (in hydrate.js)
+   makes the lobby a destination only when today's puzzle is already
+   done. */
 
 import { computed } from "@basenative/runtime";
 import { h } from "../lib/dom.js";
-import { bindHidden, bindList, bindText } from "../lib/bind.js";
+import { bindHidden, bindText } from "../lib/bind.js";
 import { groupLobby, dailyFromGroups } from "../lib/game.js";
 
 export function createLobby({
@@ -14,6 +21,7 @@ export function createLobby({
   stats,
   error,
   user,
+  dailyDone,
   onPick,
   onSubmit,
 }) {
@@ -42,9 +50,35 @@ export function createLobby({
   );
   bindHidden(statsSection, () => !hasStats());
 
-  /* Daily puzzle card — today's deterministic pick. Hidden until lobby
-     loads. Built from static nodes + bindText so the structure mirrors
-     statsSection rather than reaching for an `effect()` rebuild. */
+  /* Error — single status paragraph, hidden by default. */
+  const errorEl = h("p", {
+    class: "lb-cred lb-cred-error",
+    role: "alert",
+    "data-bn-region": "error",
+  });
+  bindText(errorEl, () => `error: ${error() || ""}`);
+  bindHidden(errorEl, () => !error());
+
+  /* Daily card — three mutually-exclusive sub-views, each shown via
+     bindHidden so the structure stays declarative (matches statsSection
+     pattern). The auto-start effect in hydrate.js means the player
+     usually only sees the "done" branch in practice; the active branch
+     is here for the deep-link case where the user lands on / before
+     auto-start has fired. */
+
+  // (a) Done — last result + come-back-tomorrow hint.
+  const doneResult = h("p", { class: "lb-daily-result" });
+  const doneScore  = h("p", { class: "lb-daily-score" });
+  const doneCat    = h("p", { class: "lb-daily-cat" });
+  bindText(doneResult, () => stats()?.lastResult === "won" ? "Solved" : "Busted");
+  bindText(doneScore,  () => `${stats()?.lastScore || 0} pts`);
+  bindText(doneCat,    () => stats()?.lastCategory || "");
+  const doneCard = h("div", { class: "lb-daily-done" }, doneResult, doneScore, doneCat);
+  const nextHint = h("p", { class: "lb-daily-next" }, "Come back tomorrow for a new puzzle");
+  bindHidden(doneCard, () => !dailyDone());
+  bindHidden(nextHint, () => !dailyDone());
+
+  // (b) Active — today's daily play button.
   const dailyCat = h("strong", { class: "lb-lobby-cat" });
   const dailyBy  = h("small", { class: "lb-lobby-by" });
   bindText(dailyCat, () => daily()?.group?.category || "");
@@ -59,67 +93,23 @@ export function createLobby({
     dailyCat,
     dailyBy,
   );
+  bindHidden(dailyBtn, () => dailyDone() || !daily());
+
+  // (c) Loading — skeleton while lobby fetch is in flight.
+  const loadingCard = h("div", { class: "lb-lobby-skel", "aria-hidden": "true" });
+  bindHidden(loadingCard, () => dailyDone() || !!daily());
+
   const dailyCard = h("section", {
     class: "lb-daily",
     "aria-label": "Today's puzzle",
     "data-bn-region": "daily",
   },
     h("p", { class: "lb-daily-label" }, "Today's puzzle"),
+    doneCard,
     dailyBtn,
+    loadingCard,
+    nextHint,
   );
-  bindHidden(dailyCard, () => !daily());
-
-  /* Error — single status paragraph, hidden by default. */
-  const errorEl = h("p", {
-    class: "lb-cred lb-cred-error",
-    role: "alert",
-    "data-bn-region": "error",
-  });
-  bindText(errorEl, () => `error: ${error() || ""}`);
-  bindHidden(errorEl, () => !error());
-
-  /* Puzzle list — bindList over groups. */
-  const list = h("ul", {
-    class: "lb-lobby",
-    role: "list",
-    "aria-label": "Available puzzles",
-    "data-bn-region": "list",
-  });
-  bindList(list, groups, (group) => {
-    const d = daily();
-    const isDaily = d?.group?.category === group.category;
-    const credit = group.puzzles.length === 1
-      ? `by ${group.puzzles[0].submittedBy}`
-      : `${group.puzzles.length} puzzles`;
-    return h("li", null,
-      h("button", {
-        type: "button",
-        class: `lb-lobby-item${isDaily ? " lb-lobby-daily" : ""}`,
-        "data-bn-action": "lobby-pick",
-        "data-puzzle-ids": group.puzzles.map(p => p.id).join(","),
-        onClick: () => {
-          /* Deterministic daily pick for the featured category, random
-             for everything else — keeps the daily reproducible across
-             players while preserving variety in the rest of the list. */
-          const pick = isDaily && d
-            ? d.puzzle
-            : group.puzzles[Math.floor(Math.random() * group.puzzles.length)];
-          onPick(pick.id);
-        },
-      },
-        h("span", { class: "sr-only" }, "Play "),
-        h("strong", { class: "lb-lobby-cat" }, group.category),
-        h("small", { class: "lb-lobby-by" }, credit),
-      ),
-    );
-  }, () => {
-    /* Skeleton — six placeholder rows while /api/puzzles is in flight. */
-    const frag = document.createDocumentFragment();
-    for (let i = 0; i < 6; i++) {
-      frag.append(h("li", null, h("div", { class: "lb-lobby-skel", "aria-hidden": "true" })));
-    }
-    return frag;
-  });
 
   /* Floating "submit a phrase" CTA. */
   const fab = h("button", {
@@ -135,19 +125,15 @@ export function createLobby({
     "data-bn-view": "lobby",
   },
     h("header", null,
-      h("h1", { id: "lobby-title", class: "sr-only" }, "Tabs — pick a round"),
+      h("h1", { id: "lobby-title", class: "sr-only" }, "Tabs — daily puzzle"),
       h("p", { class: "lb-sticky lb-sticky-narrow" },
         "One subject. One phrase.", h("br"), "No mercy.",
       ),
-      h("p", { class: "lb-tagline" }, "Pick a round"),
+      h("p", { class: "lb-tagline" }, "Daily puzzle"),
     ),
     statsSection,
     errorEl,
     dailyCard,
-    h("section", { "aria-labelledby": "lobby-list-title" },
-      h("h2", { id: "lobby-list-title", class: "sr-only" }, "Available puzzles"),
-      list,
-    ),
     fab,
   );
 }
