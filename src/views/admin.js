@@ -73,7 +73,7 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
     const r = results();
     const u = elevated();
     if (u === null) {
-      lists.innerHTML = `<div class="lb-cred">loading…</div>`;
+      lists.innerHTML = `<p data-bn-dialog-credit>loading…</p>`;
       return;
     }
     // Render the full component then strip the search-wrap so the static
@@ -119,6 +119,6 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
     h("div", { class: "lb-tagline" }, "Promote or demote · admins only"),
     errBox,
     root,
-    h("button", { class: "lb-btn lb-bs lb-bs-back", type: "button", onClick: goLobby }, "← Back"),
+    h("button", { "data-bn-button": "secondary", "data-bn-back": "", type: "button", onClick: goLobby }, "← Back"),
   );
 }

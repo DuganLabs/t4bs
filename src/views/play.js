@@ -548,7 +548,7 @@ export function createPlay({
   const wonOverlay = createEndOverlay({
     open: () => phase() === "won" && !!reveal(),
     title: "Solved",
-    titleClass: "lb-ct win",
+    tone: "win",
     session,
     score,
     reveal,
@@ -562,7 +562,7 @@ export function createPlay({
   const lostOverlay = createEndOverlay({
     open: () => phase() === "lost" && !!reveal(),
     title: "House Wins",
-    titleClass: "lb-ct lose",
+    tone: "lose",
     session,
     score,
     reveal,
@@ -601,42 +601,44 @@ export function createPlay({
 }
 
 function createEndOverlay({
-  open, title, titleClass,
+  open, title, tone,
   session, score, reveal,
   onShare, shareLbl,
   primaryLabel, onPrimary,
   secondaryLabel, onSecondary,
   subtitleSuffix = "",
 }) {
+  const titleId = `bn-end-title-${tone}`;
   const card = h("div", {
-    class: "lb-card",
     role: "dialog",
     "aria-modal": "true",
+    "aria-labelledby": titleId,
+    "data-bn-dialog": "end",
     onClick: (e) => e.stopPropagation(),
   },
-    h("div", { class: titleClass, text: title }),
-    h("div", { class: "lb-cs", text: () => `${session().category}${subtitleSuffix}` }),
-    h("div", { class: "lb-reveal", text: () => (reveal() || []).join(" ") }),
-    h("div", { class: "lb-cred" },
+    h("h2", { id: titleId, "data-bn-dialog-title": "", "data-tone": tone, text: title }),
+    h("p", { "data-bn-dialog-sub": "", text: () => `${session().category}${subtitleSuffix}` }),
+    h("p", { "data-bn-dialog-reveal": "", text: () => (reveal() || []).join(" ") }),
+    h("p", { "data-bn-dialog-credit": "" },
       "submitted by ",
       h("b", { text: () => session().submittedBy || "?" })
     ),
-    h("div", { class: "lb-cf", "aria-label": () => `Final score ${score()} points`, text: () => String(score()) }),
-    h("div", { class: "lb-cfl" }, "points"),
+    h("p", { "data-bn-dialog-final": "", "aria-label": () => `Final score ${score()} points`, text: () => String(score()) }),
+    h("p", { "data-bn-dialog-final-label": "" }, "points"),
     h("button", {
-      class: "lb-btn lb-bp",
+      "data-bn-button": "primary",
       type: "button",
       text: () => shareLbl() || "Share result",
       onClick: onShare,
     }),
     secondaryLabel
-      ? h("button", { class: "lb-btn", type: "button", onClick: onSecondary }, secondaryLabel)
+      ? h("button", { "data-bn-button": "ghost", type: "button", onClick: onSecondary }, secondaryLabel)
       : null,
-    h("button", { class: "lb-btn lb-bs", type: "button", onClick: onPrimary }, primaryLabel),
+    h("button", { "data-bn-button": "secondary", type: "button", onClick: onPrimary }, primaryLabel),
   );
 
   return h("div", {
-    class: "lb-ov",
+    "data-bn-overlay": "",
     hidden: () => !open(),
   }, card);
 }

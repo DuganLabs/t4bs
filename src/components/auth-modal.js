@@ -58,7 +58,7 @@ export function createAuthModal({ open, onClose, onAuthed }) {
   );
 
   const passkeyBtn = h("button", {
-    class: "lb-btn lb-bp",
+    "data-bn-button": "primary",
     type: "button",
     disabled: () => busy() || !handle(),
     text: () => busy() ? "…" : tab() === "login" ? "USE PASSKEY" : "CREATE PASSKEY",
@@ -69,21 +69,21 @@ export function createAuthModal({ open, onClose, onAuthed }) {
     "This browser doesn't support passkeys.");
 
   const devBtn = h("button", {
-    class: "lb-btn lb-bs",
+    "data-bn-button": "secondary",
     type: "button",
     disabled: () => busy() || !handle(),
     onClick: () => doIt(devLogin),
   }, "DEV LOGIN (no passkey)");
 
   const card = h("div", {
-    class: "lb-card",
+    "data-bn-dialog": "auth",
     role: "dialog",
     "aria-modal": "true",
-    "aria-labelledby": "lb-auth-title",
+    "aria-labelledby": "bn-auth-title",
     onClick: (e) => e.stopPropagation(),
   },
-    h("div", { class: "lb-ct auth", id: "lb-auth-title" }, "SIGN IN"),
-    h("div", { class: "lb-cs" }, "Anonymous play · login only to submit"),
+    h("h2", { "data-bn-dialog-title": "", "data-tone": "auth", id: "bn-auth-title" }, "SIGN IN"),
+    h("p", { "data-bn-dialog-sub": "" }, "Anonymous play · login only to submit"),
     tabsEl,
     h("div", { class: "lb-form" },
       h("div", { class: "lb-field" },
@@ -95,11 +95,11 @@ export function createAuthModal({ open, onClose, onAuthed }) {
     ),
     passkey ? passkeyBtn : noPasskeyHint,
     isDev() ? devBtn : null,
-    h("button", { class: "lb-btn lb-bs", type: "button", onClick: onClose }, "Cancel"),
+    h("button", { "data-bn-button": "secondary", type: "button", onClick: onClose }, "Cancel"),
   );
 
   const overlay = h("div", {
-    class: "lb-ov",
+    "data-bn-overlay": "",
     onClick: onClose,
     hidden: () => !open(),
   }, card);

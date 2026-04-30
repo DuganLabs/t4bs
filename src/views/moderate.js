@@ -35,7 +35,7 @@ export function createModerate({ toaster, onLobbyChange, goLobby }) {
     const items = list();
     if (err()) { queueRoot.innerHTML = ""; return; }
     if (items === null) {
-      queueRoot.innerHTML = `<div class="lb-cred">loading…</div>`;
+      queueRoot.innerHTML = `<p data-bn-dialog-credit>loading…</p>`;
       return;
     }
     queueRoot.innerHTML = renderAdminQueueList({ items, actionHandler: "mod-decide" });
@@ -53,6 +53,6 @@ export function createModerate({ toaster, onLobbyChange, goLobby }) {
     h("div", { class: "lb-tagline" }, "Approve or reject pending phrases"),
     errBox,
     queueRoot,
-    h("button", { class: "lb-btn lb-bs lb-bs-back", type: "button", onClick: goLobby }, "← Back"),
+    h("button", { "data-bn-button": "secondary", "data-bn-back": "", type: "button", onClick: goLobby }, "← Back"),
   );
 }

@@ -130,12 +130,12 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
       errBox,
     ),
     h("button", {
-      class: "lb-btn lb-bp",
+      "data-bn-button": "primary",
       type: "button",
       disabled: () => busy() || !category() || !phrase(),
       text: () => busy() ? "…" : "SUBMIT FOR REVIEW",
       onClick: submit,
     }),
-    h("button", { class: "lb-btn lb-bs", type: "button", onClick: onCancel }, "Cancel"),
+    h("button", { "data-bn-button": "secondary", type: "button", onClick: onCancel }, "Cancel"),
   );
 }

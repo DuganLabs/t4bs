@@ -341,7 +341,7 @@ effect(() => {
   } else if (v === "playing") {
     if (!session()) {
       if (playLoading()) {
-        mount(viewSlot, h("div", { class: "lb-cred" }, "loading round…"));
+        mount(viewSlot, h("p", { "data-bn-dialog-credit": "" }, "loading round…"));
       } else {
         mount(viewSlot);
         if (window.location.pathname === "/play") router.navigate("/");

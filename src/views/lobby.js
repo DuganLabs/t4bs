@@ -16,8 +16,9 @@ export function createLobby({
 }) {
   const groups = computed(() => groupLobby(lobby()));
 
-  const errorRow = h("div", {
-    class: "lb-cred lb-cred-error",
+  const errorRow = h("p", {
+    "data-bn-dialog-credit": "",
+    "data-state": "error",
     role: "alert",
     text: () => `error: ${error() || ""}`,
     hidden: () => !error(),

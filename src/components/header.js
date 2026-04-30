@@ -1,6 +1,8 @@
 /* Single-file component: page header.
    Renders the T4BS logo + (game stats | user controls) depending on view.
-   Inputs are signals so the same header re-renders reactively across screens. */
+   Inputs are signals so the same header re-renders reactively across screens.
+   Markup is element + data-bn-* driven; styles live in styles.css under
+   selectors keyed off [data-bn-region="app-header"]. */
 
 import { h } from "../lib/dom.js";
 
@@ -23,11 +25,11 @@ export function createHeader({
      (Lighthouse a11y regression). Now the accessible name is
      "T4BS — back to lobby" via visible text + sr-only suffix. */
   const logo = h("button", {
-    class: "lb-logo",
+    "data-bn-logo": "",
     type: "button",
     onClick: onLogo,
   },
-    h("span", { class: "lb-logo-box", "aria-hidden": "true" },
+    h("span", { "data-bn-logo-mark": "", "aria-hidden": "true" },
       // Mini Tabs mark — T + accent dot
       svgMark(),
     ),
@@ -35,77 +37,75 @@ export function createHeader({
     h("span", { class: "sr-only" }, " — back to lobby"),
   );
 
-  const right = h("div", { class: "lb-hd-r" });
+  const right = h("div", { "data-bn-region": "header-right" });
 
-  // Playing-mode stats
-  const tokenChip = h("div", {
-    class: "lb-tok",
+  // Playing-mode stats — `<output>` carries an implicit role="status".
+  const tokenChip = h("output", {
+    "data-bn-stat": "tokens",
     hidden: () => !(view() === "playing" && tokens() > 0),
-  },
-    h("span", { text: () => `⚡ ${tokens()}` })
-  );
+    text: () => `⚡ ${tokens()}`,
+  });
 
-  const scoreChip = h("div", {
-    class: "lb-score",
-    role: "status",
+  const scoreChip = h("output", {
+    "data-bn-stat": "score",
     "aria-live": "polite",
     hidden: () => view() !== "playing",
   },
-    h("span", { class: "lb-snum", text: () => String(score()) }),
-    " pts"
+    h("span", { "data-bn-stat-value": "score", text: () => String(score()) }),
+    " pts",
   );
 
-  const livesEl = h("div", {
-    class: "lb-lives",
-    role: "status",
+  const livesEl = h("output", {
+    "data-bn-stat": "lives",
     "aria-live": "polite",
     "aria-label": () => `${lives()} of 4 lives remaining`,
     hidden: () => view() !== "playing",
   });
   // Render four life dots that toggle "dead" reactively.
   for (let i = 0; i < 4; i++) {
-    livesEl.append(h("div", {
-      class: () => `lb-life${i >= lives() ? " dead" : ""}`,
+    livesEl.append(h("span", {
+      "data-bn-life": "",
+      "data-state": () => i >= lives() ? "dead" : "alive",
       "aria-hidden": "true",
     }));
   }
 
   // Off-game user controls (lobby / submit / mod / admin)
   const uctrl = h("div", {
-    class: "lb-uctrl",
+    "data-bn-region": "user-controls",
     hidden: () => view() === "playing",
   });
   const helpBtn = h("button", {
-    class: "lb-ubtn",
+    "data-bn-chip": "",
     type: "button",
     onClick: onHelp,
     "aria-label": "How to play",
   }, "?");
   const userHandle = h("span", {
-    class: "lb-uhandle",
+    "data-bn-handle": "",
     text: () => user()?.handle || "",
     hidden: () => !user(),
   });
   const modBtn = h("button", {
-    class: "lb-ubtn",
+    "data-bn-chip": "",
     type: "button",
     onClick: onMod,
     hidden: () => !(user()?.isModerator || user()?.isAdmin),
   }, "MOD");
   const adminBtn = h("button", {
-    class: "lb-ubtn",
+    "data-bn-chip": "",
     type: "button",
     onClick: onAdmin,
     hidden: () => !user()?.isAdmin,
   }, "ADM");
   const outBtn = h("button", {
-    class: "lb-ubtn",
+    "data-bn-chip": "",
     type: "button",
     onClick: onLogout,
     hidden: () => !user(),
   }, "OUT");
   const inBtn = h("button", {
-    class: "lb-ubtn primary",
+    "data-bn-chip": "primary",
     type: "button",
     onClick: onAuth,
     hidden: () => !!user(),
@@ -114,7 +114,7 @@ export function createHeader({
 
   right.append(tokenChip, scoreChip, livesEl, uctrl);
 
-  return h("header", { class: "lb-hd" }, logo, right);
+  return h("header", { "data-bn-region": "app-header" }, logo, right);
 }
 
 function svgMark() {
