@@ -371,18 +371,18 @@ export function createPlay({
     return s ? `${s.category} — round #${s.id}` : "Loading…";
   });
 
-  const numEl = h("small", { class: "lb-num" });
+  const numEl = h("small", { "data-bn-bind": "num" });
   bindText(numEl, () => {
     const s = session();
     return s ? `#${s.id} · ${s.category.toLowerCase()}` : "";
   });
 
-  const stickyEl = h("p", { class: "lb-sticky", "data-bn-region": "play-sticky" });
+  const stickyEl = h("p", { "data-bn-region": "play-sticky" });
   bindText(stickyEl, () => session()?.category || "");
 
   const subBy = h("strong");
   bindText(subBy, () => session()?.submittedBy || "?");
-  const subEl = h("p", { class: "lb-sub" });
+  const subEl = h("p", { "data-bn-bind": "sub" });
   effect(() => {
     const s = session();
     if (!s?.words) { subEl.replaceChildren(); return; }
@@ -398,7 +398,7 @@ export function createPlay({
     "data-bn-region": "play-hint",
   });
   bindText(hintEl, hintText);
-  bindClassName(hintEl, () => `lb-hint${active() !== null ? " on" : ""}`);
+  bindAttr(hintEl, "data-active", () => active() !== null ? "" : null);
 
   const cbarEl = h("p", {
     role: "status",
@@ -406,7 +406,7 @@ export function createPlay({
     "data-bn-region": "play-cbar",
   });
   bindText(cbarEl, cbarText);
-  bindClassName(cbarEl, () => `lb-cbar${allInMode() && !casc() ? " lb-cbar-allin" : ""}`);
+  bindAttr(cbarEl, "data-allin", () => (allInMode() && !casc()) ? "" : null);
   bindHidden(cbarEl, () => !casc() && !allInMode());
 
   const summary = h("header", { "data-bn-region": "play-summary" },
@@ -424,7 +424,6 @@ export function createPlay({
      Avoids the leaked-effects bug that per-tile subscriptions would
      introduce when the session swaps to a different word count. */
   const grid = h("section", {
-    class: "lb-phrase",
     "aria-label": "Phrase grid",
     "data-bn-region": "grid",
   });
@@ -453,23 +452,23 @@ export function createPlay({
       const wagerSet = new Set(wagers()[wi] || []);
       const fbW = feedback()[wi];
 
-      const wordCls = ["lb-word"];
-      if (isAct) wordCls.push("active");
-      if (allInMode() && !wordSolved()[wi]) wordCls.push("allin");
-      if (wordSolved()[wi]) wordCls.push("solved");
-      if (shaking() === wi) wordCls.push("shake");
-      if (casc() && !wordSolved()[wi]) wordCls.push("casc-on");
-
-      const word = h("div", {
+      const wordProps = {
         role: "group",
-        class: wordCls.join(" "),
+        "data-bn-region": "word",
         "aria-label": `Word ${wi + 1}`,
         "data-word-index": wi,
         onClick: () => {
           if (casc() || allInMode()) return;
           if (!wordSolved()[wi]) active.set(wi);
         },
-      });
+      };
+      if (isAct) wordProps["data-active"] = "";
+      if (allInMode() && !wordSolved()[wi]) wordProps["data-allin"] = "";
+      if (wordSolved()[wi]) wordProps["data-solved"] = "";
+      if (shaking() === wi) wordProps["data-shake"] = "";
+      if (casc() && !wordSolved()[wi]) wordProps["data-casc-on"] = "";
+
+      const word = h("div", wordProps);
 
       for (let li = 0; li < wordLen; li++) {
         const lockedLetter = lm[li];
@@ -483,20 +482,35 @@ export function createPlay({
           ? (allInNext?.wi === wi && allInNext?.slotIdx === slotIdx)
           : (isAct && slotIdx === (typed()[wi]?.length || 0));
 
-        const cls = ["lb-tile"];
+        const tileProps = {
+          role: "img",
+          "data-bn-region": "tile",
+          "data-word-index": wi,
+          "data-cell-index": li,
+          onClick: (e) => {
+            e.stopPropagation();
+            if (isCascPick) { pickCascade(wi, li); return; }
+            if ((isAct || allInMode()) && typedLetter) { toggleWager(wi, slotIdx); return; }
+            if (!wordSolved()[wi] && !casc() && !allInMode()) active.set(wi);
+          },
+        };
         let display = "";
-        if (wordSolved()[wi]) { cls.push("solved-tile"); display = lockedLetter || ""; }
-        else if (lockedLetter !== undefined) { cls.push("locked-green"); display = lockedLetter; }
+        if (wordSolved()[wi]) { tileProps["data-solved"] = ""; display = lockedLetter || ""; }
+        else if (lockedLetter !== undefined) { tileProps["data-locked"] = ""; display = lockedLetter; }
         else if (typedLetter) {
-          cls.push("typed");
-          if (allInMode()) cls.push("allin-typed");
+          tileProps["data-typed"] = "";
+          if (allInMode()) tileProps["data-allin-typed"] = "";
           display = typedLetter;
-        } else if (isCursor) cls.push("cursor");
+        } else if (isCursor) tileProps["data-cursor"] = "";
 
-        if (fbForTile) { cls.push("fb-flip", `fb-${fbForTile.status}`); display = fbForTile.letter; }
-        if (isWagered) cls.push("wagered");
-        if (isCascPick) cls.push("casc-pick");
-        if (isCascDrop) cls.push("casc-drop");
+        if (fbForTile) {
+          tileProps["data-feedback"] = fbForTile.status;
+          tileProps["data-fb-flip"] = "";
+          display = fbForTile.letter;
+        }
+        if (isWagered) tileProps["data-wagered"] = "";
+        if (isCascPick) tileProps["data-casc-pick"] = "";
+        if (isCascDrop) tileProps["data-casc-drop"] = "";
 
         const pos = `position ${li + 1} of word ${wi + 1}`;
         let label;
@@ -513,21 +527,8 @@ export function createPlay({
           if (isCascPick) label += ", cascade reveal available";
         }
         if (fbForTile) label = `${fbForTile.letter} at ${pos}, ${fbForTile.status}`;
+        tileProps["aria-label"] = label;
 
-        const tileProps = {
-          role: "img",
-          class: cls.join(" "),
-          "aria-label": label,
-          "data-word-index": wi,
-          "data-cell-index": li,
-          onClick: (e) => {
-            e.stopPropagation();
-            if (isCascPick) { pickCascade(wi, li); return; }
-            if ((isAct || allInMode()) && typedLetter) { toggleWager(wi, slotIdx); return; }
-            if (!wordSolved()[wi] && !casc() && !allInMode()) active.set(wi);
-          },
-        };
-        if (lockedLetter !== undefined) tileProps["data-locked"] = "true";
         word.append(h("span", tileProps, display));
       }
       return word;
@@ -537,36 +538,35 @@ export function createPlay({
   });
 
   /* Letter bank — present / absent chips. */
-  const presentRow = h("p", { class: "lb-bank-row", "data-bn-region": "bank-present" });
+  const presentRow = h("p", { "data-bn-region": "bank-present" });
   effect(() => {
     const pg = presentGlobal();
     if (pg.length === 0) {
       presentRow.replaceChildren(
-        h("span", { class: "lb-bank-label" }, "in phrase:"),
-        h("span", { class: "lb-bank-label" }, "—"),
+        h("span", { "data-bn-role": "label" }, "in phrase:"),
+        h("span", { "data-bn-role": "label" }, "—"),
       );
       return;
     }
     presentRow.replaceChildren(
-      h("span", { class: "lb-bank-label" }, "in phrase:"),
-      ...pg.map(L => h("span", { class: "lb-chip yellow" }, L)),
+      h("span", { "data-bn-role": "label" }, "in phrase:"),
+      ...pg.map(L => h("span", { "data-bn-chip": "yellow" }, L)),
     );
   });
 
-  const absentRow = h("p", { class: "lb-bank-row", "data-bn-region": "bank-absent" });
+  const absentRow = h("p", { "data-bn-region": "bank-absent" });
   effect(() => {
     const a = active();
     if (a === null) { absentRow.replaceChildren(); return; }
     const abs = absentByWord()[a] || [];
     if (abs.length === 0) { absentRow.replaceChildren(); return; }
     absentRow.replaceChildren(
-      h("span", { class: "lb-bank-label" }, `not in word ${a + 1}:`),
-      ...abs.map(L => h("span", { class: "lb-chip absent" }, L)),
+      h("span", { "data-bn-role": "label" }, `not in word ${a + 1}:`),
+      ...abs.map(L => h("span", { "data-bn-chip": "absent" }, L)),
     );
   });
 
   const bank = h("section", {
-    class: "lb-bank",
     "aria-label": "Letter bank",
     "data-bn-region": "bank",
   }, presentRow, absentRow);
@@ -588,7 +588,6 @@ export function createPlay({
   });
 
   const allInBtn = h("button", {
-    class: "lb-kb-allin",
     type: "button",
     "data-bn-action": "all-in",
     onClick: openAllIn,
@@ -597,13 +596,12 @@ export function createPlay({
   bindAttr(allInBtn, "aria-label", () => allInMode()
     ? "Fold and resume normal play mode"
     : "Enter all-in mode: type all remaining letters and submit for bonus points or lose all lives");
+  bindAttr(allInBtn, "data-on", () => allInMode() ? "" : null);
   effect(() => {
-    allInBtn.classList.toggle("on", allInMode());
     allInBtn.disabled = casc() && !allInMode();
   });
 
   const stakeLbl = h("output", {
-    class: "lb-kb-stake",
     "aria-live": "polite",
     "data-bn-region": "stake-label",
   });
@@ -617,15 +615,14 @@ export function createPlay({
     return null;
   });
 
-  const kbActions = h("footer", { class: "lb-kb-actions" }, allInBtn, stakeLbl);
+  const kbActions = h("footer", { "data-bn-region": "kb-actions" }, allInBtn, stakeLbl);
   const kbHost = h("div", { html: kb.html });
 
   const keyboard = h("section", {
-    class: "lb-kb-wrap",
     "aria-label": "On-screen keyboard",
     "data-bn-region": "keyboard",
   }, kbActions, kbHost);
-  bindClassName(keyboard, () => `lb-kb-wrap${allInMode() ? " allin" : ""}`);
+  bindAttr(keyboard, "data-allin", () => allInMode() ? "" : null);
   bindHidden(keyboard, () => phase() !== "playing");
 
   queueMicrotask(() => {

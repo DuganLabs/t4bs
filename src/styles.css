@@ -122,12 +122,11 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
 .lb-ubtn.primary:hover { background: #FFA830; }
 .lb-uhandle { color: #E8920A; border-color: rgba(232,146,10,.4); font-size: 12px; cursor: default; }
 
-/* META */
-.lb-num {
-  font-size: 12px; text-transform: uppercase; letter-spacing: 2.5px; color: #7A7570;
-  margin-bottom: 10px; width: 100%; max-width: 540px; text-align: center;
-}
-.lb-sticky {
+/* META — .lb-sticky kept as a shared visual: lobby, submit, moderate, admin
+   all use the class. The play view's [data-bn-region="play-sticky"]
+   piggybacks on the same rule. */
+.lb-sticky,
+main[data-bn-view="play"] [data-bn-region="play-sticky"] {
   background: #F5E06A; color: #1E1600; font-family: 'Caveat', cursive;
   font-size: 21px; font-weight: 700; padding: 10px 26px 12px;
   border-radius: 2px; transform: rotate(-1.4deg);
@@ -136,105 +135,6 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
   max-width: 320px; position: relative;
 }
 .lb-sticky-narrow { max-width: 380px; }
-.lb-sub {
-  font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: #9A9590;
-  margin-bottom: 18px; text-align: center;
-}
-.lb-sub b { color: #E8920A; font-weight: 600; }
-
-.lb-hint {
-  width: 100%; max-width: 540px; text-align: center;
-  font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;
-  color: #7A7570; margin-bottom: 12px; min-height: 14px; transition: color .4s;
-}
-.lb-hint.on { color: #A06020; }
-
-.lb-cbar {
-  width: 100%; max-width: 540px;
-  background: rgba(78,175,124,.08); border: 1px solid rgba(78,175,124,.5);
-  border-radius: 8px; padding: 10px 16px; margin-bottom: 12px;
-  text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
-  color: #4EAF7C; font-weight: 600;
-}
-.lb-cbar-allin {
-  background: rgba(255,77,77,.08); border-color: rgba(255,77,77,.5); color: #FF6E6E;
-}
-
-/* PHRASE GRID */
-.lb-phrase {
-  width: 100%; max-width: 540px;
-  display: flex; flex-wrap: wrap; justify-content: center;
-  gap: 14px 22px; margin-bottom: 14px; padding: 14px 6px;
-  background: #161412; border: 1.5px solid #222; border-radius: 12px;
-  position: relative;
-}
-.lb-word { display: flex; gap: 4px; position: relative; cursor: pointer; }
-.lb-word.active::before {
-  content: ''; position: absolute; left: -6px; right: -6px; top: -6px; bottom: -6px;
-  border: 1.5px solid var(--rc); border-radius: 8px;
-  box-shadow: 0 0 18px rgba(var(--rg),.18); pointer-events: none;
-}
-.lb-word.solved { cursor: default; }
-.lb-word.allin::before {
-  content: ''; position: absolute; left: -6px; right: -6px; top: -6px; bottom: -6px;
-  border: 1.5px dashed rgba(255,110,110,.55); border-radius: 8px; pointer-events: none;
-}
-
-/* TILES */
-.lb-tile {
-  width: clamp(38px, 9.5vw, 46px); height: clamp(44px, 11.5vw, 52px);
-  border-radius: 5px; display: flex; align-items: center; justify-content: center;
-  font-family: 'Bebas Neue', sans-serif; font-size: clamp(22px, 5.5vw, 28px);
-  user-select: none; flex-shrink: 0; transform-origin: center center;
-  transition: background .25s, border-color .2s; position: relative;
-  background: #161412; border: 1.5px solid #2A2724; color: #F0EDE4;
-}
-.lb-tile.locked-green {
-  background: #4EAF7C; color: #0A1F12;
-  box-shadow: 0 2px 5px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.35);
-  border-color: #4EAF7C;
-}
-.lb-tile.solved-tile {
-  background: #4EAF7C; color: #0A1F12;
-  box-shadow: 0 2px 5px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.4);
-  border-color: #4EAF7C;
-}
-.lb-tile.typed { background: #1E1C18; border: 1.5px solid #555; color: #F0EDE4; cursor: pointer; }
-.lb-tile.cursor {
-  border: 2px solid var(--rc);
-  box-shadow: 0 0 0 1px rgba(var(--rg),.5), 0 0 12px rgba(var(--rg),.35);
-}
-.lb-tile.fb-green  { background: #4EAF7C !important; color: #0A1F12 !important; border-color: #4EAF7C !important; }
-.lb-tile.fb-yellow { background: #D4B445 !important; color: #1F1700 !important; border-color: #D4B445 !important; }
-.lb-tile.fb-absent { background: #2C2925 !important; color: #5A5550 !important; border-color: #2C2925 !important; }
-.lb-tile.wagered { box-shadow: 0 0 0 2px #FFD700, 0 0 14px rgba(255,215,0,.55); }
-.lb-tile.wagered::before {
-  content: '2×'; position: absolute; top: -8px; right: -8px;
-  font-size: 9px; letter-spacing: .5px;
-  background: #FFD700; color: #1A0A00; padding: 1px 4px; border-radius: 3px;
-  font-family: 'Bebas Neue', sans-serif;
-  box-shadow: 0 1px 4px rgba(0,0,0,.5); z-index: 2;
-}
-.lb-tile.allin-typed { box-shadow: 0 0 0 1.5px #FF6E6E, 0 0 12px rgba(255,77,77,.35); }
-
-/* KNOWLEDGE BANK */
-.lb-bank {
-  width: 100%; max-width: 540px;
-  display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;
-  padding: 8px 12px; background: #100F0D; border: 1px solid #1F1C18;
-  border-radius: 8px; min-height: 42px;
-}
-.lb-bank-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
-.lb-bank-label {
-  font-size: 12px; letter-spacing: 1.3px; color: #9A9590;
-  text-transform: uppercase; margin-right: 4px;
-}
-.lb-chip {
-  font-family: 'Bebas Neue', sans-serif; font-size: 11px; letter-spacing: 1px;
-  padding: 2px 7px 3px; border-radius: 3px;
-}
-.lb-chip.yellow { background: rgba(212,180,69,.16); color: #D4B445; border: 1px solid rgba(212,180,69,.5); }
-.lb-chip.absent { background: rgba(70,65,60,.35); color: #6A6560; border: 1px solid #2C2925; text-decoration: line-through; }
 
 /* TOAST */
 .lb-toast {
@@ -504,25 +404,6 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
 }
 .lb-tabs button.on { background: #1C1916; color: #F0EDE4; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
 
-/* KEYBOARD WRAPPER */
-.lb-kb-wrap {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  background: #0C0B09; border-top: 1px solid #1F1C18;
-  padding: 8px 6px calc(10px + env(safe-area-inset-bottom,0px));
-}
-.lb-kb-wrap.allin { background: linear-gradient(180deg, rgba(255,77,77,.06) 0%, #0C0B09 30%); border-top-color: rgba(255,77,77,.4); }
-.lb-kb-actions { display: flex; align-items: center; gap: 8px; max-width: 540px; margin: 0 auto 8px; padding: 0 4px; }
-.lb-kb-allin {
-  background: #1A1815; border: 1px solid #FF4D4D; border-radius: 6px; color: #FF4D4D;
-  font-family: 'Bebas Neue', sans-serif; font-size: 12px; letter-spacing: 1.5px;
-  padding: 7px 14px; cursor: pointer; min-height: 34px; transition: all .15s; flex-shrink: 0;
-}
-.lb-kb-allin:hover { background: #FF4D4D; color: #1A0A0A; box-shadow: 0 0 18px rgba(255,77,77,.45); }
-.lb-kb-allin:active { transform: scale(.94); }
-.lb-kb-allin:disabled { opacity: .35; cursor: not-allowed; }
-.lb-kb-allin.on { background: #FF4D4D; color: #1A0A0A; }
-.lb-kb-stake { flex: 1; text-align: right; font-family: 'Bebas Neue', sans-serif; font-size: 12px; letter-spacing: 1.5px; color: #FFD700; min-height: 18px; }
-
 /* @basenative/keyboard theming */
 .bn-kb {
   --kb-bg: #0C0B09;
@@ -703,16 +584,29 @@ main[data-bn-view="lobby"] [role="alert"] {
   font-size: 12px; letter-spacing: .5px;
 }
 
-/* PLAY (SSR-static skeleton — full styling lives in .lb-* rules above
-   for the post-hydration tree). These keep the SSR play view legible. */
+/* PLAY view — semantic, attribute-driven. Same rules cover the SSR-rendered
+   skeleton (which uses [role="group"] words + [role="img"] tiles + the
+   <h1> sticky-note category) and the post-hydration SPA tree (which adds
+   data-bn-region="word"/"tile" + boolean state attributes). The shared
+   end-of-round overlay still uses the .lb-ov / .lb-card / .lb-btn / .lb-ct
+   etc. classes since those are reused by auth / help / submit / lobby /
+   moderate / admin. */
 main[data-bn-view="play"] {
   width: 100%; max-width: 540px;
   display: flex; flex-direction: column; align-items: center; gap: 12px;
+  --rc: #E8920A;
+  --rg: 232,146,10;
 }
+
+/* SUMMARY HEADER — sticky-note category + meta + hint + cbar */
 main[data-bn-view="play"] > header[data-bn-region="play-summary"] {
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  display: flex; flex-direction: column; align-items: center;
   width: 100%; padding: 0 6px;
 }
+
+/* SSR <h1> in summary doubles as the visible sticky-note. Post-hydration the
+   <h1> becomes sr-only and the visible category is on [data-bn-region="play-sticky"]
+   (also styled by the .lb-sticky shared rule above). */
 main[data-bn-view="play"] > header[data-bn-region="play-summary"] > h1 {
   font-family: 'Caveat', cursive;
   background: #F5E06A; color: #1E1600;
@@ -722,29 +616,171 @@ main[data-bn-view="play"] > header[data-bn-region="play-summary"] > h1 {
   text-align: center; line-height: 1.2;
   max-width: 320px;
 }
-main[data-bn-view="play"] > header[data-bn-region="play-summary"] > p {
+
+/* "#42 · capital cities" */
+main[data-bn-view="play"] [data-bn-bind="num"] {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 2.5px; color: #7A7570;
+  margin-bottom: 10px; width: 100%; max-width: 540px; text-align: center;
+}
+
+/* "3 words · 13 letters · by handle" */
+main[data-bn-view="play"] [data-bn-bind="sub"] {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: #9A9590;
+  margin-bottom: 18px; text-align: center;
+}
+main[data-bn-view="play"] [data-bn-bind="sub"] strong { color: #E8920A; font-weight: 600; }
+
+/* SSR fallback: when no JS has hydrated yet, the summary's plain <p> contains
+   inline <small> chunks. Style them as a single uppercase muted line. */
+main[data-bn-view="play"] > header[data-bn-region="play-summary"] > p:not([data-bn-bind]):not([data-bn-region]) {
   display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
   font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
   color: #9A9590;
 }
+
+/* hint line — orange when a word is active */
+main[data-bn-view="play"] [data-bn-region="play-hint"] {
+  width: 100%; max-width: 540px; text-align: center;
+  font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;
+  color: #7A7570; margin-bottom: 12px; min-height: 14px; transition: color .4s;
+}
+main[data-bn-view="play"] [data-bn-region="play-hint"][data-active] { color: #A06020; }
+
+/* cbar — green by default, red in all-in mode */
+main[data-bn-view="play"] [data-bn-region="play-cbar"] {
+  width: 100%; max-width: 540px;
+  background: rgba(78,175,124,.08); border: 1px solid rgba(78,175,124,.5);
+  border-radius: 8px; padding: 10px 16px; margin-bottom: 12px;
+  text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
+  color: #4EAF7C; font-weight: 600;
+}
+main[data-bn-view="play"] [data-bn-region="play-cbar"][data-allin] {
+  background: rgba(255,77,77,.08); border-color: rgba(255,77,77,.5); color: #FF6E6E;
+}
+
+/* PHRASE GRID */
 main[data-bn-view="play"] [data-bn-region="grid"] {
-  width: 100%;
+  width: 100%; max-width: 540px;
   display: flex; flex-wrap: wrap; justify-content: center;
-  gap: 14px 22px; padding: 14px 6px;
+  gap: 14px 22px; margin-bottom: 14px; padding: 14px 6px;
   background: #161412; border: 1.5px solid #222; border-radius: 12px;
+  position: relative;
 }
-main[data-bn-view="play"] [data-bn-region="grid"] > div[role="group"] {
-  display: flex; gap: 4px; position: relative;
+
+/* word row — one per word. Selector matches both SSR and post-hydration:
+   SSR: <div role="group" data-word-index>, post-hydration adds data-bn-region="word". */
+main[data-bn-view="play"] [data-bn-region="grid"] > [role="group"] {
+  display: flex; gap: 4px; position: relative; cursor: pointer;
 }
+main[data-bn-view="play"] [data-bn-region="grid"] > [role="group"][data-solved] {
+  cursor: default;
+}
+main[data-bn-view="play"] [data-bn-region="grid"] > [role="group"][data-active]::before {
+  content: ''; position: absolute; left: -6px; right: -6px; top: -6px; bottom: -6px;
+  border: 1.5px solid var(--rc); border-radius: 8px;
+  box-shadow: 0 0 18px rgba(var(--rg),.18); pointer-events: none;
+}
+main[data-bn-view="play"] [data-bn-region="grid"] > [role="group"][data-allin]::before {
+  content: ''; position: absolute; left: -6px; right: -6px; top: -6px; bottom: -6px;
+  border: 1.5px dashed rgba(255,110,110,.55); border-radius: 8px; pointer-events: none;
+}
+
+/* tile — one per letter cell. Selector matches both SSR <span role="img">
+   and post-hydration (which adds data-bn-region="tile"). */
 main[data-bn-view="play"] [data-bn-region="grid"] [role="img"] {
   width: clamp(38px, 9.5vw, 46px); height: clamp(44px, 11.5vw, 52px);
   border-radius: 5px; display: flex; align-items: center; justify-content: center;
   font-family: 'Bebas Neue', sans-serif; font-size: clamp(22px, 5.5vw, 28px);
-  flex-shrink: 0;
+  user-select: none; flex-shrink: 0; transform-origin: center center;
+  transition: background .25s, border-color .2s; position: relative;
   background: #161412; border: 1.5px solid #2A2724; color: #F0EDE4;
 }
-main[data-bn-view="play"] [data-bn-region="grid"] [data-locked="true"] {
+main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-locked],
+main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-solved] {
   background: #4EAF7C; color: #0A1F12; border-color: #4EAF7C;
+  box-shadow: 0 2px 5px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.35);
+}
+main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-typed] {
+  background: #1E1C18; border: 1.5px solid #555; color: #F0EDE4; cursor: pointer;
+}
+main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-cursor] {
+  border: 2px solid var(--rc);
+  box-shadow: 0 0 0 1px rgba(var(--rg),.5), 0 0 12px rgba(var(--rg),.35);
+}
+main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-feedback="green"]  { background: #4EAF7C !important; color: #0A1F12 !important; border-color: #4EAF7C !important; }
+main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-feedback="yellow"] { background: #D4B445 !important; color: #1F1700 !important; border-color: #D4B445 !important; }
+main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-feedback="absent"] { background: #2C2925 !important; color: #5A5550 !important; border-color: #2C2925 !important; }
+main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-wagered] {
+  box-shadow: 0 0 0 2px #FFD700, 0 0 14px rgba(255,215,0,.55);
+}
+main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-wagered]::before {
+  content: '2×'; position: absolute; top: -8px; right: -8px;
+  font-size: 9px; letter-spacing: .5px;
+  background: #FFD700; color: #1A0A00; padding: 1px 4px; border-radius: 3px;
+  font-family: 'Bebas Neue', sans-serif;
+  box-shadow: 0 1px 4px rgba(0,0,0,.5); z-index: 2;
+}
+main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-allin-typed] {
+  box-shadow: 0 0 0 1.5px #FF6E6E, 0 0 12px rgba(255,77,77,.35);
+}
+
+/* KNOWLEDGE BANK */
+main[data-bn-view="play"] section[data-bn-region="bank"] {
+  width: 100%; max-width: 540px;
+  display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;
+  padding: 8px 12px; background: #100F0D; border: 1px solid #1F1C18;
+  border-radius: 8px; min-height: 42px;
+}
+main[data-bn-view="play"] [data-bn-region="bank-present"],
+main[data-bn-view="play"] [data-bn-region="bank-absent"] {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+}
+main[data-bn-view="play"] section[data-bn-region="bank"] [data-bn-role="label"] {
+  font-size: 12px; letter-spacing: 1.3px; color: #9A9590;
+  text-transform: uppercase; margin-right: 4px;
+}
+main[data-bn-view="play"] section[data-bn-region="bank"] [data-bn-chip] {
+  font-family: 'Bebas Neue', sans-serif; font-size: 11px; letter-spacing: 1px;
+  padding: 2px 7px 3px; border-radius: 3px;
+}
+main[data-bn-view="play"] section[data-bn-region="bank"] [data-bn-chip="yellow"] {
+  background: rgba(212,180,69,.16); color: #D4B445; border: 1px solid rgba(212,180,69,.5);
+}
+main[data-bn-view="play"] section[data-bn-region="bank"] [data-bn-chip="absent"] {
+  background: rgba(70,65,60,.35); color: #6A6560; border: 1px solid #2C2925;
+  text-decoration: line-through;
+}
+
+/* KEYBOARD WRAP */
+main[data-bn-view="play"] section[data-bn-region="keyboard"] {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  background: #0C0B09; border-top: 1px solid #1F1C18;
+  padding: 8px 6px calc(10px + env(safe-area-inset-bottom,0px));
+}
+main[data-bn-view="play"] section[data-bn-region="keyboard"][data-allin] {
+  background: linear-gradient(180deg, rgba(255,77,77,.06) 0%, #0C0B09 30%);
+  border-top-color: rgba(255,77,77,.4);
+}
+main[data-bn-view="play"] [data-bn-region="kb-actions"] {
+  display: flex; align-items: center; gap: 8px;
+  max-width: 540px; margin: 0 auto 8px; padding: 0 4px;
+}
+main[data-bn-view="play"] button[data-bn-action="all-in"] {
+  background: #1A1815; border: 1px solid #FF4D4D; border-radius: 6px; color: #FF4D4D;
+  font-family: 'Bebas Neue', sans-serif; font-size: 12px; letter-spacing: 1.5px;
+  padding: 7px 14px; cursor: pointer; min-height: 34px; transition: all .15s; flex-shrink: 0;
+}
+main[data-bn-view="play"] button[data-bn-action="all-in"]:hover {
+  background: #FF4D4D; color: #1A0A0A; box-shadow: 0 0 18px rgba(255,77,77,.45);
+}
+main[data-bn-view="play"] button[data-bn-action="all-in"]:active { transform: scale(.94); }
+main[data-bn-view="play"] button[data-bn-action="all-in"]:disabled { opacity: .35; cursor: not-allowed; }
+main[data-bn-view="play"] button[data-bn-action="all-in"][data-on] { background: #FF4D4D; color: #1A0A0A; }
+
+main[data-bn-view="play"] [data-bn-region="stake-label"] {
+  display: block; flex: 1; text-align: right;
+  font-family: 'Bebas Neue', sans-serif; font-size: 12px; letter-spacing: 1.5px;
+  color: #FFD700; min-height: 18px;
 }
 
 /* SUBMIT / MODERATE / ADMIN — minimum SSR styling so the static shell
