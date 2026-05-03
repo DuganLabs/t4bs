@@ -28,7 +28,7 @@ jobs:
   migrate:
     needs: deploy
     if: github.event_name == 'push'
-    uses: DuganLabs/.github/.github/workflows/d1-migrate.yml@v1
+    uses: DuganLabs/.github/.github/workflows/d1-migrate.yml@v2
     with:
       database: tabs-db
       package-manager: npm
