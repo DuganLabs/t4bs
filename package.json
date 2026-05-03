@@ -38,10 +38,10 @@
   "devDependencies": {
     "@basenative/eslint-config": "^0.2.0",
     "@basenative/tsconfig": "^0.2.0",
-    "@cloudflare/workers-types": "^4.20240821.1",
-    "eslint": "^10.2.1",
+    "@cloudflare/workers-types": "^4.20260503.1",
+    "eslint": "^10.3.0",
     "typescript": "^6.0.3",
     "vite": "^8.0.10",
-    "wrangler": "^4.85.0"
+    "wrangler": "^4.87.0"
   }
 }
