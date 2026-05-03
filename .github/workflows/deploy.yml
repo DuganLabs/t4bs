@@ -14,7 +14,7 @@ on:
 
 jobs:
   deploy:
-    uses: DuganLabs/.github/.github/workflows/cf-deploy.yml@v1
+    uses: DuganLabs/.github/.github/workflows/cf-deploy.yml@v2
     with:
       project-name: t4bs
       package-manager: npm
