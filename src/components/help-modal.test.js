@@ -35,4 +35,14 @@ describe("helpDialogHtml", () => {
     const html = helpDialogHtml();
     assert.doesNotMatch(html, /data-bn="dialog-close"/);
   });
+
+  it("leaves aria-labelledby to createHelpModal() (title is in the content slot, not renderDialog's `title`)", () => {
+    const html = helpDialogHtml();
+    const openTag = html.match(/^<dialog [^>]*>/)[0];
+    // 0.7.0's renderDialog() emits aria-labelledby only for its own
+    // `title` option — none is passed here, so nothing doubles up with
+    // the #help-title label createHelpModal() sets at mount.
+    assert.doesNotMatch(openTag, /aria-labelledby/);
+    assert.doesNotMatch(html, /data-bn="dialog-title"/);
+  });
 });

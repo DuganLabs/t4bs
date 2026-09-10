@@ -2,8 +2,9 @@
    @basenative/components' renderDialog()/renderTabs()) exported
    specifically so its markup is testable without a DOM —
    createAuthModal() itself calls document.createElement via
-   fromHTML()/h() and isn't testable without a browser, same as before
-   this change (there was never an existing test for it). */
+   fromHTML()/h() (and hands the switcher to initTabs()) and isn't
+   testable without a browser, same as before this change (there was
+   never an existing test for it). */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
@@ -31,6 +32,26 @@ describe("authDialogHtml", () => {
     assert.match(html, /data-tab="login"[^>]*aria-selected="true"|aria-selected="true"[^>]*data-tab="login"/);
     assert.match(html, />LOG IN</);
     assert.match(html, />NEW HANDLE</);
+  });
+
+  it("emits the roving tabindex (components 0.7.0): only the active tab is in the tab sequence", () => {
+    const html = authDialogHtml();
+    const tabButtons = [...html.matchAll(/<button data-bn="tab" role="tab"[^>]*>/g)].map((m) => m[0]);
+    const login    = tabButtons.find((b) => b.includes('data-tab="login"'));
+    const register = tabButtons.find((b) => b.includes('data-tab="register"'));
+    assert.ok(login && register, "expected a login and a register tab button");
+    assert.match(login, /tabindex="0"/);
+    assert.match(register, /tabindex="-1"/);
+  });
+
+  it("leaves aria-labelledby to createAuthModal() (title is in the content slot, not renderDialog's `title`)", () => {
+    const html = authDialogHtml();
+    const openTag = html.match(/^<dialog [^>]*>/)[0];
+    // 0.7.0's renderDialog() emits aria-labelledby only for its own
+    // `title` option — none is passed here, so nothing doubles up with
+    // the #auth-title label createAuthModal() sets at mount.
+    assert.doesNotMatch(openTag, /aria-labelledby/);
+    assert.doesNotMatch(html, /data-bn="dialog-title"/);
   });
 
   it("keeps the existing title/subtitle/cancel-button attribute contract", () => {

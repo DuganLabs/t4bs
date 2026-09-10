@@ -306,24 +306,6 @@ button[data-bn-button][data-bn-variant="back"] { max-width: 300px; margin-top: 1
   background: #2C2925; color: #FF6E6E; border: 1px solid rgba(255,77,77,.3);
 }
 
-/* AUTH TABS — semantic <menu role="tablist"><li role="presentation">
-   <button role="tab"> chain inside the auth dialog. Active tab is
-   marked with aria-selected="true"; no parallel class needed. The
-   <li>s are the flex items; buttons fill 100% of their li. */
-dialog menu[role="tablist"] {
-  display: flex; gap: 6px; margin-bottom: 16px;
-  background: #100F0D; padding: 4px; border-radius: 8px;
-}
-dialog menu[role="tablist"] > li { flex: 1; display: flex; }
-dialog menu[role="tablist"] [role="tab"] {
-  flex: 1; background: transparent; border: none; color: #6A6560;
-  font-family: 'Bebas Neue', sans-serif; font-size: 13px; letter-spacing: 1.5px;
-  padding: 10px; border-radius: 6px; cursor: pointer; min-height: 40px;
-}
-dialog menu[role="tablist"] [role="tab"][aria-selected="true"] {
-  background: #1C1916; color: #F0EDE4; box-shadow: 0 1px 3px rgba(0,0,0,.4);
-}
-
 /* @basenative/keyboard theming */
 .bn-kb {
   --kb-bg: #0C0B09;
