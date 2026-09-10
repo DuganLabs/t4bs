@@ -182,7 +182,13 @@ export function createAuthModal({ open, onClose, onAuthed }) {
          follows the signal reset above without echoing back into it. */
       tabs.select("login");
     }
-    if (isOpen && !dlg.open) dlg.showModal();
+    /* Guard `isConnected`: a signal flip that lands before this dialog
+       is mounted (e.g. the /submit route bouncing a signed-out visitor
+       to "/" while opening the auth prompt, before hydrate.js's
+       mount() call has appended it to #app) would otherwise throw
+       "showModal ... not in a Document" and abort the whole hydrate
+       script before mount() ever runs. */
+    if (isOpen && !dlg.open && dlg.isConnected) dlg.showModal();
     else if (!isOpen && dlg.open) dlg.close();
     lastOpen = isOpen;
   });

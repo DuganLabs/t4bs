@@ -20,7 +20,8 @@
  * @typedef {{ kind: "resume", sessionId: string }} ResumeIntent
  * @typedef {{ kind: "daily" }} DailyIntent
  * @typedef {{ kind: "home" }} HomeIntent
- * @typedef {StartIntent | ResumeIntent | DailyIntent | HomeIntent} BootIntent
+ * @typedef {{ kind: "ignore" }} IgnoreIntent Route isn't /play or / — leave it alone.
+ * @typedef {StartIntent | ResumeIntent | DailyIntent | HomeIntent | IgnoreIntent} BootIntent
  */
 
 /**
@@ -31,6 +32,20 @@
  * @returns {BootIntent}
  */
 export function decidePlayBoot(location, saved) {
+  /* Only resolve a start/resume/home *play* intent for the routes that
+     boot policy actually owns: /play itself, and / (the lobby, which
+     already offers its own "pick a round" / daily-auto-start affordance
+     around an in-progress session). Direct navigation or a reload of
+     /moderate, /admin or /submit must not get hijacked into the game —
+     this used to run unconditionally, so a moderator reloading the queue
+     with an unfinished daily saved would get bounced straight into
+     /play. Callers of an "ignore" intent leave the current route alone
+     and skip start/resume entirely. */
+  const pathname = location.pathname ?? "/play";
+  if (pathname !== "/play" && pathname !== "/") {
+    return { kind: "ignore" };
+  }
+
   const params = new URLSearchParams(location.search || "");
   const playRaw = params.get("play");
   if (playRaw !== null) {

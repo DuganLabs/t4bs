@@ -56,7 +56,8 @@ export function createHelpModal({ open, onClose }) {
 
   effect(() => {
     const isOpen = open();
-    if (isOpen && !dlg.open) dlg.showModal();
+    // Guard `isConnected` — see the matching comment in auth-modal.js.
+    if (isOpen && !dlg.open && dlg.isConnected) dlg.showModal();
     else if (!isOpen && dlg.open) dlg.close();
   });
 
