@@ -14,6 +14,29 @@
 import "../../styles.css";
 import "@basenative/keyboard/styles.css";
 import "@basenative/combobox/css";
+/* @basenative/components: tokens.css + components.css + states.css
+   bring in the `--bn-*` variables and the [data-bn="dialog"] /
+   [data-bn="tabs"] rules the new renderDialog()/renderTabs() markup
+   needs, each wrapped in its own `@layer tokens|components|states {}`
+   so importing them in this order registers that same relative layer
+   order (tokens before components before states) on first encounter —
+   no separate layer-order declaration needed for that.
+   (The package's own layers.css — which declares the full
+   `@layer reset, tokens, layout, components, states;` order upstream —
+   isn't published under a `./layers.css` subpath in 0.5.0's exports
+   map, only `./css`, `./tokens.css`, `./components.css`, `./states.css`,
+   `./reset.css`, `./layout.css`, `./theme.css`; importing it 404s the
+   build. Filed as a components package gap, not worked around here.)
+   reset.css and layout.css are deliberately NOT imported: T4BS already
+   owns its own reset (styles.css, above) and doesn't use the
+   layout-grid component, so pulling those in would be pure dead weight
+   (or worse, fight the existing reset) for no visual benefit.
+   ../../theme.css (below) carries T4BS's token mapping onto this
+   package's palette. */
+import "@basenative/components/tokens.css";
+import "@basenative/components/components.css";
+import "@basenative/components/states.css";
+import "../../theme.css";
 
 import { signal, effect } from "@basenative/runtime";
 import { createRouter, interceptLinks } from "@basenative/router";
