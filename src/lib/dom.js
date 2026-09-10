@@ -98,6 +98,21 @@ export function mount(host, ...nodes) {
   host.replaceChildren(...nodes.flat().filter(Boolean));
 }
 
+/**
+ * Parse a trusted HTML string (e.g. from a @basenative/components
+ * renderX() call) into a single real DOM element, so it can be mounted
+ * and wired up with addEventListener alongside the rest of an h()-built
+ * tree. Uses a <template> so the parser doesn't apply the usual
+ * context-element rules (e.g. a bare <tr> string getting dropped
+ * outside a <table>) — <template>.innerHTML always parses as if it
+ * were document fragment content.
+ */
+export function fromHTML(html) {
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html.trim();
+  return /** @type {HTMLElement} */ (tpl.content.firstElementChild);
+}
+
 /** Quick className builder: cn("a", cond && "b", { c: true }) → "a b c". */
 export function cn(...parts) {
   const out = [];
