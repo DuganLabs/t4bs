@@ -7,7 +7,9 @@ import { renderPng, defaultCardScene, pngHeaders } from "../_shared/og.js";
 // v3: replaced wordle-style tile row with brand-orange pip variants
 // (filled / hollow ring / dim dot). New design language across both
 // default and per-score cards.
-const CACHE_KEY = "og:default:v3";
+// v4: renderer swapped from satori (broken under Pages Functions — see
+// `_shared/og.js`) to hand-built SVG + resvg; invalidates old cached PNGs.
+const CACHE_KEY = "og:default:v4";
 
 export const onRequestGet = async ({ env, params }) => {
   const raw = String(params.name || "");

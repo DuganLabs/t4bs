@@ -11,7 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src functions shared",
-    "test": "node --test shared/engine.test.js src/bn/hydrate.test.js src/lib/game.test.js src/components/toast.test.js src/components/help-modal.test.js src/components/auth-modal.test.js functions/_shared/util.test.js tests/build-output.test.js tests/ssr-audit.test.js",
+    "test": "node --test shared/engine.test.js src/bn/hydrate.test.js src/lib/game.test.js src/components/toast.test.js src/components/help-modal.test.js src/components/auth-modal.test.js functions/_shared/util.test.js functions/_shared/og.test.js tests/build-output.test.js tests/ssr-audit.test.js",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
     "cf:dev": "wrangler pages dev dist --d1=DB --compatibility-date=2024-09-23 --port=8788",
     "cf:deploy": "wrangler pages deploy dist --project-name=t4bs",
@@ -23,21 +23,26 @@
   "overrides": {
     "@basenative/runtime": "^0.6.2"
   },
+  "imports": {
+    "#og-wasm-init": {
+      "workerd": "./functions/_shared/og-wasm.workerd.js",
+      "browser": "./functions/_shared/og-wasm.workerd.js",
+      "default": "./functions/_shared/og-wasm.node.js"
+    }
+  },
   "dependencies": {
     "@basenative/admin": "^1.0.0",
     "@basenative/auth-webauthn": "^1.0.3",
     "@basenative/combobox": "^1.0.4",
     "@basenative/components": "^0.7.0",
     "@basenative/keyboard": "^1.0.5",
-    "@basenative/og-image": "^0.2.1",
     "@basenative/persist": "^1.0.4",
     "@basenative/router": "^0.5.0",
     "@basenative/runtime": "^0.6.2",
     "@basenative/server": "^0.6.1",
     "@basenative/share": "^1.0.1",
     "@resvg/resvg-wasm": "^2.6.2",
-    "@simplewebauthn/server": "^14.0.1",
-    "satori": "^0.33.4"
+    "@simplewebauthn/server": "^14.0.1"
   },
   "devDependencies": {
     "@basenative/eslint-config": "^0.2.0",
