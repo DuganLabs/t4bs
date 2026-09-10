@@ -33,7 +33,7 @@
     "@basenative/share": "^1.0.0",
     "@resvg/resvg-wasm": "^2.6.2",
     "@simplewebauthn/server": "^11.0.0",
-    "satori": "^0.26.0"
+    "satori": "^0.33.4"
   },
   "devDependencies": {
     "@basenative/eslint-config": "^0.2.0",
