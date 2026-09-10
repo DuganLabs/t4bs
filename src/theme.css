@@ -121,6 +121,44 @@
      default without changing anything on screen. */
 }
 
+/* @basenative/combobox ships a WCAG-AA *light* default palette (see its
+   own styles.css header comment) as `--cb-*` custom properties scoped to
+   `[data-bn="combobox"]` — with no T4BS override, the category combobox
+   on /submit rendered as a plain white box with black text, the one
+   light-surface leak inside an otherwise all-dark UI. Deliberately
+   unlayered for the same reason as the `--bn-*` block above: the
+   package's own tokens live in `@layer combobox`, so an unlayered rule
+   here wins regardless of import order.
+     bg/listbox-bg #0F0E0C, fg #F0EDE4 — one step darker than
+       --bn-color-surface (#0C0B09) so the field reads as a raised
+       control against the page, same relationship styles.css already
+       uses for [data-bn-region="input"].
+     border #988570 — reuses --bn-color-border-control (see its comment
+       above: 5.55:1 on this bg, clears the WCAG 1.4.11 3:1 control-
+       boundary minimum; the decorative --bn-color-border is too faint
+       for that).
+     option-bg-hover #242018 / -active #2E2A22 — distinguishable dark
+       steps up from the field bg, same "hover < active" relationship
+       as [data-bn="cb-option"] expects. */
+:root {
+  --cb-bg: #0F0E0C;
+  --cb-fg: #F0EDE4;
+  --cb-muted-fg: #988570;
+  --cb-border: #988570;
+  --cb-border-focus: #E8920A;
+
+  --cb-listbox-bg: #0F0E0C;
+  --cb-listbox-border: #2C2926;
+
+  --cb-option-bg-hover: #242018;
+  --cb-option-bg-active: #2E2A22;
+  --cb-option-fg: #F0EDE4;
+  --cb-option-hint-fg: #988570;
+
+  --cb-create-fg: #4EAF7C;
+  --cb-create-bg: rgb(78 175 124 / 0.12);
+}
+
 @layer keyboard {
   /* @basenative/keyboard — game palette layered on top of the WCAG-AA
      default palette shipped by the package. */
@@ -135,5 +173,16 @@
     --kb-key-staked: #FFD700;
     --kb-key-radius: 5px;
     --kb-min-tap: 44px;
+
+    /* Enter key text — package default (#111111 on --kb-key-primary-bg
+       #E8920A, ~6:1) already clears AA, but something else in this
+       cascade (styles.css's unlayered `.bn-kb` block) was winning and
+       leaving the ENTER key's text at the general --kb-key-fg color
+       instead (#F0EDE4 on #E8920A — axe-measured 2.1:1, fails AA). Set
+       explicitly here, and belt-and-suspenders as a plain `color` rule
+       on `.bn-kb-key--enter` in styles.css, matching the 7.86:1
+       data-bn-button="primary" text color already used everywhere else
+       an accent-orange background needs readable text. */
+    --kb-key-primary-fg: #1A0A00;
   }
 }

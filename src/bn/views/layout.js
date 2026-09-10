@@ -113,7 +113,7 @@ export default `<!DOCTYPE html>
     </script>
   </head>
   <body :data-route="route">
-    <div id="app" role="application" aria-label="Tabs word puzzle game">
+    <div id="app">
       <!--BN_VIEW-->
     </div>
     <noscript>

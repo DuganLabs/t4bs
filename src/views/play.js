@@ -12,6 +12,7 @@ import { signal, computed, effect } from "@basenative/runtime";
 import { Keyboard } from "@basenative/keyboard";
 import { h } from "../lib/dom.js";
 import { bindAttr, bindHidden, bindText } from "../lib/bind.js";
+import { trapFocus } from "../lib/focus-trap.js";
 import { api } from "../lib/api.js";
 import { openSlots, fullCount, computeKeyStatus } from "../lib/game.js";
 import { confetti } from "../lib/confetti.js";
@@ -704,7 +705,19 @@ export function createPlay({
     "data-bn-region": "end-overlay",
   }, endCard);
   endTitle.id = "play-end-title";
-  bindHidden(endOverlay, () => !((phase() === "won" || phase() === "lost") && !!reveal()));
+  const endOpen = () => (phase() === "won" || phase() === "lost") && !!reveal();
+  bindHidden(endOverlay, () => !endOpen());
+  /* This overlay is a plain <div role="dialog"> (not a native <dialog>,
+     since it's gated by a signal-driven `hidden` rather than an
+     imperative showModal() call — see the comment above), so none of
+     the focus management a native dialog gives for free happens
+     automatically: focus stayed on <body> on open, Tab could escape to
+     the page behind it, and closing it didn't return focus anywhere.
+     trapFocus() moves focus into the card (Share is its first focusable
+     control) when the round ends, traps Tab inside it, and restores
+     focus to whatever had it when the round ended — the keyboard key
+     or ALL IN button the player just pressed — when it closes. */
+  trapFocus(endOverlay, endOpen);
 
   /* ── Root <main>: same shape as src/bn/views/play.js SSR template. ── */
   return h("main", {

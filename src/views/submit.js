@@ -140,7 +140,14 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
     h("fieldset", null,
       h("legend", null, "New round"),
       h("p", { "data-bn-region": "field" },
-        h("label", { for: "submit-category" }, "Category"),
+        // @basenative/combobox renders its actual <input> as
+        // "${id}-input" (`submit-category` is just the wrapper <span>'s
+        // id) — point the label there directly instead of duplicating a
+        // second <label> via the component's own `label` option, so the
+        // combobox has a real accessible name instead of axe's
+        // label-title-only (the wrapper <div>/<span> isn't a labelable
+        // element).
+        h("label", { for: "submit-category-input" }, "Category"),
         cbWrapper,
         catHint,
       ),
