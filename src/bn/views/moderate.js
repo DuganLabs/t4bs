@@ -16,32 +16,12 @@ export default `<main aria-labelledby="moderate-title" data-bn-view="moderate">
   <template @else>
     <section aria-labelledby="moderate-pending-title" data-bn-region="queue">
       <h2 id="moderate-pending-title">Pending submissions</h2>
-      <ul role="list" data-bn-bind="moderate-list">
-        <template @for="item of pending; track item.id">
-          <li>
-            <article :aria-label="'Submission #' + item.id">
-              <header>
-                <p>
-                  <strong>{{ item.category }}</strong>
-                  <small>by {{ item.submittedBy }}</small>
-                </p>
-                <p>{{ item.phrase }}</p>
-              </header>
-              <footer>
-                <button type="button"
-                        data-bn-action="moderate-approve"
-                        :data-id="item.id">Approve</button>
-                <button type="button"
-                        data-bn-action="moderate-reject"
-                        :data-id="item.id">Reject</button>
-              </footer>
-            </article>
-          </li>
-        </template>
-        <template @empty>
-          <li><p>Nothing pending. The queue is empty.</p></li>
-        </template>
-      </ul>
+      <!-- Markup owned by @basenative/admin's renderAdminQueueList (see
+           src/bn/server/render.js) — same renderer + same
+           actionHandler ("mod-decide") the client calls in
+           src/views/moderate.js, so SSR and post-hydration markup
+           match. -->
+      <div data-bn-bind="moderate-list">{{ queueListHtml }}</div>
     </section>
   </template>
 </main>
