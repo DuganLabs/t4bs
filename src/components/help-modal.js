@@ -46,6 +46,9 @@ export function helpDialogHtml() {
 
 export function createHelpModal({ open, onClose }) {
   const dlg = /** @type {HTMLDialogElement} */ (fromHTML(helpDialogHtml()));
+  /* renderDialog() (components 0.7.0) emits aria-labelledby only for
+     its own `title` slot; this dialog keeps its title inside `content`
+     (see above), so the label is pointed at that h2 here. */
   dlg.setAttribute("aria-labelledby", "help-title");
   dlg.addEventListener("close", onClose);
   dlg.addEventListener("click", (e) => { if (e.target === dlg) onClose(); });
