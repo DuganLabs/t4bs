@@ -320,6 +320,34 @@ describe("decidePlayBoot", () => {
     assert.equal(decidePlayBoot({ search: "" }, { sessionId: "" }).kind, "home");
     assert.equal(decidePlayBoot({ search: "" }, { sessionId: 42 }).kind, "home");
   });
+
+  it("ignores routes other than /play and / — no session hijack on /moderate, /admin, /submit", () => {
+    const saved = { sessionId: "abc-123" };
+    for (const pathname of ["/moderate", "/admin", "/submit"]) {
+      assert.deepEqual(
+        decidePlayBoot({ pathname, search: "" }, saved),
+        { kind: "ignore" },
+        `${pathname} should be ignored even with a resumable session saved`,
+      );
+      // A ?play= deep-link on one of these routes still shouldn't hijack it.
+      assert.deepEqual(decidePlayBoot({ pathname, search: "?play=42" }, saved), { kind: "ignore" });
+    }
+  });
+
+  it("still resolves start/resume/home on /play and / (root)", () => {
+    assert.deepEqual(decidePlayBoot({ pathname: "/play", search: "?play=5" }, null), { kind: "start", puzzleId: 5 });
+    assert.deepEqual(
+      decidePlayBoot({ pathname: "/", search: "" }, { sessionId: "abc" }),
+      { kind: "resume", sessionId: "abc" },
+    );
+    assert.equal(decidePlayBoot({ pathname: "/play", search: "" }, null).kind, "home");
+  });
+
+  it("defaults to /play when pathname is omitted (existing callers)", () => {
+    // Callers that don't pass `pathname` (e.g. older call sites/tests)
+    // must keep resolving start/resume normally, not silently no-op.
+    assert.deepEqual(decidePlayBoot({ search: "?play=9" }, null), { kind: "start", puzzleId: 9 });
+  });
 });
 
 describe("withTimeout", () => {

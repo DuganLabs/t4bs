@@ -161,6 +161,10 @@ api.me().then(r => user.set(r.user)).catch(() => {});
     const saved = await loadPersisted(SESSION_KEY).catch(() => null);
     const intent = decidePlayBoot(window.location, saved);
 
+    // Routes other than /play and / never touch session start/resume —
+    // see the matching comment in bn/client/hydrate.js.
+    if (intent.kind === "ignore") return;
+
     if (intent.kind === "start") {
       const url = new URL(window.location.href);
       url.searchParams.delete("play");
@@ -331,6 +335,31 @@ function mountLazy(label, importFn, build) {
   });
 }
 
+// Top-level shell — gradient + flex layout. The data-playing attribute
+// toggles the keyboard-mode bottom padding via
+// [data-bn-region="shell"][data-playing] in styles.css.
+const container = h("div", {
+  "data-bn-region": "shell",
+  "data-playing": () => view() === "playing" ? "" : null,
+});
+container.append(header, viewSlot);
+
+/* Mount BEFORE registering the view-switching effect below. That effect
+   runs immediately on creation (it's a plain `effect()`, not deferred),
+   and — for a signed-out visitor whose route is /submit, or any other
+   guarded route — its first pass calls `authOpen.set(true)`/navigates
+   synchronously. authModal's own `effect()` reacts to that in the same
+   tick: if the modal weren't in the document yet, `dlg.showModal()`
+   would throw "not in a Document" (now guarded in auth-modal.js too,
+   but a still-detached dialog can only ever silently fail to open —
+   mounting first is what lets it actually show). */
+mount(root,
+  container,
+  createToast(toast),
+  helpModal,
+  authModal,
+);
+
 // Re-mount the active view when `view` changes. Effects own DOM lifetime;
 // each branch builds its component fresh, so we can safely tear down by
 // just replacing children on `viewSlot`.
@@ -402,19 +431,3 @@ effect(() => {
     }));
   }
 });
-
-// Top-level shell — gradient + flex layout. The data-playing attribute
-// toggles the keyboard-mode bottom padding via
-// [data-bn-region="shell"][data-playing] in styles.css.
-const container = h("div", {
-  "data-bn-region": "shell",
-  "data-playing": () => view() === "playing" ? "" : null,
-});
-container.append(header, viewSlot);
-
-mount(root,
-  container,
-  createToast(toast),
-  helpModal,
-  authModal,
-);
