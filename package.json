@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src functions shared",
-    "test": "node --test shared/engine.test.js src/bn/hydrate.test.js src/lib/game.test.js functions/_shared/util.test.js tests/build-output.test.js tests/ssr-audit.test.js",
+    "test": "node --test shared/engine.test.js src/bn/hydrate.test.js src/lib/game.test.js src/components/toast.test.js functions/_shared/util.test.js tests/build-output.test.js tests/ssr-audit.test.js",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
     "cf:dev": "wrangler pages dev dist --d1=DB --compatibility-date=2024-09-01 --port=8788",
     "cf:deploy": "wrangler pages deploy dist --project-name=t4bs",
