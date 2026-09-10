@@ -21,18 +21,30 @@ import "@basenative/combobox/css";
    so importing them in this order registers that same relative layer
    order (tokens before components before states) on first encounter —
    no separate layer-order declaration needed for that.
-   (The package's own layers.css — which declares the full
-   `@layer reset, tokens, layout, components, states;` order upstream —
-   isn't published under a `./layers.css` subpath in 0.5.0's exports
-   map, only `./css`, `./tokens.css`, `./components.css`, `./states.css`,
-   `./reset.css`, `./layout.css`, `./theme.css`; importing it 404s the
-   build. Filed as a components package gap, not worked around here.)
-   reset.css and layout.css are deliberately NOT imported: T4BS already
-   owns its own reset (styles.css, above) and doesn't use the
-   layout-grid component, so pulling those in would be pure dead weight
-   (or worse, fight the existing reset) for no visual benefit.
+   (0.6.0 fixes the gap noted here against 0.5.0: `./layers.css` — the
+   package's own `@layer reset, tokens, layout, components, states;`
+   order declaration — is now a real exports-map subpath and no longer
+   404s the build. Still deliberately NOT imported, for a different
+   reason than before: T4BS's own styles.css declares its *own*
+   `@layer reset, app, keyboard;` up top, i.e. a layer also named
+   "reset". Cascade layers with the same name are the same layer
+   everywhere in the document, so importing the package's layers.css
+   would fold that name into the shared global layer order and — per
+   the browser's "insert new names right after the last already-known
+   name in this statement" merge rule — splice tokens/layout/components/
+   states in between T4BS's "reset" and "app" layers, instead of after
+   them as today's plain import-order registration achieves. That
+   flips whether T4BS's own "app"/"keyboard" layers outrank this
+   package's "components"/"states" layers for equal-specificity rules —
+   a real cascade-order change, not just a no-op order lock, and one
+   this pass isn't signing off on without a visual pass to back it up.
+   reset.css and layout.css remain unimported for the original reason:
+   T4BS already owns its own reset (styles.css, above) and doesn't use
+   the layout-grid component, so pulling those in is dead weight (or
+   worse, a same-named-layer collision) for no visual benefit.
    ../../theme.css (below) carries T4BS's token mapping onto this
-   package's palette. */
+   package's palette — it wins regardless of layer order because it's
+   deliberately unlayered (see that file's own comment). */
 import "@basenative/components/tokens.css";
 import "@basenative/components/components.css";
 import "@basenative/components/states.css";

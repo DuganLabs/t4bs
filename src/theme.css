@@ -41,6 +41,14 @@
   --bn-color-border-focus: #E8920A;
   --bn-focus-ring: 0 0 0 2px #0C0B09, 0 0 0 4px #E8920A;
 
+  /* Border — control boundary (components 0.6.0). WCAG 1.4.11 requires
+     3:1 against the surface a control sits on; --bn-color-border /
+     -strong above are decorative-only (1.58:1 for -strong against bg)
+     and stay that way. Reuse --bn-color-text-muted's value instead:
+     5.55:1 on bg, 4.94:1 on surface-raised, 5.23:1 on surface-subtle —
+     clears 3:1 everywhere inputs/selects/comboboxes/checkboxes render. */
+  --bn-color-border-control: #988570;
+
   /* Accent — accent #E8920A from CLAUDE.md. Used for
      [data-bn="tab"][aria-selected="true"]'s underline
      (--bn-color-accent-600) among others. */
@@ -67,6 +75,10 @@
   --bn-color-error-bg: rgb(232 68 68 / 0.12);
   --bn-color-error-border: rgb(232 68 68 / 0.4);
   --bn-color-error-text: #E84444;
+  /* --bn-color-error-fg (components 0.6.0): the text-safe error color
+     [data-bn="field-error"] reads — same red as -600/-text above, no
+     separate value needed. */
+  --bn-color-error-fg: var(--bn-color-error-600);
 
   --bn-color-info-500: #E8920A;
   --bn-color-info-600: #E8920A;
@@ -76,6 +88,37 @@
 
   /* Type — DM Sans is already the body font (this file, `body{}` above). */
   --bn-font-family: 'DM Sans', system-ui, sans-serif;
+
+  /* Radius ladder (components 0.6.0) — matches the corner radii T4BS's
+     own chrome already uses, so renderDialog()/renderTabs()/inputs
+     read as the same shapes as the bespoke UI around them:
+     controls (buttons/inputs, styles.css ~187/268) = 8px,
+     containers (cards/panels, styles.css ~253/387) = 12px,
+     modal surfaces ([data-bn-region="end-overlay"] > article,
+     styles.css ~126) = 14px. */
+  --bn-radius-control: 8px;
+  --bn-radius-container: 12px;
+  --bn-radius-modal: 14px;
+
+  /* Elevation — same drop shadow the end-of-round overlay's <article>
+     already uses (styles.css ~128), so [data-bn="dialog"] reads as
+     the same weight of "floating card". */
+  --bn-shadow-modal: 0 28px 72px rgb(0 0 0 / 0.7);
+
+  /* Scrim — same tone/opacity as the end-overlay backdrop (styles.css
+     ~118: rgba(10,9,7,.92)) minus its blur (component CSS hardcodes
+     its own backdrop-filter: blur(4px)), so [data-bn="dialog"]'s
+     ::backdrop dims to the same near-black T4BS already uses instead
+     of upstream's neutral rgb(0 0 0 / 0.4). */
+  --bn-scrim: rgb(10 9 7 / 0.92);
+
+  /* --bn-motion-fast/-base/-slow (components 0.6.0): NOT overridden.
+     Upstream's defaults (150ms/200ms/300ms ease, aliased from
+     --bn-transition-fast/-normal/-slow) already match T4BS's own
+     transition timings (.15s dominates border-color/color/background
+     transitions; .2s/.25s cover the rest — see styles.css) closely
+     enough that a T4BS-specific override would just restate the
+     default without changing anything on screen. */
 }
 
 @layer keyboard {
