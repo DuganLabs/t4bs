@@ -10,6 +10,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
+import { renderAdminQueueList } from "@basenative/admin/components";
+
 import { matchRoute, shouldRenderSsr } from "./route-table.js";
 import { renderPage } from "./server/render.js";
 import { decidePlayBoot, withTimeout, isResumable } from "./client/play-boot.js";
@@ -198,6 +200,58 @@ describe("renderPage — emits a complete BaseNative-rendered HTML document for 
       moderate: { pending: null, forbidden: true },
     }), ASSETS);
     assert.match(html, /You need moderator access/);
+  });
+
+  describe("moderate view — queue markup matches the client renderer", () => {
+    /* src/views/moderate.js (client) renders the pending queue with
+       `renderAdminQueueList({ items, actionHandler: "mod-decide" })`.
+       The SSR path (src/bn/server/render.js) calls the exact same
+       function with the exact same actionHandler, so first paint and
+       the post-hydration client repaint agree. Proven here by literally
+       re-deriving the expected markup with the same renderer + the same
+       inputs the SSR context carries, and asserting it appears verbatim
+       in renderPage()'s output — not just a loose structural fuzz check. */
+    const SAMPLE_QUEUE = [
+      { id: 1, category: "Movies", submittedBy: "wmd", phrase: "the empire strikes back" },
+      { id: 2, category: "Sports", submittedBy: "ada", phrase: "hail mary" },
+    ];
+
+    it("embeds the exact renderAdminQueueList output for a non-empty queue", () => {
+      const html = renderPage(baseCtx({
+        route: "moderate", pathname: "/moderate",
+        moderate: { pending: SAMPLE_QUEUE, forbidden: false },
+      }), ASSETS);
+      const expected = renderAdminQueueList({ items: SAMPLE_QUEUE, actionHandler: "mod-decide" });
+      assert.ok(
+        html.includes(expected),
+        "SSR output should embed renderAdminQueueList's markup verbatim",
+      );
+      // And sanity-check a couple of the attributes callers rely on for
+      // approve/reject wiring, so a future renderer change that breaks
+      // the contract fails loudly here too, not just via a diff.
+      assert.match(html, /data-bn="admin-queue-list"/);
+      assert.match(html, /data-action="mod-decide"/);
+      assert.match(html, /data-decision="approved"/);
+      assert.match(html, /data-decision="rejected"/);
+    });
+
+    it("embeds the exact renderAdminQueueList output for an empty queue", () => {
+      const html = renderPage(baseCtx({
+        route: "moderate", pathname: "/moderate",
+        moderate: { pending: [], forbidden: false },
+      }), ASSETS);
+      const expected = renderAdminQueueList({ items: [], actionHandler: "mod-decide" });
+      assert.ok(html.includes(expected));
+    });
+
+    it("treats a null pending list the same as an empty queue (matches the ?? [] guard)", () => {
+      const html = renderPage(baseCtx({
+        route: "moderate", pathname: "/moderate",
+        moderate: { pending: null, forbidden: false },
+      }), ASSETS);
+      const expected = renderAdminQueueList({ items: [], actionHandler: "mod-decide" });
+      assert.ok(html.includes(expected));
+    });
   });
 
   it("not-found view shows the requested pathname", () => {

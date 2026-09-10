@@ -14,6 +14,8 @@
    context shaping and the ordered render() calls. */
 
 import { render } from "@basenative/server";
+import { raw } from "@basenative/runtime/shared/escape";
+import { renderAdminQueueList } from "@basenative/admin/components";
 import layoutHtml from "../views/layout.js";
 import headerHtml from "../views/header.js";
 import lobbyHtml from "../views/lobby.js";
@@ -129,9 +131,21 @@ function renderView(ctx) {
         existingCategories: ctx.submit.existingCategories,
       });
     case "moderate":
+      /* The pending queue is rendered with @basenative/admin's
+         renderAdminQueueList — the same renderer src/views/moderate.js
+         (client) calls via `renderAdminQueueList({ items, actionHandler:
+         "mod-decide" })` — instead of a hand-rolled @for/<li> loop, so
+         SSR first paint and the post-hydration client repaint agree
+         byte-for-byte on the same input. raw() marks the resulting HTML
+         string trusted so `{{ queueListHtml }}` below doesn't
+         double-escape it (renderAdminQueueList already escapes every
+         field it interpolates). */
       return render(tpl, {
         forbidden: !!ctx.moderate.forbidden,
-        pending: ctx.moderate.pending ?? [],
+        queueListHtml: raw(renderAdminQueueList({
+          items: ctx.moderate.pending ?? [],
+          actionHandler: "mod-decide",
+        })),
       });
     case "admin":
       return render(tpl, {
