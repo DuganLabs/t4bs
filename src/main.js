@@ -12,6 +12,17 @@
 import "./styles.css";
 import "@basenative/keyboard/styles.css";
 import "@basenative/combobox/css";
+/* Kept in sync with src/bn/client/hydrate.js's @basenative/components
+   imports (see that file for why tokens/components/states, why not
+   layers.css, and why not the package's reset.css/layout.css) — this
+   file is documented above as "identical to [hydrate.js] minus the
+   SSR seed", and the toast/help-modal/auth-modal components it also
+   mounts now render [data-bn="dialog"]/[data-bn="tabs"] markup that
+   needs this CSS. */
+import "@basenative/components/tokens.css";
+import "@basenative/components/components.css";
+import "@basenative/components/states.css";
+import "./theme.css";
 
 import { signal, effect } from "@basenative/runtime";
 import { createRouter, interceptLinks } from "@basenative/router";

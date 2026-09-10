@@ -3,6 +3,81 @@
    Mirrors the @use pattern: import the package's defaults, then layer
    on the consumer's theme. */
 
+/* @basenative/components ships its palette as `--bn-*` custom
+   properties in an `@layer tokens` block (packages/components/src/
+   tokens.css). This block maps T4BS's brand palette (see CLAUDE.md
+   "Color tokens") onto those same variable names so renderDialog() /
+   renderTabs() / components.css pick up T4BS's look with zero forked
+   CSS — no `[data-bn="dialog"]` selector is redeclared here, only the
+   tokens it reads.
+
+   Deliberately unlayered (not wrapped in `@layer tokens`): unlayered
+   rules always win over any `@layer`-declared rule regardless of
+   import order or layer position, so this overrides the package
+   default the same way the plain `body { color: #F0EDE4 }` above wins
+   over @basenative/components' own `@layer reset` — no ordering
+   games required. */
+:root {
+  /* Surfaces — bg #0C0B09 from CLAUDE.md, with raised/muted steps
+     matching the dialog/card chrome already in this file
+     ([data-bn-region="end-overlay"] > article, line ~126). */
+  --bn-color-surface: #0C0B09;
+  --bn-color-surface-subtle: #15130F;
+  --bn-color-surface-muted: #1E1C18;
+  --bn-color-surface-raised: #1C1916;
+  --bn-color-surface-inset: #0C0B09;
+  --bn-color-surface-inverse: #F0EDE4;
+
+  /* Text — fg #F0EDE4, muted #988570 from CLAUDE.md. */
+  --bn-color-text: #F0EDE4;
+  --bn-color-text-muted: #988570;
+  --bn-color-text-subtle: #6B5F4F;
+  --bn-color-text-inverse: #0C0B09;
+  --bn-color-text-link: #E8920A;
+
+  /* Border — matches the dialog border already used at line ~126. */
+  --bn-color-border: #2C2926;
+  --bn-color-border-strong: #3A332B;
+  --bn-color-border-focus: #E8920A;
+  --bn-focus-ring: 0 0 0 2px #0C0B09, 0 0 0 4px #E8920A;
+
+  /* Accent — accent #E8920A from CLAUDE.md. Used for
+     [data-bn="tab"][aria-selected="true"]'s underline
+     (--bn-color-accent-600) among others. */
+  --bn-color-accent-500: #E8920A;
+  --bn-color-accent-600: #E8920A;
+
+  /* Status — reuse the tile-state palette from CLAUDE.md so any
+     future alert/badge/toast adoption inherits the same greens/
+     yellows/reds already on screen during play. */
+  --bn-color-success-500: #3F9D5B;
+  --bn-color-success-600: #3F9D5B;
+  --bn-color-success-bg: rgb(63 157 91 / 0.12);
+  --bn-color-success-border: rgb(63 157 91 / 0.4);
+  --bn-color-success-text: #3F9D5B;
+
+  --bn-color-warning-500: #E8B73B;
+  --bn-color-warning-600: #E8B73B;
+  --bn-color-warning-bg: rgb(232 183 59 / 0.12);
+  --bn-color-warning-border: rgb(232 183 59 / 0.4);
+  --bn-color-warning-text: #E8B73B;
+
+  --bn-color-error-500: #E84444;
+  --bn-color-error-600: #E84444;
+  --bn-color-error-bg: rgb(232 68 68 / 0.12);
+  --bn-color-error-border: rgb(232 68 68 / 0.4);
+  --bn-color-error-text: #E84444;
+
+  --bn-color-info-500: #E8920A;
+  --bn-color-info-600: #E8920A;
+  --bn-color-info-bg: rgb(232 146 10 / 0.12);
+  --bn-color-info-border: rgb(232 146 10 / 0.4);
+  --bn-color-info-text: #E8920A;
+
+  /* Type — DM Sans is already the body font (this file, `body{}` above). */
+  --bn-font-family: 'DM Sans', system-ui, sans-serif;
+}
+
 @layer keyboard {
   /* @basenative/keyboard — game palette layered on top of the WCAG-AA
      default palette shipped by the package. */
