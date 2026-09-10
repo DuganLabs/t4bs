@@ -18,6 +18,7 @@ jobs:
     with:
       project-name: t4bs
       package-manager: npm
+      node-version: "22"
       branch: main
       environment: production
       environment-url: https://t4bs.com
@@ -32,6 +33,7 @@ jobs:
     with:
       database: tabs-db
       package-manager: npm
+      node-version: "22"
     secrets:
       DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
