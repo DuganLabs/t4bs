@@ -1,9 +1,8 @@
 name: bundle-size
 
-# Thin caller: delegates to the DuganLabs org reusable workflow that
-# builds the project, measures gzipped JS + CSS output (summed across
-# every chunk in dist/), comments the numbers on the PR, and fails if
-# either total exceeds the budget.
+# Builds the project, measures gzipped JS + CSS output (summed across every
+# chunk in dist/), comments the numbers on the PR, and fails if either total
+# exceeds the budget.
 #
 # Current totals (post-#64): ~31 KB JS gzip, ~6 KB CSS gzip. The 60/40
 # ceiling absorbs reasonable feature growth (~2x headroom on JS, ~6x on
@@ -12,21 +11,91 @@ name: bundle-size
 #
 # Note: this gate measures TOTAL output. The eager-vs-lazy chunk split
 # from #64 is locked separately by tests/build-output.test.js (run via
-# `npm test` from the ci.yml caller), which asserts the lazy view
-# chunks remain dynamic entries and the eager play-boot stays under a
-# 55 KB raw budget.
+# `npm test` in ci.yml), which asserts the lazy view chunks remain
+# dynamic entries and the eager play-boot stays under a 55 KB raw budget.
 #
-# See: https://github.com/DuganLabs/.github/blob/main/.github/workflows/bundle-size.yml
+# This used to be a thin caller of
+# DuganLabs/.github/.github/workflows/bundle-size.yml@v2. That reusable never
+# authenticates to GitHub Packages, so `npm ci` fails with E401 on every PR
+# that changes the lockfile (all Dependabot PRs). The job is inlined here,
+# mirroring the reusable step for step, so the install can use NPM_TOKEN when
+# present and fall back to GITHUB_TOKEN (`packages: read`) otherwise.
 
 on:
   pull_request:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: read
+  pull-requests: write
+
+env:
+  OUT: dist
+  JS_BUDGET: 60
+  CSS_BUDGET: 40
+
 jobs:
   size:
-    uses: DuganLabs/.github/.github/workflows/bundle-size.yml@v2
-    with:
-      package-manager: npm
-      js-budget-kb: 60
-      css-budget-kb: 40
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://npm.pkg.github.com
+          scope: "@basenative"
+
+      - name: Install
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.GITHUB_TOKEN }}
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Measure
+        run: |
+          set -e
+          js_bytes=$(find "$OUT" -name '*.js' -exec gzip -c {} \; | wc -c)
+          css_bytes=$(find "$OUT" -name '*.css' -exec gzip -c {} \; | wc -c)
+          js_kb=$(( js_bytes / 1024 ))
+          css_kb=$(( css_bytes / 1024 ))
+          echo "JS:  ${js_kb}KB gzipped (budget ${JS_BUDGET}KB)"
+          echo "CSS: ${css_kb}KB gzipped (budget ${CSS_BUDGET}KB)"
+          {
+            echo "## Bundle size"
+            echo ""
+            echo "| Asset | Size | Budget | Status |"
+            echo "|---|---|---|---|"
+            js_status="✅"; [ "$js_kb" -gt "$JS_BUDGET" ] && js_status="❌"
+            css_status="✅"; [ "$css_kb" -gt "$CSS_BUDGET" ] && css_status="❌"
+            echo "| JS (gzip)  | ${js_kb}KB | ${JS_BUDGET}KB | $js_status |"
+            echo "| CSS (gzip) | ${css_kb}KB | ${CSS_BUDGET}KB | $css_status |"
+          } > comment.md
+          cat comment.md
+          cat comment.md >> "$GITHUB_STEP_SUMMARY"
+          if [ "$js_kb" -gt "$JS_BUDGET" ] || [ "$css_kb" -gt "$CSS_BUDGET" ]; then
+            echo "::error::Bundle size budget violated."
+            exit 1
+          fi
+
+      # Dependabot-triggered runs get a read-only GITHUB_TOKEN, so posting a
+      # comment would 403; the table is still in the step summary above.
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('comment.md', 'utf8');
+            const { number } = context.payload.pull_request;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: number,
+              body,
+            });
