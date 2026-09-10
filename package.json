@@ -13,7 +13,7 @@
     "lint": "eslint src functions shared",
     "test": "node --test shared/engine.test.js src/bn/hydrate.test.js src/lib/game.test.js src/components/toast.test.js src/components/help-modal.test.js src/components/auth-modal.test.js functions/_shared/util.test.js tests/build-output.test.js tests/ssr-audit.test.js",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
-    "cf:dev": "wrangler pages dev dist --d1=DB --compatibility-date=2024-09-01 --port=8788",
+    "cf:dev": "wrangler pages dev dist --d1=DB --compatibility-date=2024-09-23 --port=8788",
     "cf:deploy": "wrangler pages deploy dist --project-name=t4bs",
     "db:apply:local": "wrangler d1 execute tabs-db --local --file=./schema.sql && wrangler d1 execute tabs-db --local --file=./seed.sql",
     "db:apply:remote": "wrangler d1 execute tabs-db --remote --file=./schema.sql && wrangler d1 execute tabs-db --remote --file=./seed.sql",
