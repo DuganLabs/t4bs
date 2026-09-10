@@ -1,8 +1,16 @@
 name: ci
 
-# Thin caller: delegates to the DuganLabs org reusable workflow that
-# runs lint + typecheck + test against the project's package scripts.
-# See: https://github.com/DuganLabs/.github/blob/main/.github/workflows/ci.yml
+# Runs lint + typecheck + test against the project's package scripts.
+#
+# This used to be a thin caller of DuganLabs/.github/.github/workflows/ci.yml@v2.
+# That reusable never authenticates to GitHub Packages (no NODE_AUTH_TOKEN, no
+# registry-url), so `npm ci` only succeeded when the actions cache already held
+# the @basenative/* tarballs (seeded by deploy.yml, which does get NPM_TOKEN).
+# Any lockfile change — every Dependabot PR — misses that cache and fails with
+# npm E401. The job is inlined here so the install step can authenticate with
+# NPM_TOKEN when present, falling back to the workflow's own GITHUB_TOKEN
+# (`packages: read` is enough for the public @basenative/* packages), which is
+# what Dependabot-triggered runs get.
 
 on:
   pull_request:
@@ -11,8 +19,33 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   ci:
-    uses: DuganLabs/.github/.github/workflows/ci.yml@v2
-    with:
-      package-manager: npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://npm.pkg.github.com
+          scope: "@basenative"
+
+      - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.GITHUB_TOKEN }}
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test
