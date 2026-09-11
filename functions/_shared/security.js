@@ -58,10 +58,25 @@
    receives and never in what the origin emits. curl and a Worker-side
    render both show a clean page. A browser shows two blocked scripts.
    Check the delivered document, not the origin response.
-   The beacon is now a hand-written external <script src> in the SSR shell
-   (src/bn/views/layout.js) rather than the zone's automatic injection,
-   which emits an inline loader that no CSP can admit without
-   'unsafe-inline' or a hash of text Cloudflare rotates per release.
+   Both origins below are allowed, and today NEITHER is reached, because
+   Web Analytics on this zone is on AUTOMATIC setup and its injected loader
+   is inline — which no CSP admits without 'unsafe-inline' or a hash of text
+   Cloudflare rotates with every beacon release.
+
+   A hand-written external <script src> carrying the automatic-setup token
+   was tried and reverted: the script loads, and then every report to
+   cloudflareinsights.com/cdn-cgi/rum comes back without an
+   Access-Control-Allow-Origin header, so the browser drops it. An
+   automatic-setup token is not valid in a manual snippet. That shipped
+   analytics that looked configured and recorded nothing, plus a failed
+   request on every page load — strictly worse than no beacon.
+
+   What actually fixes it is one dashboard action: Web Analytics -> add the
+   site with MANUAL setup, which issues a token whose RUM endpoint answers
+   with CORS headers, and turn automatic injection off. Then put that
+   token in a <script src="https://static.cloudflareinsights.com/beacon.min.js"
+   data-cf-beacon='{"token":"..."}'> in src/bn/views/layout.js. These two
+   origins are what that will need, so they stay.
    The JSON-LD and `#bn-ssr-state` blocks are <script type="application/
    ld+json"> and <script type="application/json"> — HTML data blocks,
    never executed, so script-src does not apply and they need no hash. */
