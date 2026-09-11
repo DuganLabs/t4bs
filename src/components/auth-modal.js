@@ -21,6 +21,31 @@ import { isDev } from "../lib/game.js";
 const AUTH_TABS_ID = "auth-tabs";
 const AUTH_PANEL_ID = "auth-tabs-panel";
 
+/* Maps the raw error slugs the server / @basenative/auth-webauthn client
+   throw (see its src/server.js and src/client.js) to user-facing copy —
+   the modal used to show these verbatim ('user-not-found', 'auth-failed'). */
+const AUTH_ERROR_COPY = {
+  "user-not-found": "No account with that handle — try NEW HANDLE instead.",
+  "bad-handle": "Handles are 2–24 characters: letters, numbers, _ or -.",
+  "credential-not-found": "That passkey isn't recognized on this device — try NEW HANDLE.",
+  "challenge-not-found": "That sign-in attempt expired — try again.",
+  "bad-challenge": "That sign-in attempt expired — try again.",
+  "not-verified": "Passkey verification failed — try again.",
+  "missing-assertion": "Passkey verification failed — try again.",
+  "missing-attestation": "Passkey verification failed — try again.",
+};
+const AUTH_ERROR_FALLBACK = "Sign-in failed — try again.";
+
+function authErrorCopy(e) {
+  const code = String(e?.message ?? e ?? "");
+  // Browser-side WebAuthn cancellation (e.g. the OS passkey sheet was
+  // dismissed) surfaces as a DOMException, not one of the server's slugs.
+  if (e?.name === "NotAllowedError" || /not allowed|cancel/i.test(code)) {
+    return "Passkey was cancelled.";
+  }
+  return AUTH_ERROR_COPY[code] || AUTH_ERROR_FALLBACK;
+}
+
 /**
  * The auth dialog's static shell — header, login/register tab
  * switcher, cancel button — as a plain string. No signals, no DOM, so
@@ -70,9 +95,9 @@ export function createAuthModal({ open, onClose, onAuthed }) {
     try {
       const me = await fn(handle.peek().trim().toLowerCase());
       if (me?.user) onAuthed(me.user);
-      else err.set("auth-failed");
+      else err.set(AUTH_ERROR_FALLBACK);
     } catch (e) {
-      err.set(String(e.message || e));
+      err.set(authErrorCopy(e));
     } finally {
       busy.set(false);
     }
