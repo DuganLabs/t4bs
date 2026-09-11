@@ -14,7 +14,7 @@ import { h } from "../lib/dom.js";
 import { bindAttr, bindHidden, bindText } from "../lib/bind.js";
 import { trapFocus } from "../lib/focus-trap.js";
 import { api } from "../lib/api.js";
-import { openSlots, fullCount, computeKeyStatus } from "../lib/game.js";
+import { openSlots, fullCount, computeKeyStatus, KEY_STATE_INFO } from "../lib/game.js";
 import { confetti } from "../lib/confetti.js";
 
 export function createPlay({
@@ -52,6 +52,7 @@ export function createPlay({
   /* ── derived ───────────────────────────────────────────────────────── */
   const keyStatus = computed(() => computeKeyStatus({
     session: session(),
+    active: active(),
     locked: locked(),
     presentGlobal: presentGlobal(),
     absentByWord: absentByWord(),
@@ -651,6 +652,25 @@ export function createPlay({
       e.preventDefault();
       btn.click();
     }, { passive: false });
+
+    /* @basenative/keyboard@1.0.5's hydrateKeyboard() only toggles the
+       bn-kb-key--{green,yellow,absent} classes when `state` changes —
+       it sets each key's aria-label once at render time and never
+       updates it. That leaves screen-reader users with zero signal
+       for a state sighted players see as a colour (plus the ::after
+       glyph in styles.css). Layer a second, independent effect over
+       the same keyStatus() signal that keeps aria-label current — a
+       sighted-only colour+glyph pairing wouldn't satisfy "state must
+       not be conveyed by colour alone" for AT users. */
+    const charKeys = root.querySelectorAll('[data-bn-kb-key][data-kb-type="char"]');
+    effect(() => {
+      const map = keyStatus();
+      charKeys.forEach((btn) => {
+        const letter = btn.dataset.kbKey;
+        const info = KEY_STATE_INFO[map[letter]];
+        btn.setAttribute("aria-label", info ? `${letter} key, ${info.ariaSuffix}` : `${letter} key`);
+      });
+    });
   });
 
   /* End-of-round dialog — overlay <div role="dialog"> wrapping a single

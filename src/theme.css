@@ -179,9 +179,18 @@
     --kb-key-bg: #3A3530;
     --kb-key-fg: #F0EDE4;
     --kb-key-active: #5A5550;
+    /* Paired explicitly with their -fg tokens — see styles.css's
+       `.bn-kb` block (which wins the cascade today, being unlayered)
+       for the full contrast-ratio rationale. Kept in sync here too so
+       this block stays correct on its own if the unlayered override
+       is ever removed, same belt-and-suspenders reasoning as
+       --kb-key-primary-fg just below. */
     --kb-key-green: #4EAF7C;
+    --kb-key-green-fg: #0A1F12;
     --kb-key-yellow: #D4B445;
+    --kb-key-yellow-fg: #1F1700;
     --kb-key-absent: #1E1C18;
+    --kb-key-absent-fg: #988570;
     --kb-key-staked: #FFD700;
     --kb-key-radius: 5px;
     --kb-min-tap: 44px;
