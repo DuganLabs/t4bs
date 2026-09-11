@@ -12,6 +12,9 @@ import {
   knowledgeSummary,
   KEY_STATE_INFO,
   groupLobby,
+  browseCategories,
+  renderBrowseRounds,
+  renderBrowseShelf,
 } from "./game.js";
 
 describe("openSlots", () => {
@@ -352,5 +355,147 @@ describe("knowledgeSummary — the phrase-level read-out", () => {
     assert.equal(k.totalWords, 0);
     assert.equal(k.totalLetters, 0);
     assert.equal(k.bestTarget, null);
+  });
+});
+
+/* ── FREE-PLAY BROWSE SHELF ──────────────────────────────────────────
+   The lobby's free play used to collapse a category to one row and one
+   playable round. These cover the replacement: every round listed, and
+   the SAME markup reaching the SSR template and the hydrated client
+   from the same input — which is the only thing keeping the two view
+   trees honest here. */
+describe("browseCategories", () => {
+  const groups = [
+    {
+      category: "MOTIVATIONAL",
+      puzzles: [
+        { id: 1000, submittedBy: "admin" },
+        { id: 8,    submittedBy: "house" },
+      ],
+    },
+    { category: "FAIRY TALES", puzzles: [{ id: 3, submittedBy: "house" }] },
+  ];
+
+  it("numbers rounds by ascending puzzle id, not array order", () => {
+    const [motivational] = browseCategories(groups);
+    assert.deepEqual(
+      motivational.rounds.map(r => [r.label, r.id]),
+      [["Round 1", 8], ["Round 2", 1000]],
+      "the server and the client must number the same puzzle the same way",
+    );
+  });
+
+  it("says how many rounds are inside, singular and plural", () => {
+    const [motivational, fairyTales] = browseCategories(groups);
+    assert.equal(motivational.title, "MOTIVATIONAL · 2 rounds");
+    assert.equal(fairyTales.title,   "FAIRY TALES · 1 round");
+  });
+
+  it("gives every round its own play target", () => {
+    const [motivational] = browseCategories(groups);
+    assert.deepEqual(
+      motivational.rounds.map(r => r.playHref),
+      ["/play?play=8", "/play?play=1000"],
+      "a category no longer collapses to a single deterministic pick",
+    );
+  });
+
+  it("credits the submitter per round, not per category", () => {
+    const [motivational] = browseCategories(groups);
+    assert.deepEqual(motivational.rounds.map(r => r.credit), ["by house", "by admin"]);
+  });
+
+  it("marks free play as not counting, in the accessible name", () => {
+    const [, fairyTales] = browseCategories(groups);
+    assert.match(fairyTales.rounds[0].ariaLabel, /does not count toward your streak/i);
+  });
+
+  it("survives a lobby that hasn't loaded", () => {
+    assert.equal(browseCategories(null), null);
+    assert.deepEqual(browseCategories([]), []);
+  });
+});
+
+describe("renderBrowseRounds — the SSR/client tag split", () => {
+  const cat = browseCategories([
+    { category: "FAIRY TALES", puzzles: [{ id: 3, submittedBy: "house" }] },
+  ])[0];
+
+  /* issue #24: the lobby has to work with JavaScript disabled, so the
+     SSR surface is anchors — and now one per puzzle rather than one per
+     category, which is strictly more reachable than before. */
+  it("emits a real href per round for the no-JS surface", () => {
+    const html = renderBrowseRounds(cat, "a");
+    assert.match(html, /<a href="\/play\?play=3"/);
+    assert.doesNotMatch(html, /<button/);
+  });
+
+  /* The hydrated client uses buttons: a client-side navigation to
+     /play?play=… never re-runs the boot resolver that reads the query
+     string, so an anchor would route to an empty play view. */
+  it("emits buttons for the hydrated client", () => {
+    const html = renderBrowseRounds(cat, "button");
+    assert.match(html, /<button type="button"/);
+    assert.doesNotMatch(html, /href=/);
+  });
+
+  it("carries the puzzle id on every control, either way", () => {
+    for (const tag of ["a", "button"]) {
+      assert.match(renderBrowseRounds(cat, tag), /data-puzzle-id="3"/);
+    }
+  });
+
+  it("escapes interpolated fields", () => {
+    const evil = browseCategories([
+      { category: 'X" onload="alert(1)', puzzles: [{ id: 1, submittedBy: "<img/onerror=1>" }] },
+    ])[0];
+    const html = renderBrowseRounds(evil, "a");
+    assert.doesNotMatch(html, /onload="alert/);
+    assert.doesNotMatch(html, /<img/);
+  });
+});
+
+describe("renderBrowseShelf", () => {
+  const groups = [
+    { category: "FAIRY TALES",  puzzles: [{ id: 3, submittedBy: "house" }] },
+    { category: "MOTIVATIONAL", puzzles: [{ id: 8, submittedBy: "house" }] },
+  ];
+
+  it("is @basenative/components' accordion, so the disclosure is native", () => {
+    const html = renderBrowseShelf(groups, "a");
+    assert.match(html, /<div data-bn="accordion"/);
+    assert.match(html, /<details data-bn="accordion-item"/);
+    assert.match(html, /<summary data-bn="accordion-header"/);
+  });
+
+  /* The id is pinned rather than left to the package's nextId()
+     counter. If the server and the client picked different ids, the
+     name= grouping that makes the sections mutually exclusive would
+     desynchronise across hydration. */
+  it("pins the same id on both sides of hydration", () => {
+    const server = renderBrowseShelf(groups, "a");
+    const client = renderBrowseShelf(groups, "button");
+    assert.match(server, /id="lobby-browse"/);
+    assert.match(client, /id="lobby-browse"/);
+    assert.equal(
+      (server.match(/name="lobby-browse"/g) || []).length,
+      (client.match(/name="lobby-browse"/g) || []).length,
+    );
+  });
+
+  /* The two trees must differ in exactly one way — the control tag. */
+  it("differs between the trees only in the control element", () => {
+    const server = renderBrowseShelf(groups, "a");
+    const client = renderBrowseShelf(groups, "button");
+    const normalise = (s) => s
+      .replace(/<a href="[^"]*"/g, "<CTRL")
+      .replace(/<button type="button"/g, "<CTRL")
+      .replace(/<\/(a|button)>/g, "</CTRL>");
+    assert.equal(normalise(server), normalise(client));
+  });
+
+  it("renders an empty shelf rather than throwing on no puzzles", () => {
+    assert.match(renderBrowseShelf([], "a"), /data-bn="accordion"/);
+    assert.match(renderBrowseShelf(null, "a"), /data-bn="accordion"/);
   });
 });

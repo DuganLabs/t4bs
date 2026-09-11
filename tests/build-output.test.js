@@ -127,16 +127,27 @@ describe("vite build chunk split (PR #64)", () => {
   describe("eager chunk size budget", () => {
     /* Soft budget — guards against the eager chunk ballooning back to
        the pre-#64 size. The actual measured value at the time of
-       writing is ~38 KB raw (~14 KB gzipped); we use a 55 KB raw
-       ceiling so reasonable feature growth doesn't trip the test, but
-       a regression that re-bundles the lazy views (back to ~62 KB)
-       fails loudly. */
-    it("play-boot raw size stays under 55 KB", () => {
+       writing is ~38 KB raw (~14 KB gzipped); the ceiling exists so a
+       regression that re-bundles the lazy views (back to ~62 KB) fails
+       loudly, while reasonable feature growth does not.
+
+       Raised 55 → 58 KB when the lobby's free-play shelf adopted
+       @basenative/components' accordion. That pulls accordion.js plus
+       its ids/attrs helpers — ~3.1 KB of package source, ~1.1 KB
+       minified — into the eager graph, because the lobby is the
+       landing view and is eager by design. Measured 54.4 KB before,
+       55.5 KB after.
+
+       The number that matters is the gap to the failure this guards:
+       62 KB still trips it, and that is the only way the chunk gets
+       there — a lazy view (submit/moderate/admin) re-entering the eager
+       import graph. A kilobyte of markup helper is not that. */
+    it("play-boot raw size stays under 58 KB", () => {
       const playBoot = chunkSources["play-boot"];
       const rawKb = playBoot.length / 1024;
       assert.ok(
-        rawKb < 55,
-        `play-boot is ${rawKb.toFixed(1)} KB raw — over the 55 KB budget. Did a lazy view sneak back into the eager graph?`,
+        rawKb < 58,
+        `play-boot is ${rawKb.toFixed(1)} KB raw — over the 58 KB budget. Did a lazy view sneak back into the eager graph?`,
       );
     });
   });

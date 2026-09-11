@@ -120,7 +120,16 @@ describe("renderPage — emits a complete BaseNative-rendered HTML document for 
     }
   });
 
-  it("lobby view renders @for puzzle groups using BaseNative directives", () => {
+  /* The free-play shelf used to print ONE row per category, carrying
+     the whole group's ids in a single data-puzzle-ids="1,2" attribute
+     and starting a deterministic pick. That made every round but one
+     unreachable, and invisible — which is what "I can't see games from
+     other categories" was about.
+
+     Each category is now a collapsible section listing every round it
+     holds, so the contract this test guards is per-ROUND: one control
+     per puzzle, each addressable on its own id. */
+  it("lobby view renders every round in every category, individually addressable", () => {
     const lobby = [
       { id: 1, category: "ANIMALS", submittedBy: "wmd" },
       { id: 2, category: "ANIMALS", submittedBy: "warren" },
@@ -129,8 +138,24 @@ describe("renderPage — emits a complete BaseNative-rendered HTML document for 
     const html = renderPage(baseCtx({ lobby }), ASSETS);
     assert.match(html, /ANIMALS/);
     assert.match(html, /FOODS/);
-    assert.match(html, /data-puzzle-ids="1,2"/);
-    assert.match(html, /data-puzzle-ids="3"/);
+
+    // Every puzzle gets its own control, not one per category.
+    for (const id of [1, 2, 3]) {
+      assert.match(html, new RegExp(`data-puzzle-id="${id}"`),
+        `puzzle ${id} must be reachable from the lobby on its own`);
+    }
+    // The collapsed group attribute is gone with the row that carried it.
+    assert.doesNotMatch(html, /data-puzzle-ids=/,
+      "a group no longer collapses its rounds into one control");
+
+    // The category summary says how many rounds are inside, so the
+    // reader can tell there is something to open.
+    assert.match(html, /ANIMALS · 2 rounds/);
+    assert.match(html, /FOODS · 1 round/);
+
+    /* Native <details>, from @basenative/components' accordion — the
+       disclosure has to work with JavaScript off, like the links. */
+    assert.match(html, /<details[^>]*data-bn="accordion-item"/);
   });
 
   /* issue #24 — the lobby must work with JavaScript disabled. Each

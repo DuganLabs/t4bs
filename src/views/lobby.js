@@ -19,7 +19,7 @@
 import { computed, effect, signal } from "@basenative/runtime";
 import { bnAlert, h } from "../lib/dom.js";
 import { bindAttr, bindHidden, bindText } from "../lib/bind.js";
-import { groupLobby } from "../lib/game.js";
+import { groupLobby, renderBrowseShelf } from "../lib/game.js";
 
 /** "6h 21m" / "12m" — how long until the next UTC daily unlocks. */
 export function formatCountdown(ms) {
@@ -158,31 +158,29 @@ export function createLobby({
   );
 
   /* ── Free play ──────────────────────────────────────────────────── */
-  const freeList = h("ul", { role: "list", "data-bn-region": "list" });
+
+  /* One collapsible section per category, listing every round inside
+     it — see the browse-shelf note in lib/game.js for why this replaced
+     the old one-row-per-category list.
+
+     Built as markup + delegation rather than per-round `h()` nodes with
+     their own onClick, because the SSR template renders the identical
+     string from the identical helper. Same pattern the moderate view
+     already uses for @basenative/admin's queue list. */
+  const freeList = h("div", { "data-bn-bind": "browse-host" });
   effect(() => {
     const gs = groups();
     if (!gs || gs.length === 0) {
-      freeList.replaceChildren(h("li", null, h("p", null, "Loading puzzles…")));
+      freeList.replaceChildren(h("p", { "data-bn-region": "browse-empty" }, "Loading puzzles…"));
       return;
     }
-    freeList.replaceChildren(...gs.map(group => {
-      /* Deterministic pick inside a category so the same card always
-         opens the same round — surprise belongs to the daily. */
-      const pick = group.puzzles.reduce((a, b) => (a.id <= b.id ? a : b));
-      return h("li", null,
-        h("button", {
-          type: "button",
-          "data-bn-action": "lobby-pick",
-          "aria-label": `Free play: ${group.category}, by ${pick.submittedBy}. Practice — does not count toward your streak.`,
-          onClick: () => onFree(pick.id),
-        },
-          h("strong", null, group.category),
-          h("small", null, group.puzzles.length === 1
-            ? `by ${pick.submittedBy}`
-            : `${group.puzzles.length} puzzles`),
-        ),
-      );
-    }));
+    freeList.innerHTML = renderBrowseShelf(gs, "button");
+  });
+  freeList.addEventListener("click", (e) => {
+    const btn = e.target.closest('[data-bn-action="lobby-pick"]');
+    if (!btn) return;
+    const id = Number(btn.dataset.puzzleId);
+    if (Number.isFinite(id)) onFree(id);
   });
 
   const freeSection = h("section", {
@@ -191,8 +189,9 @@ export function createLobby({
   },
     h("h2", { id: "lobby-free-title" }, "Free play · pick any category"),
     h("p", { "data-bn-region": "free-note" },
-      "This is where you choose. Every approved category, replayable as "
-      + "often as you like — they never touch your streak."),
+      "This is where you choose. Open a category to see every round in "
+      + "it — all replayable as often as you like, and they never touch "
+      + "your streak."),
     freeList,
   );
 
@@ -206,7 +205,13 @@ export function createLobby({
 
   /* One-line statement of the rule that decides every round. The help
      modal explains it properly; this makes sure nobody meets it for the
-     first time by losing to it. */
+     first time by losing to it.
+
+     It used to sit between the daily card and free play, which pushed
+     the shelf of other categories to y=551 on an 844px viewport — and
+     clean off the first screen on anything shorter. The rule is worth
+     stating but it is not worth a screenful, so free play now comes
+     first and the note closes the page. */
   const rules = h("p", { "data-bn-region": "rules-note" },
     "Four lives for the whole phrase — any word guess that isn't fully correct costs one.");
 
@@ -224,8 +229,8 @@ export function createLobby({
     statsSection,
     errorEl,
     dailyCard,
-    rules,
     freeSection,
+    rules,
     fab,
   );
 }

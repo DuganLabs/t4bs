@@ -24,7 +24,7 @@ import submitHtml from "../views/submit.js";
 import moderateHtml from "../views/moderate.js";
 import adminHtml from "../views/admin.js";
 import notFoundHtml from "../views/not_found.js";
-import { groupLobby } from "../../lib/game.js";
+import { groupLobby, renderBrowseShelf } from "../../lib/game.js";
 
 const VIEW_TEMPLATES = {
   "lobby":     lobbyHtml,
@@ -60,27 +60,23 @@ function safeJson(value) {
     .replace(/\u2029/g, "\\u2029");
 }
 
-/** @param {{ id: number, category: string, submittedBy: string }[] | null} lobby */
-function lobbyGroups(lobby) {
-  const groups = groupLobby(lobby) || [];
-  return groups.map(group => {
-    /* For the no-JS case we need a deterministic single round per
-       category — pick the lowest puzzle id. The hydrated SPA uses a
-       random pick within the group instead, but that re-bind happens
-       after mount() replaces the SSR markup, so the link target only
-       affects browsers without JS or before the bundle has executed. */
-    const firstPuzzleId = group.puzzles
-      .map(p => p.id)
-      .reduce((min, id) => (id < min ? id : min), group.puzzles[0].id);
-    return {
-      category: group.category,
-      puzzleIds: group.puzzles.map(p => p.id).join(","),
-      playHref: `/play?play=${firstPuzzleId}`,
-      credit: group.puzzles.length === 1
-        ? `by ${group.puzzles[0].submittedBy}`
-        : `${group.puzzles.length} puzzles`,
-    };
-  });
+/* The free-play shelf.
+
+   This used to flatten each category to a single link — lowest puzzle
+   id, credited "by house" or "2 puzzles" — which meant the rounds
+   inside a category were neither reachable nor visible from the lobby.
+   It is now @basenative/components' accordion, one collapsible section
+   per category listing every round, built by the same
+   renderBrowseShelf() helper src/views/lobby.js calls after hydration
+   so the two trees emit the same markup from the same input.
+
+   "a" is not a detail: the SSR surface has to keep working with
+   JavaScript off, so every round is a real <a href="/play?play={id}">.
+   The hydrated client passes "button" instead — see lib/game.js.
+
+   @param {{ id: number, category: string, submittedBy: string }[] | null} lobby */
+function lobbyBrowseHtml(lobby) {
+  return renderBrowseShelf(groupLobby(lobby) || [], "a");
 }
 
 /* Presentation shaping for the server's daily status — the template
@@ -140,7 +136,11 @@ function renderView(ctx) {
   switch (ctx.route) {
     case "lobby":
       return render(tpl, {
-        groups: lobbyGroups(ctx.lobby),
+        /* raw(): renderBrowseShelf() already escapes every field it
+           interpolates, so `{{ browseHtml }}` must not escape it again.
+           Same contract as queueListHtml below. */
+        browseHtml: raw(lobbyBrowseHtml(ctx.lobby)),
+        hasGroups: !!(ctx.lobby && ctx.lobby.length),
         daily: shapeDaily(ctx.daily),
         dailyOpen: !!(ctx.daily && ctx.daily.puzzleId && !ctx.daily.playedToday),
         dailyDone: !!(ctx.daily && ctx.daily.playedToday),

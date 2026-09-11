@@ -120,6 +120,37 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
   display: flex; flex-direction: column; align-items: center;
 }
 
+/* VIEW SLOT — the <div> the SPA swaps the active view into. It exists
+   only in the hydrated tree: SSR renders <main> as a direct child of
+   #app, so `main { width: 100% }` resolves against #app's content box.
+
+   The hydrated tree inserts shell > view-slot between the two, and an
+   unstyled <div> flex item under `align-items: center` is shrink-to-fit
+   — so `width: 100%` on the view resolved against the view's OWN
+   max-content width instead of the page's. The views that declare
+   `width: 100%; max-width: 540px` silently got whatever their widest
+   line of text happened to need.
+
+   Measured in Chromium before this rule:
+
+     route      viewport 390   viewport 1280
+     /moderate  main 252px     main 252px
+     /          main 362px     main 480px
+
+   i.e. the moderation queue was 252px wide on a 390px phone and STILL
+   252px on a 1280px desktop — the "card narrower than the screen"
+   report. The lobby escaped it by accident: its rules-note paragraph is
+   long enough that max-content already filled the line.
+
+   Stretching the slot and re-centring its children puts <main> in the
+   same box in both trees, which is the same contract the shell rule
+   above exists to keep. Like the shell, it contributes layout only — no
+   padding, margin, border or min-height, all of which #app owns. */
+[data-bn-region="view-slot"] {
+  width: 100%;
+  display: flex; flex-direction: column; align-items: center;
+}
+
 /* STICKY NOTE — yellow rotated paper visual reused as the page-title
    marker on lobby, submit, moderate, admin, and play. The "narrow"
    variant widens the cap from 320px to 380px for the lobby tagline
@@ -261,7 +292,12 @@ main[data-bn-view="play"] [data-bn-region="play-sticky"] {
    no-JS surface), and both get the same box. */
 [data-bn="button"][data-bn-variant="leave"],
 a[data-bn-variant="leave"] {
-  max-inline-size: 300px; margin-block-start: 14px;
+  /* Stays narrower than the content column on purpose — it is the way
+     out, not the job. 300px was set against a 252px-wide <main>, so it
+     was effectively full-bleed and read as a primary action; against
+     the real column it can afford to be a little wider and still sit
+     clearly below the work. */
+  max-inline-size: 360px; margin-block-start: 18px;
 }
 a[data-bn-variant="leave"] {
   display: flex; align-items: center; justify-content: center;
@@ -361,23 +397,51 @@ a[data-bn-variant="leave"]:hover { border-color: #E8920A; color: #E8920A; }
   text-transform: uppercase; margin-top: 10px; margin-bottom: 6px;
 }
 
+/* MODERATION QUEUE — markup is @basenative/admin's
+   renderAdminQueueList(); everything below is T4BS skin over it.
+
+   Reported as "this screen doesn't need to be so small and tightly
+   compacted": one item, a wall of empty space under it, and a card
+   narrower than the phone. Two separate causes, fixed in two places.
+
+   The width was never a queue problem — <main> itself was being
+   shrink-to-fit at 252px on every viewport; see the
+   [data-bn-region="view-slot"] note above. With that fixed the queue
+   reaches its 540px cap and fills a 390px phone edge to edge.
+
+   What's left is density, and it was genuinely too tight for the job.
+   A moderator is reading a phrase and deciding yes/no, so the phrase is
+   the thing that has to be legible — it was 18px, smaller than the
+   lobby's own category labels. The attribution was 10px, below what
+   anyone reads comfortably on a phone and under the 11px floor the rest
+   of this sheet keeps. Type and padding both go up:
+
+     item padding   14px → 18px      gap 8px → 12px
+     category       15px → 17px
+     submitted-by   10px → 12px
+     phrase         18px → 26px
+     decide buttons 42px → 48px tall, 15px label
+
+   The decision buttons also stop at 42px high, under the 44px minimum
+   tap target the rest of the app keeps, so they go to 48px. */
 .bn-admin-queue {
   list-style: none; padding: 0; margin: 0;
   width: 100%; max-width: 540px;
-  display: flex; flex-direction: column; gap: 12px;
+  display: flex; flex-direction: column; gap: 14px;
 }
 .bn-admin-queue__item {
-  background: #161412; border: 1.5px solid #222; border-radius: 10px;
-  padding: 14px; display: flex; flex-direction: column; gap: 8px;
+  background: #161412; border: 1.5px solid #222; border-radius: 12px;
+  padding: 18px; display: flex; flex-direction: column; gap: 12px;
 }
-.bn-admin-queue__meta { display: flex; justify-content: space-between; align-items: baseline; }
-.bn-admin-queue__cat  { font-family: 'Bebas Neue', sans-serif; font-size: 15px; letter-spacing: 2px; color: #F0EDE4; }
-.bn-admin-queue__by   { font-size: 10px; letter-spacing: 1.2px; color: #9A9590; text-transform: uppercase; }
+.bn-admin-queue__meta { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.bn-admin-queue__cat  { font-family: 'Bebas Neue', sans-serif; font-size: 17px; letter-spacing: 2px; color: #F0EDE4; }
+.bn-admin-queue__by   { font-size: 12px; letter-spacing: 1.2px; color: #9A9590; text-transform: uppercase; white-space: nowrap; }
 .bn-admin-queue__phrase {
-  font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2px;
-  color: #E8920A; line-height: 1.2; word-break: break-word;
+  font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 2px;
+  color: #E8920A; line-height: 1.15; word-break: break-word;
 }
-.bn-admin-queue__actions { display: flex; gap: 8px; }
+.bn-admin-queue__actions { display: flex; gap: 10px; }
+.bn-admin-queue__actions .bn-admin-btn { min-height: 48px; font-size: 15px; }
 
 .bn-admin { width: 100%; max-width: 540px; display: flex; flex-direction: column; gap: 14px; }
 .bn-admin-search-wrap { display: block; }
@@ -631,14 +695,26 @@ header[data-bn-region="header"] [aria-current="page"] { color: #E8920A; border-c
   }
 }
 
-/* LOBBY — attribute-driven daily-only shell. SSR template still emits
-   the old browse-by-category list with section[aria-labelledby=
-   "lobby-list-title"] rules below for graceful no-JS fallback;
-   post-hydration the SPA replaces the tree with the daily card built
-   in src/views/lobby.js. */
+/* LOBBY — attribute-driven. The SSR template and the post-hydration
+   SPA tree emit the same regions, so one set of rules covers both.
+
+   The old `section[aria-labelledby="lobby-list-title"]` pair that used
+   to live in here is gone: it existed because the SSR template labelled
+   the free-play section "lobby-list-title" while src/views/lobby.js
+   labelled the same section "lobby-free-title", so each tree matched a
+   different rule for the same box. Both now use lobby-free-title, and
+   [data-bn-region="free-play"] below styles it once for both. */
 main[data-bn-view="lobby"] {
   width: 100%; max-width: 540px;
   display: flex; flex-direction: column; align-items: center; gap: 12px;
+  /* Clearance for the fixed "+ submit a phrase" FAB, which floats
+     20px off the bottom of the VIEWPORT and is ~48px tall — so at full
+     scroll it covers the last 68px of the page. #app contributes 40px
+     of that; this is the rest. Previously the element it landed on was
+     the final free-play card, where a half-covered row still read as a
+     row; now the page ends in the rules note, where it landed on a
+     sentence. */
+  padding-bottom: 32px;
 }
 main[data-bn-view="lobby"] > h1 {
   font-family: 'Bebas Neue', sans-serif;
@@ -662,16 +738,10 @@ main[data-bn-view="lobby"] [data-bn-region="noscript-hint"] {
   color: #988570; font-size: 11px; text-align: center;
   background: transparent; border: none; max-width: 480px;
 }
-main[data-bn-view="lobby"] section[aria-labelledby="lobby-list-title"] { width: 100%; max-width: 480px; }
-main[data-bn-view="lobby"] section[aria-labelledby="lobby-list-title"] > h2 {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;
-  color: #9A9590; font-weight: 400; text-align: center; margin-bottom: 8px;
-}
-main[data-bn-view="lobby"] [data-bn-region="list"] {
+main[data-bn-view="lobby"] [data-bn-region="rounds"] {
   display: flex; flex-direction: column; gap: 8px; list-style: none; padding: 0; margin: 0;
 }
-main[data-bn-view="lobby"] [data-bn-region="list"] > li { list-style: none; }
+main[data-bn-view="lobby"] [data-bn-region="rounds"] > li { list-style: none; }
 main[data-bn-view="lobby"] [data-bn-action="lobby-pick"] {
   font: inherit; text-align: left; cursor: pointer;
   display: flex; justify-content: space-between; align-items: center; gap: 10px;
@@ -820,8 +890,56 @@ main[data-bn-view="lobby"] [data-bn-region="free-play"] > h2 {
 main[data-bn-view="lobby"] [data-bn-region="free-note"] {
   font-size: 11px; line-height: 1.45; color: #9A9590; margin-bottom: 10px;
 }
-main[data-bn-view="lobby"] [data-bn-region="free-play"] [data-bn-region="list"] {
-  display: flex; flex-direction: column; gap: 8px; padding: 0; margin: 0;
+
+/* BROWSE SHELF — @basenative/components' accordion, one section per
+   category, each listing the rounds inside it. The package owns the
+   disclosure behaviour, the marker and the focus ring (it is native
+   <details>/<summary>, so it also works with JavaScript off); what
+   follows is the T4BS skin, matching the card visual the free-play
+   rows have always had.
+
+   The package's own [data-bn="accordion-item"] rules join adjacent
+   items into one continuous stack, which would fight the 8px gap this
+   list wants — each <details> is its own flex row here, so the radius
+   and border are restated rather than inherited from that stack. */
+main[data-bn-view="lobby"] [data-bn-region="browse"] {
+  display: flex; flex-direction: column; gap: 8px;
+  width: 100%; border: none; background: transparent;
+}
+main[data-bn-view="lobby"] [data-bn-region="browse"] [data-bn="accordion-item"] {
+  margin: 0; border: 1.5px solid #222; border-radius: 10px;
+  background: #161412; overflow: hidden;
+  transition: border-color .2s, background .15s;
+}
+main[data-bn-view="lobby"] [data-bn-region="browse"] [data-bn="accordion-item"][open] {
+  border-color: rgba(232,146,10,.45); background: #1A1714;
+}
+main[data-bn-view="lobby"] [data-bn-region="browse"] [data-bn="accordion-header"] {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 56px; padding: 14px 16px; cursor: pointer;
+  font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2.5px;
+  color: #F0EDE4; background: transparent; border: none;
+}
+main[data-bn-view="lobby"] [data-bn-region="browse"] [data-bn="accordion-header"]:hover {
+  background: #1A1714; color: #E8920A;
+}
+main[data-bn-view="lobby"] [data-bn-region="browse"] [data-bn="accordion-content"] {
+  padding: 0 12px 12px;
+}
+main[data-bn-view="lobby"] [data-bn-region="browse-empty"] {
+  font-size: 12px; color: #9A9590; padding: 8px 0;
+}
+
+/* A round inside an open category. Same control the free-play rows
+   used to be — [data-bn-action="lobby-pick"] above still supplies the
+   box — but the label is now the round rather than the category, so
+   the two halves swap emphasis: the round name is the quieter one and
+   the credit carries the detail. */
+main[data-bn-view="lobby"] [data-bn-region="rounds"] [data-bn-action="lobby-pick"] {
+  min-height: 48px; padding: 10px 14px; background: #100F0D;
+}
+main[data-bn-view="lobby"] [data-bn-region="rounds"] [data-bn-action="lobby-pick"] strong {
+  font-size: 15px; letter-spacing: 2px; color: #E8920A;
 }
 
 /* PLAY view — semantic, attribute-driven. Same rules cover the SSR-rendered
