@@ -2,7 +2,7 @@
    Axioms: semantic HTML, zero inline style (via class= only), hosts pass through. */
 
 import { effect } from "@basenative/runtime";
-import { renderAlert, renderButton } from "@basenative/components";
+import { renderAlert, renderButton, renderSkeleton, renderSpinner } from "@basenative/components";
 import { escapeText } from "@basenative/runtime/shared/escape";
 
 /**
@@ -161,6 +161,42 @@ export function bnButton(label, options = {}) {
 export function bnAlert(options = {}) {
   const el = /** @type {HTMLElement} */ (fromHTML(renderAlert("", options)));
   return { el, content: /** @type {HTMLElement} */ (el.querySelector('[data-bn="alert-content"]')) };
+}
+
+/**
+ * A labelled waiting state: @basenative/components' spinner (which
+ * already carries role="status" + the accessible name) next to the
+ * visible label, wrapped in a [data-bn-region="pending"] <p> so
+ * styles.css can place it without this file touching style.
+ *
+ * Used wherever the UI has to admit it is still fetching — the lazily
+ * imported route chunks, and the auth check on a guarded deep link.
+ * Both used to render a bare "Loading …" paragraph, which is why a slow
+ * phone made the submit form look like it had simply lost its category
+ * picker.
+ *
+ * @param {string} label
+ * @returns {HTMLElement}
+ */
+export function bnPending(label) {
+  const el = h("p", { "data-bn-region": "pending" });
+  el.innerHTML = renderSpinner({ size: "sm", label });
+  el.append(document.createTextNode(" "), h("span", null, label));
+  return el;
+}
+
+/**
+ * Placeholder blocks sized like the content that is about to replace
+ * them, so a pending view reserves its own space instead of letting the
+ * real thing shove the page around when it lands.
+ *
+ * @param {{ width?: string, height?: string, count?: number, variant?: string }} [options]
+ * @returns {HTMLElement}
+ */
+export function bnSkeleton(options = {}) {
+  const el = h("div", { "data-bn-region": "skeleton", "aria-hidden": "true" });
+  el.innerHTML = renderSkeleton(options);
+  return el;
 }
 
 /** Quick className builder: cn("a", cond && "b", { c: true }) → "a b c". */

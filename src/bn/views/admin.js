@@ -68,6 +68,11 @@ export default `<main aria-labelledby="admin-title" data-bn-view="admin">
       <h2 id="admin-results-title">Search results</h2>
       <ul role="list" data-bn-bind="admin-results"></ul>
     </section>
+
+    <!-- Matches src/views/admin.js: names the destination instead of
+         claiming to be a history "back". -->
+    <a href="/" data-bn-action="to-lobby" data-bn-variant="leave"
+       aria-label="Leave moderator administration and go to the puzzle lobby">Go to the puzzle lobby →</a>
   </template>
 </main>
 `;

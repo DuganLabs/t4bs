@@ -75,9 +75,15 @@ export function createModerate({ toaster, onLobbyChange, goLobby }) {
     ),
     errBox,
     queueRoot,
-    bnButton("← Back", {
+    /* Not a back action — it goes to the lobby, which is where APPROVED
+       puzzles live, and it goes there regardless of how the moderator
+       reached the queue. The old "← Back" label promised history
+       navigation and delivered a different view; this names the
+       destination and points forward. */
+    bnButton("Go to the puzzle lobby →", {
       variant: "secondary",
-      attrs: 'data-bn-variant="back" data-bn-action="back"',
+      attrs: 'data-bn-variant="leave" data-bn-action="to-lobby" '
+        + 'aria-label="Leave the moderation queue and go to the puzzle lobby, where approved puzzles are listed"',
       onClick: goLobby,
     }),
   );

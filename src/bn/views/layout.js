@@ -49,7 +49,21 @@ export default `<!DOCTYPE html>
          time the parser reaches <body>, the layout, gradient, and
          header are already styled — even before the external CSS
          arrives. The semantic selectors here mirror the SSR templates
-         so first paint matches the post-hydration paint. -->
+         so first paint matches the post-hydration paint.
+
+         "The header is already styled" has to mean the WHOLE header.
+         This block used to stop after the <header> band and the logo,
+         leaving the nav's <ul>/<li>/<button> rules — and the
+         max-width:420px phone overrides — only in the external sheet.
+         Whenever that sheet was slow, blocked, or still in flight, the
+         menu fell back to UA defaults: <li> went back to list-item, so
+         "?" and "Sign in" stacked vertically instead of sitting in a
+         row, and the band measured 68px against the 48px it settles at
+         (measured on t4bs.com at 390x844 with /assets/*.css blocked).
+         That 20px is pure Cumulative Layout Shift on exactly the slow
+         connections this inline block exists to protect. Every rule
+         below is a verbatim copy of its counterpart in styles.css —
+         tests/header-parity.test.js fails if the two drift. -->
     <style data-bn-critical>
       @layer reset, app, keyboard;
       @layer reset {
@@ -67,8 +81,29 @@ export default `<!DOCTYPE html>
       .sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
       header[data-bn-region=header]{position:sticky;top:0;z-index:30;width:100%;max-width:540px;margin-top:4px;margin-bottom:14px;padding:8px 14px;background:rgba(22,20,18,.92);backdrop-filter:blur(8px);border:1px solid #2C2926;border-radius:12px}
       header[data-bn-region=header]>nav{display:flex;align-items:center;justify-content:space-between;gap:8px}
-      [data-bn-action=logo]{font-family:'Bebas Neue',sans-serif;font-size:23px;letter-spacing:4px;color:#F0EDE4;display:inline-flex;align-items:center;gap:8px}
+      [data-bn-action=logo]{font-family:'Bebas Neue',sans-serif;font-size:23px;letter-spacing:4px;color:#F0EDE4;display:inline-flex;align-items:center;gap:8px;cursor:pointer;background:transparent;border:none;padding:0}
       [data-bn-action=logo] em{font-style:normal;color:#E8920A}
+      header[data-bn-region=header] output{font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:1px;padding:3px 8px;border-radius:4px;color:#F0EDE4;display:inline-flex;align-items:center;gap:4px}
+      header[data-bn-region=header] output[data-bn-role=score]{font-size:19px;min-width:60px;text-align:right;padding:0}
+      header[data-bn-region=header] output[data-bn-role=lives]{border:1.5px solid #E8920A;color:#E8920A}
+      header[data-bn-region=header] output[data-bn-role=tokens]{border:1.5px solid #4EAF7C;color:#4EAF7C}
+      header[data-bn-region=header] ul{display:flex;align-items:center;gap:6px;list-style:none;padding:0;margin:0}
+      header[data-bn-region=header] li{display:inline-flex}
+      header[data-bn-region=header] button,header[data-bn-region=header] a[href="/moderate"],header[data-bn-region=header] a[href="/admin"]{display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid #2E2C28;color:#9A9590;font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:1.5px;padding:0 11px;border-radius:6px;height:34px;min-width:42px;text-decoration:none;cursor:pointer}
+      header[data-bn-region=header] [data-bn-action=auth]{background:#E8920A;color:#1A0A00;border-color:#E8920A}
+      header[data-bn-region=header] [data-bn-action=account]{color:#E8920A;border-color:rgba(232,146,10,.4);cursor:default}
+      .is-hidden{display:none!important}
+      @media (max-width:420px){
+        header[data-bn-region=header]{padding:8px 10px}
+        header[data-bn-region=header]>nav{gap:5px;min-width:0;flex-wrap:wrap;row-gap:4px}
+        header[data-bn-region=header] ul{gap:4px;min-width:0;flex-wrap:wrap;justify-content:flex-end;row-gap:4px}
+        [data-bn-action=logo]{font-size:19px;letter-spacing:2px;gap:4px;flex-shrink:0}
+        header[data-bn-region=header] output{font-size:12px;padding:2px 6px;gap:2px}
+        header[data-bn-region=header] output[data-bn-role=score]{font-size:16px;min-width:0}
+        header[data-bn-region=header] button,header[data-bn-region=header] a[href="/moderate"],header[data-bn-region=header] a[href="/admin"]{font-size:10.5px;letter-spacing:1px;padding:0 7px;height:30px;min-width:32px}
+        header[data-bn-region=header] [data-bn-action=account]{max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}
+      }
+      [data-bn-region=shell]{width:100%;display:flex;flex-direction:column;align-items:center}
       main{width:100%;max-width:540px;display:flex;flex-direction:column;align-items:center;gap:14px}
     </style>
 
@@ -92,6 +127,16 @@ export default `<!DOCTYPE html>
          problem. modulepreload lets the browser start fetching as soon
          as the head is parsed, parallel with stylesheet + font fetches. -->
     <link rel="modulepreload" :href="jsAsset" />
+
+    <!-- …and the same argument one level down: on /submit, /moderate
+         and /admin the view is a separate chunk the hydrate bundle
+         imports lazily, so the browser only learns it exists after that
+         bundle has downloaded and run. Naming it here collapses those
+         two serial round trips into one parallel pair. Empty on every
+         other route. -->
+    <template @for="href of viewPreloads">
+      <link rel="modulepreload" :href="href" />
+    </template>
 
     <script type="application/ld+json">
       {

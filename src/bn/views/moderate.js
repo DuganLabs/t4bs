@@ -29,6 +29,16 @@ export default `<main aria-labelledby="moderate-title" data-bn-view="moderate">
            match. -->
       <div data-bn-bind="moderate-list">{{ queueListHtml }}</div>
     </section>
+
+    <!-- The way out of the queue, matching src/views/moderate.js (the
+         hydrated client) in both wording and box. An <a> rather than a
+         <button> because this is the pre-hydration surface, where only
+         a real link works — the same split the lobby template uses for
+         its round cards. It is deliberately NOT called "back": it goes
+         to the lobby, which lists the APPROVED puzzles, whatever the
+         moderator's history says. -->
+    <a href="/" data-bn-action="to-lobby" data-bn-variant="leave"
+       aria-label="Leave the moderation queue and go to the puzzle lobby, where approved puzzles are listed">Go to the puzzle lobby →</a>
   </template>
 </main>
 `;

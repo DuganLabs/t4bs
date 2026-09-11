@@ -221,6 +221,15 @@ export function renderPage(ctx, assets) {
     admin: ctx.admin,
   };
 
+  /* submit / moderate / admin ship as their own lazily-imported chunks,
+     so the browser cannot know about them until the hydrate bundle has
+     run. On a direct hit to one of those routes we already know which
+     chunk is wanted, so name it in <head> and let it download in
+     parallel with the hydrate bundle rather than one round trip behind
+     it. Empty for every other route, and empty when the manifest
+     couldn't be read — nothing here is load-bearing. */
+  const viewPreloads = [assets.views?.[ctx.route]].filter(Boolean);
+
   const layoutCtx = {
     title: TITLES[ctx.route] ?? TITLES["lobby"],
     description: SITE_DESCRIPTION,
@@ -228,6 +237,7 @@ export function renderPage(ctx, assets) {
     route: ctx.route,
     cssAssets: assets.css,
     jsAsset: assets.js,
+    viewPreloads,
     ssrStateJson: safeJson(ssrState),
   };
 

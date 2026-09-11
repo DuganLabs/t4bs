@@ -112,7 +112,7 @@ export function createLobby({
   const dailyCat = h("strong");
   const dailyBy  = h("small");
   bindText(dailyCat, () => d()?.category || "");
-  bindText(dailyBy,  () => d() ? `${d().day} · counts toward your streak` : "");
+  bindText(dailyBy,  () => d() ? `${d().day} · one attempt · counts toward your streak` : "");
   const dailyBtn = h("button", {
     type: "button",
     "data-bn-action": "lobby-daily",
@@ -124,9 +124,22 @@ export function createLobby({
     dailyBy,
   );
   bindAttr(dailyBtn, "aria-label", () => d()
-    ? `Play today's puzzle, ${d().category}. One attempt — it counts toward your streak.`
+    ? `Play today's puzzle, ${d().category}. This category is fixed for everyone today. One attempt — it counts toward your streak.`
     : "Play today's puzzle");
   bindHidden(dailyBtn, () => done() || !loaded());
+
+  /* The card is a launcher, not a picker — but it shares the free-play
+     cards' visual, so it kept being read as one ("still can't change
+     from film titles to motivational"). The behaviour is correct and
+     must stay: the daily is server-picked per UTC day and recorded
+     once, which is the only thing that makes the streak mean anything.
+     So the card says so, and hands the reader on to the shelf that DOES
+     let them choose. */
+  const dailyNote = h("p", { "data-bn-region": "daily-note" },
+    "Everyone gets this same category today — it isn't a choice. ",
+    "To pick your own, use free play below.",
+  );
+  bindHidden(dailyNote, () => done() || !loaded());
 
   // (c) Loading skeleton while /api/daily is in flight.
   const loadingCard = h("div", { "data-bn-region": "daily-loading", "aria-hidden": "true" });
@@ -136,9 +149,10 @@ export function createLobby({
     "aria-label": "Today's puzzle",
     "data-bn-region": "daily",
   },
-    h("p", { "data-bn-region": "daily-label" }, "Today's puzzle"),
+    h("p", { "data-bn-region": "daily-label" }, "Today's puzzle · set by the server"),
     doneCard,
     dailyBtn,
+    dailyNote,
     loadingCard,
     nextHint,
   );
@@ -175,9 +189,10 @@ export function createLobby({
     "aria-labelledby": "lobby-free-title",
     "data-bn-region": "free-play",
   },
-    h("h2", { id: "lobby-free-title" }, "Free play"),
+    h("h2", { id: "lobby-free-title" }, "Free play · pick any category"),
     h("p", { "data-bn-region": "free-note" },
-      "Practice rounds. Replay anything, as often as you like — they never touch your streak."),
+      "This is where you choose. Every approved category, replayable as "
+      + "often as you like — they never touch your streak."),
     freeList,
   );
 

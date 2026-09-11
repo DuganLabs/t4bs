@@ -59,7 +59,7 @@ import { nativeShare, mintShareCard, composeShareText } from "@basenative/share/
 
 import { api } from "../../lib/api.js";
 import { groupLobby } from "../../lib/game.js";
-import { bnAlert, mount, h } from "../../lib/dom.js";
+import { bnAlert, bnPending, bnSkeleton, mount, h } from "../../lib/dom.js";
 import { createHeader }    from "../../components/header.js";
 import { createToast, makeToaster } from "../../components/toast.js";
 import { createHelpModal } from "../../components/help-modal.js";
@@ -164,7 +164,31 @@ effect(() => {
   else if (r.name === "submit")   view.set("submit");
   else if (r.name === "moderate") view.set("moderate");
   else if (r.name === "admin")    view.set("admin");
+
+  /* Keep <body data-route> — which layout.js stamps server-side — in
+     step with the client router. styles.css keys the play view's
+     keyboard-sized bottom padding off `body[data-route="play"] #app`,
+     so one rule now covers the SSR paint and every client-side
+     navigation; the shell no longer carries a second, separately
+     maintained copy of that padding. */
+  if (typeof document !== "undefined" && document.body) document.body.dataset.route = r.name;
 });
+
+/* Leave /play when there is no round to show.
+
+   /play is the one route that genuinely cannot be deep-linked on its
+   own: a session is created by POST, never by a GET, so a bare /play
+   with no ?play=/?daily= and nothing saved has nothing to render. The
+   shareable forms — /play?play=<id> and /play?daily=1 — do work, and
+   decidePlayBoot resolves them before this is ever reached.
+
+   The bounce REPLACES the history entry instead of pushing one. It used
+   to push, so the lobby's Back button went to /play, which bounced to
+   the lobby again — the user was pinned to the page with no way back to
+   wherever they came from. */
+function leavePlay() {
+  router.navigate("/", { replace: true });
+}
 
 /* ── Stats + session resume via @basenative/persist ───────────────── */
 const STATS_KEY   = "t4bs:stats";
@@ -206,11 +230,51 @@ async function recordResultPersist(won, finalScore, category, mode) {
 if (!SSR.lobby) {
   api.listPuzzles().then(lobby.set).catch(e => error.set(String(e.message || e)));
 }
-if (!SSR.user) {
-  api.me().then(r => user.set(r.user)).catch(() => {});
-}
 if (!SSR.daily) {
   api.daily().then(daily.set).catch(() => {});
+}
+
+/* Categories for the submit form's combobox.
+
+   These never needed fetching. renderSsr() already shapes
+   `ctx.submit.existingCategories` for the /submit route, and the SSR
+   template prints every one of them into the <datalist> — they arrive
+   in the same HTML response as the form. The client view was reading
+   only the lobby listing, so on any entry where that listing wasn't in
+   hand yet the combobox mounted with an empty option set and filled in
+   later, which is exactly the "no category picker in the form" the
+   owner reported (and why it turned up on its own a moment later).
+
+   Reading both sources means the picker is populated on its first
+   paint, with no second round trip to wait on. */
+const ssrCategories = Array.isArray(SSR.submit?.existingCategories)
+  ? SSR.submit.existingCategories
+  : [];
+const knownCategories = () => {
+  const seen = new Set(ssrCategories);
+  for (const g of groupLobby(lobby()) || []) seen.add(g.category);
+  return [...seen].sort((a, b) => a.localeCompare(b));
+};
+
+/* Is `user()` an answer yet, or just "we haven't asked"?
+
+   renderSsr() awaits currentUser() before it emits a byte, so on the SSR
+   path `SSR.user` is a real answer — null included — and the route
+   guards can act on it immediately. On the ?legacy=1 path there is no
+   SSR state at all, so the only answer comes from GET /api/auth/me, and
+   until it lands `user()` is null purely because nobody has looked.
+
+   The guards used to treat that "haven't asked yet" null as "signed
+   out" and navigate to "/" on the spot, which is one of the two reasons
+   /submit, /moderate and /admin could not be opened from a link: the
+   redirect fired a tick before the identity that would have allowed
+   them. */
+const authReady = signal(typeof SSR.route === "string");
+if (!SSR.user) {
+  api.me()
+    .then(r => user.set(r.user))
+    .catch(() => {})
+    .finally(() => authReady.set(true));
 }
 
 /* Reload-safe play-route resume.
@@ -271,7 +335,7 @@ if (!SSR.daily) {
     /* "home" intent OR resume failed/expired: get the user off /play.
        Previously this relied on a fall-through `if (!session()) navigate("/")`
        check that never ran when the resume promise stalled forever. */
-    if (window.location.pathname === "/play") router.navigate("/");
+    if (window.location.pathname === "/play") leavePlay();
   } finally {
     playLoading.set(false);
   }
@@ -330,7 +394,7 @@ async function startDaily() {
     } else {
       error.set(String(err?.message || e));
     }
-    if (window.location.pathname === "/play") router.navigate("/");
+    if (window.location.pathname === "/play") leavePlay();
   }
 }
 
@@ -346,7 +410,7 @@ async function start(puzzleId) {
     error.set(String(/** @type {Error} */ (e)?.message || e));
     /* Don't strand the user on /play with no session — surface the
        error on the lobby where the message + retry are visible. */
-    if (window.location.pathname === "/play") router.navigate("/");
+    if (window.location.pathname === "/play") leavePlay();
   }
 }
 
@@ -430,12 +494,21 @@ const viewSlot = h("div", { "data-bn-region": "view-slot" });
 /* Lazy-mount helper for views that ship in their own chunk. Shows a
    status placeholder while the import resolves, then mounts only if
    the user hasn't navigated away in the meantime. */
-function mountLazy(label, importFn, build) {
-  mount(viewSlot, h("p", {
+function mountLazy(label, importFn, build, placeholder) {
+  /* A spinner plus skeletons shaped like the view that is coming, not a
+     bare line of text. On a phone the submit chunk (form + combobox) is
+     the slowest thing the app loads, and the old "Loading submit…"
+     paragraph read as a finished, empty page — the owner reported the
+     category picker as missing when it was still in flight. */
+  mount(viewSlot, h("div", {
     "data-bn-region": "status",
     role: "status",
     "aria-live": "polite",
-  }, `Loading ${label}…`));
+    "aria-busy": "true",
+  },
+    bnPending(`Loading ${label}…`),
+    ...(placeholder ? [placeholder()] : []),
+  ));
   importFn().then((mod) => {
     if (view() !== label) return;
     mount(viewSlot, build(mod));
@@ -447,10 +520,11 @@ function mountLazy(label, importFn, build) {
   });
 }
 
-const container = h("div", {
-  "data-bn-region": "shell",
-  "data-playing": () => view() === "playing" ? "" : null,
-});
+/* Top-level shell — layout only. It must NOT restate #app's padding or
+   min-height: it is mounted inside #app, so anything it repeats is
+   applied twice and the page visibly re-insets the moment hydration
+   commits (see the [data-bn-region="shell"] note in styles.css). */
+const container = h("div", { "data-bn-region": "shell" });
 container.append(header, viewSlot);
 
 /* Mount BEFORE registering the view-switching effect below. That effect
@@ -469,6 +543,102 @@ mount(root,
   authModal,
 );
 
+/* ── Route access ──────────────────────────────────────────────────
+
+   Every one of /submit, /moderate and /admin used to answer a cold load
+   with `router.navigate("/")`: the URL was rewritten to the lobby
+   before the visitor could read anything, so no route but "/" could be
+   linked to, bookmarked or reloaded. Two separate reasons, both fixed
+   here:
+
+     1. The guard ran before auth was known (see `authReady`), so even a
+        signed-in moderator could be bounced by the race.
+     2. Even when the answer was a genuine "not allowed", redirecting
+        threw away the destination. Signing in from the lobby then left
+        the user on the lobby, with nothing connecting the sign-in to
+        the queue they had actually asked for.
+
+   So the route now HOLDS. A guarded view renders its own gate in place
+   — still at /moderate, still reloadable — and the auth modal opens
+   over it. `user` is a signal this effect reads, so a successful
+   sign-in re-runs it and the real view mounts on the URL the visitor
+   came in on. Nothing to remember, nothing to replay. */
+
+/** @type {Record<string, { title: string, allowed: () => boolean, gate: string, denied: string }>} */
+const ROUTE_ACCESS = {
+  submit: {
+    title: "Submit a phrase",
+    allowed: () => !!user(),
+    gate: "Sign in to submit a phrase — it goes to the moderation queue for review.",
+    denied: "",
+  },
+  moderate: {
+    title: "Moderation queue",
+    allowed: () => !!(user()?.isModerator || user()?.isAdmin),
+    gate: "Sign in to open the moderation queue.",
+    denied: "The moderation queue is for moderators. Your account doesn't have that yet.",
+  },
+  admin: {
+    title: "Moderator administration",
+    allowed: () => !!user()?.isAdmin,
+    gate: "Sign in to manage moderators.",
+    denied: "Moderator administration is for admins only.",
+  },
+};
+
+/** A dead end that still tells the user where they are and offers a way
+ *  on. Rendered as a real <main> with a heading: it replaces the view,
+ *  so if it were a bare <section> the page would lose its only main
+ *  landmark — the same rule tests/ssr-audit.test.js holds every SSR
+ *  route to. */
+function mountNotice(title, message) {
+  const alert = bnAlert({ variant: "warning" });
+  alert.content.textContent = message;
+  mount(viewSlot, h("main", {
+    "aria-labelledby": "gate-title",
+    "data-bn-view": "gate",
+  },
+    h("h1", { id: "gate-title", class: "sr-only" }, title),
+    h("section", { "data-bn-region": "gate", "aria-live": "polite" },
+      h("p", { "data-bn-region": "sticky", "data-bn-variant": "narrow" }, title),
+      alert.el,
+      h("a", { href: "/", "data-bn-action": "gate-lobby" }, "Go to the puzzle lobby"),
+    ),
+  ));
+}
+
+/**
+ * Decide whether `routeName` may render right now.
+ * Mounts the appropriate gate and returns false when it may not.
+ *
+ * @param {string} routeName
+ * @returns {boolean} true when the real view should mount
+ */
+function canEnter(routeName) {
+  const access = ROUTE_ACCESS[routeName];
+  if (!access) return true;
+  if (access.allowed()) return true;
+
+  if (!authReady()) {
+    // Still asking who this is — say so rather than guessing "nobody".
+    mount(viewSlot, h("div", { role: "status", "aria-live": "polite", "aria-busy": "true" },
+      bnPending("Checking your access…"),
+    ));
+    return false;
+  }
+
+  if (!user()) {
+    // Signed out: stay on this URL so signing in lands here, not home.
+    mountNotice(access.title, access.gate);
+    authOpen.set(true);
+    return false;
+  }
+
+  // Signed in, but not enough — an explanation beats a silent redirect.
+  mountNotice(access.title, access.denied || access.gate);
+  return false;
+}
+
 effect(() => {
   const v = view();
   if (v === "lobby") {
@@ -482,51 +652,43 @@ effect(() => {
       },
     }));
   } else if (v === "submit") {
-    if (!user()) {
-      router.navigate("/");
-      authOpen.set(true);
-      return;
-    }
+    if (!canEnter("submit")) return;
     mountLazy("submit", () => import("../../views/submit.js"), (mod) => mod.createSubmit({
-      existingCategories: () => groupLobby(lobby())?.map(g => g.category) || [],
+      existingCategories: knownCategories,
       onCancel: () => router.navigate("/"),
       onSubmitted: () => {
         api.listPuzzles().then(lobby.set).catch(() => {});
         router.navigate("/");
       },
       toaster,
-    }));
+    }), () => bnSkeleton({ height: "3rem", count: 4 }));
   } else if (v === "moderate") {
-    if (!(user()?.isModerator || user()?.isAdmin)) {
-      router.navigate("/");
-      return;
-    }
+    if (!canEnter("moderate")) return;
     mountLazy("moderate", () => import("../../views/moderate.js"), (mod) => mod.createModerate({
       toaster,
       goLobby: () => router.navigate("/"),
       onLobbyChange: () => api.listPuzzles().then(lobby.set).catch(() => {}),
-    }));
+    }), () => bnSkeleton({ height: "4rem", count: 3 }));
   } else if (v === "admin") {
-    if (!user()?.isAdmin) {
-      router.navigate("/");
-      return;
-    }
+    if (!canEnter("admin")) return;
     mountLazy("admin", () => import("../../views/admin.js"), (mod) => mod.createAdmin({
       currentHandle: user()?.handle,
       toaster,
       goLobby: () => router.navigate("/"),
-    }));
+    }), () => bnSkeleton({ height: "2.5rem", count: 4 }));
   } else if (v === "playing") {
     if (!session()) {
       if (playLoading()) {
         mount(viewSlot,
-          h("p", { role: "status", "aria-live": "polite" }, "Loading round…"),
+          h("div", { role: "status", "aria-live": "polite", "aria-busy": "true" },
+            bnPending("Loading round…"),
+          ),
         );
       } else {
         /* Boot resolver gave up but route still says /play — flip back
            to the lobby instead of dead-ending here. */
         mount(viewSlot);
-        if (window.location.pathname === "/play") router.navigate("/");
+        if (window.location.pathname === "/play") leavePlay();
       }
       return;
     }
