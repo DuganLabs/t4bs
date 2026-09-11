@@ -20,7 +20,10 @@ import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const playSource = readFileSync(join(here, "play.js"), "utf8");
+const stripComments = (src) =>
+  src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1 ");
+
+const playSource = stripComments(readFileSync(join(here, "play.js"), "utf8"));
 
 const require_ = createRequire(import.meta.url);
 const keyboardSource = readFileSync(
