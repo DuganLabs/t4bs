@@ -25,10 +25,16 @@ describe("helpDialogHtml", () => {
     assert.match(html, /data-tone="help"/);
     assert.match(html, /data-bn-region="subtitle"/);
     assert.match(html, /data-bn-region="help-body"/);
-    assert.match(html, /data-bn-button="primary"/);
-    assert.match(html, /data-bn-action="help-close"/);
+    /* The close button is @basenative/components' renderButton() now,
+       not T4BS's retired [data-bn-button] vocabulary. */
+    assert.match(html, /<button data-bn="button" data-variant="primary"[^>]*data-bn-action="help-close"/);
     assert.match(html, />HOW TO PLAY</);
     assert.match(html, />Got it</);
+  });
+
+  it("wraps its content in a renderCard() article, the shared modal card chrome", () => {
+    const html = helpDialogHtml();
+    assert.match(html, /<article data-bn="card"/);
   });
 
   it("has no close-X button (closable: false, matching the previous design)", () => {

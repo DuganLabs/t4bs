@@ -1,13 +1,14 @@
 /* SUBMIT view — semantic mirror of src/bn/views/submit.js (SSR).
 
    <main data-bn-view="submit"> with a real <form>, <fieldset>, <legend>,
-   <label>, <input>, <datalist>, and <output role="alert">. The combobox
-   from @basenative/combobox sits inside the category <label>; the live
-   tile preview is a <section data-bn-region="preview">. */
+   <label>, <input> and <datalist>. The combobox from
+   @basenative/combobox sits inside the category <label>; the live tile
+   preview is a <section data-bn-region="preview">; the error box and
+   both buttons come from @basenative/components. */
 
 import { signal, computed, effect } from "@basenative/runtime";
 import { Combobox } from "@basenative/combobox";
-import { h } from "../lib/dom.js";
+import { bnAlert, bnButton, h } from "../lib/dom.js";
 import { bindDisabled, bindHidden, bindList, bindText } from "../lib/bind.js";
 import { api } from "../lib/api.js";
 
@@ -93,13 +94,13 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
     : "No starting hints. Players solve it cold.",
   );
 
-  /* Error output. */
-  const errBox = h("output", {
-    "data-bn-region": "error",
-    role: "alert",
-    "data-bn-bind": "submit-error",
-  });
-  bindText(errBox, () => err() || "");
+  /* Error — @basenative/components' alert. The error variant already
+     carries role="alert" (the same assertive announcement the bare
+     <output role="alert"> was hand-asserting), and the server's message
+     goes into the escaped text slot. */
+  const errAlert = bnAlert({ variant: "error" });
+  const errBox = errAlert.el;
+  bindText(errAlert.content, () => err() || "");
   bindHidden(errBox, () => !err());
 
   /* Phrase input. */
@@ -115,20 +116,19 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
     onInput: (e) => phrase.set(e.target.value),
   });
 
-  const submitBtn = h("button", {
+  const submitBtn = bnButton("SUBMIT FOR REVIEW", {
+    variant: "primary",
     type: "submit",
-    "data-bn-button": "primary",
-    "data-bn-action": "submit-confirm",
+    attrs: 'data-bn-action="submit-confirm"',
   });
   bindText(submitBtn, () => busy() ? "…" : "SUBMIT FOR REVIEW");
   bindDisabled(submitBtn, () => busy() || !category() || !phrase());
 
-  const cancelBtn = h("button", {
-    type: "button",
-    "data-bn-button": "secondary",
-    "data-bn-action": "submit-cancel",
+  const cancelBtn = bnButton("Cancel", {
+    variant: "secondary",
+    attrs: 'data-bn-action="submit-cancel"',
     onClick: onCancel,
-  }, "Cancel");
+  });
 
   const form = h("form", {
     "data-bn-region": "form",

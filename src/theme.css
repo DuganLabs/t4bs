@@ -23,7 +23,11 @@
      ([data-bn-region="end-overlay"] > article, line ~126). */
   --bn-color-surface: #0C0B09;
   --bn-color-surface-subtle: #15130F;
-  --bn-color-surface-muted: #1E1C18;
+  /* -muted is upstream's generic hover tone (secondary/ghost buttons,
+     menu items, dialog-close). #242018 is the hover T4BS's buttons
+     already used, so pointing the token at it keeps every hovered
+     surface in the app on one value. */
+  --bn-color-surface-muted: #242018;
   --bn-color-surface-raised: #1C1916;
   --bn-color-surface-inset: #0C0B09;
   --bn-color-surface-inverse: #F0EDE4;
@@ -55,6 +59,34 @@
   --bn-color-accent-500: #E8920A;
   --bn-color-accent-600: #E8920A;
 
+  /* Primary — what [data-bn="button"][data-variant="primary"] paints
+     itself with. Same accent orange, with the -700 step carrying the
+     hover lift T4BS's buttons have always had (#FFA830). Note upstream
+     aliases --bn-color-accent-* TO --bn-color-primary-*, so these are
+     declared after the accent block above purely for readability; each
+     name is set explicitly and neither inherits from the other here. */
+  --bn-color-primary-500: #E8920A;
+  --bn-color-primary-600: #E8920A;
+  --bn-color-primary-700: #FFA830;
+
+  /* Foreground on a filled brand box (components 0.8.0). Accent orange
+     is light: #FFFFFF on #E8920A is 2.46:1, well under WCAG 1.4.3's
+     4.5:1. #1A0A00 is 7.86:1 — the same near-black T4BS's own buttons
+     and the keyboard's ENTER key already use. Before these tokens
+     existed, --bn-color-white was hardcoded into the component CSS and
+     this file had nothing to point at, which is why every button in
+     this app was hand-rolled as [data-bn-button] instead. */
+  --bn-color-on-primary: #1A0A00;
+  --bn-color-on-accent: #1A0A00;
+  /* Error red #E84444 is light too: the page fg #F0EDE4 lands at 3.36:1
+     on it. The same near-black is 4.91:1. */
+  --bn-color-on-error: #1A0A00;
+
+  /* Control height — T4BS's 44px minimum tap target (WCAG 2.5.5), the
+     min-height its buttons and inputs have always carried. Upstream
+     defaults to 2.5rem/40px. */
+  --bn-control-height: 44px;
+
   /* Status — reuse the tile-state palette from CLAUDE.md so any
      future alert/badge/toast adoption inherits the same greens/
      yellows/reds already on screen during play. */
@@ -72,9 +104,16 @@
 
   --bn-color-error-500: #E84444;
   --bn-color-error-600: #E84444;
-  --bn-color-error-bg: rgb(232 68 68 / 0.12);
-  --bn-color-error-border: rgb(232 68 68 / 0.4);
-  --bn-color-error-text: #E84444;
+  /* -bg/-border/-text are what [data-bn="alert"][data-variant="error"]
+     paints itself with. Set to the exact rgba/hex triple T4BS's own
+     [data-bn-region="error"] box has always used (styles.css), so the
+     error notices on lobby / submit / moderate / admin are unchanged on
+     screen now that the box is the package's alert. #FF6E6E measures
+     6.77:1 on that tint over the page background and 5.90:1 on the same
+     tint over a card — comfortably AA both ways. */
+  --bn-color-error-bg: rgb(255 77 77 / 0.08);
+  --bn-color-error-border: rgb(255 77 77 / 0.3);
+  --bn-color-error-text: #FF6E6E;
   /* --bn-color-error-fg (components 0.6.0): the text-safe error color
      [data-bn="field-error"] reads — same red as -600/-text above, no
      separate value needed. */
@@ -202,8 +241,9 @@
        instead (#F0EDE4 on #E8920A — axe-measured 2.1:1, fails AA). Set
        explicitly here, and belt-and-suspenders as a plain `color` rule
        on `.bn-kb-key--enter` in styles.css, matching the 7.86:1
-       data-bn-button="primary" text color already used everywhere else
-       an accent-orange background needs readable text. */
+       --bn-color-on-primary text color (this file, above) now used
+       everywhere else an accent-orange background needs readable
+       text. */
     --kb-key-primary-fg: #1A0A00;
   }
 }

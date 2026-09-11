@@ -7,7 +7,14 @@
    lobby is usable with JavaScript disabled (issue #24). When the SPA
    hydrates, mount() replaces #app's children with the imperative tree
    that uses <button> + signal-driven onclick — so the anchors are a
-   purely SSR-time degradation surface, no hydration mismatch. */
+   purely SSR-time degradation surface, no hydration mismatch.
+
+   The error notice is @basenative/components' renderAlert(); the
+   `{{ error }}` marker sits in its content slot and is interpolated —
+   and escaped — by @basenative/server at render time, exactly as it was
+   in the hand-written <p>. */
+
+import { renderAlert } from "@basenative/components";
 
 export default `<main aria-labelledby="lobby-title" data-bn-view="lobby">
   <h1 id="lobby-title">Pick a round</h1>
@@ -25,7 +32,7 @@ export default `<main aria-labelledby="lobby-title" data-bn-view="lobby">
   </section>
 
   <template @if="error">
-    <p role="alert" data-bn-region="error">{{ error }}</p>
+    ${renderAlert("{{ error }}", { variant: "error" })}
   </template>
 
   <section aria-labelledby="lobby-list-title">

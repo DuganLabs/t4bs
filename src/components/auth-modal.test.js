@@ -60,10 +60,16 @@ describe("authDialogHtml", () => {
     assert.match(html, /data-bn-region="title"/);
     assert.match(html, /data-tone="auth"/);
     assert.match(html, /data-bn-region="subtitle"/);
-    assert.match(html, /data-bn-button="secondary"/);
-    assert.match(html, /data-bn-action="auth-cancel"/);
+    /* The cancel button is @basenative/components' renderButton() now,
+       not T4BS's retired [data-bn-button] vocabulary. */
+    assert.match(html, /<button data-bn="button" data-variant="secondary"[^>]*data-bn-action="auth-cancel"/);
     assert.match(html, />SIGN IN</);
     assert.match(html, />Cancel</);
+  });
+
+  it("wraps its content in a renderCard() article, the shared modal card chrome", () => {
+    const html = authDialogHtml();
+    assert.match(html, /<article data-bn="card"/);
   });
 
   it("has no close-X button (closable: false, matching the previous design)", () => {
