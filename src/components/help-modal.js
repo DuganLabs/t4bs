@@ -27,9 +27,10 @@ const HELP_CONTENT = `
   <div data-bn-region="help-body">
     <p><b>1 &middot; Type into tiles. </b>Pick a word, type its letters into the tiles. Press Enter or tap GO.</p>
     <p><b data-tone="green">2 &middot; Greens lock in. </b>Letters in the right spot stay revealed across attempts. Letters known to be in the phrase pile up below.</p>
-    <p><b data-tone="yellow">3 &middot; Stake tiles 2&times;. </b>Tap any tile you've typed before submitting — right pays double, wrong costs double.</p>
-    <p><b data-tone="green">4 &middot; Cold solves earn ⚡. </b>Solve a word with no wrong attempts → tap any unrevealed tile in any unsolved word for a free letter.</p>
-    <p><b data-tone="red">5 &middot; ALL IN. </b>Shove the whole phrase. Right = +8 × every unrevealed tile. Wrong = game over.</p>
+    <p><b data-tone="yellow">3 &middot; Read the keyboard. </b>Green key (&check;) = confirmed in this word. Gold key (&#9670;) = it's elsewhere in the phrase, not this word — still worth trying here. Dark key (&#10005;) = not in this word. Each state has its own mark as well as its own colour, and nothing is ever locked out for the next word.</p>
+    <p><b data-tone="yellow">4 &middot; Stake tiles 2&times;. </b>Tap any tile you've typed before submitting — right pays double, wrong costs double.</p>
+    <p><b data-tone="green">5 &middot; Cold solves earn ⚡. </b>Solve a word with no wrong attempts → tap any unrevealed tile in any unsolved word for a free letter.</p>
+    <p><b data-tone="red">6 &middot; ALL IN. </b>Shove the whole phrase. Right = +8 × every unrevealed tile. Wrong = game over.</p>
   </div>
   <button type="button" data-bn-button="primary" data-bn-action="help-close">Got it</button>
 `;

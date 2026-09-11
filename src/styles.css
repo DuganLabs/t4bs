@@ -306,15 +306,49 @@ button[data-bn-button][data-bn-variant="back"] { max-width: 300px; margin-top: 1
   background: #2C2925; color: #FF6E6E; border: 1px solid rgba(255,77,77,.3);
 }
 
-/* @basenative/keyboard theming */
+/* @basenative/keyboard theming.
+
+   Every state color below is paired with its OWN -fg token, not left
+   to inherit the package default. That default pairing is exactly how
+   the ENTER key bug happened (see the comment below) and how two more
+   were found sitting right next to it, both silently broken by the
+   same "override the bg token, forget the fg token" shape:
+     green:  white (#FFFFFF, package default --kb-key-green-fg) on the
+             T4BS green #4EAF7C below → 2.71:1, fails AA (4.5:1).
+     absent: #5A5550 on #1E1C18 (both package defaults — untouched by
+             T4BS, so this one shipped broken from day one) → 2.31:1,
+             fails AA. The package's own styles.css header comment
+             claims 5.0:1 for this exact pairing; recomputing the WCAG
+             relative-luminance formula by hand puts it at 2.31:1 — the
+             comment was never actually checked against the formula.
+   Every ratio here was computed from the WCAG 2.x relative-luminance
+   formula (same formula a browser's own contrast checker uses), not
+   eyeballed — see the getKeyStateColors() test in game.test.js for a
+   plain-JS re-implementation that keeps these numbers honest. */
 .bn-kb {
   --kb-bg: #0C0B09;
   --kb-key-bg: #3A3530;
   --kb-key-fg: #F0EDE4;
   --kb-key-active: #5A5550;
+
+  /* green ("in this word") — #0A1F12 on #4EAF7C = 6.36:1. Reuses the
+     same dark-green-on-green pairing .bn-admin-btn--ok already uses,
+     rather than inventing a new value. */
   --kb-key-green: #4EAF7C;
+  --kb-key-green-fg: #0A1F12;
+
+  /* yellow ("elsewhere in the phrase, not this word") — package
+     default fg #1F1700 already cleared AA against this bg (8.82:1);
+     restated explicitly here so it's paired the same way as the other
+     three states instead of relying on nobody re-overriding it later. */
   --kb-key-yellow: #D4B445;
+  --kb-key-yellow-fg: #1F1700;
+
+  /* absent ("not in this word") — #988570 on #1E1C18 = 4.80:1. Reuses
+     --bn-color-text-muted's value (theme.css) instead of a one-off. */
   --kb-key-absent: #1E1C18;
+  --kb-key-absent-fg: #988570;
+
   --kb-key-radius: 5px;
   --kb-min-tap: 44px;
 }
@@ -324,6 +358,31 @@ button[data-bn-button][data-bn-variant="back"] { max-width: 300px; margin-top: 1
    directly on the class (theme.css sets the token too), same
    #1A0A00/7.86:1 pairing data-bn-button="primary" uses. */
 .bn-kb-key--enter { color: #1A0A00; }
+
+/* Non-colour cues for the four keyboard states (WCAG 1.4.1 — state
+   can't be conveyed by colour alone). Each state gets its own small
+   glyph badge, distinct from the other two, on top of its background
+   color; game.js's KEY_STATE_INFO keeps the matching aria-label
+   suffixes in sync for screen-reader users (applied in play.js, since
+   @basenative/keyboard's own hydrate() only ever toggles classes).
+   "Untried" needs no cue of its own — it's the plain, unmarked key,
+   which is itself the distinguishing signal (nothing has been said
+   about that letter yet). */
+.bn-kb [data-bn="kb-key"] { position: relative; }
+.bn-kb-key--green::after,
+.bn-kb-key--yellow::after,
+.bn-kb-key--absent::after {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+.bn-kb-key--green::after  { content: "✓"; color: var(--kb-key-green-fg); }
+.bn-kb-key--yellow::after { content: "◆"; color: var(--kb-key-yellow-fg); }
+.bn-kb-key--absent::after { content: "✕"; color: var(--kb-key-absent-fg); }
 
 /* ENGINE-OWNED HIDE/SHOW (used by signal templates) */
 .is-hidden { display: none !important; }

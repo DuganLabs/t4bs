@@ -9,6 +9,7 @@ import {
   openSlots,
   fullCount,
   computeKeyStatus,
+  KEY_STATE_INFO,
   groupLobby,
   dailySeed,
   dailyPuzzle,
@@ -68,9 +69,15 @@ describe("fullCount", () => {
 });
 
 describe("computeKeyStatus", () => {
+  /* Owner's ruling (2026-09-10), authoritative: a letter ruled out in
+     one word must stay usable — and correctly styled — in a later
+     word. `active` is the word the player is currently entering;
+     "absent" is scoped to it alone (see the long comment on
+     computeKeyStatus in game.js for why). */
   const baseSession = { words: [4, 3], category: "X" };
   const emptyArgs = {
     session: baseSession,
+    active: 0,
     locked: [{}, {}],
     presentGlobal: [],
     absentByWord: [[], []],
@@ -96,7 +103,7 @@ describe("computeKeyStatus", () => {
     assert.equal(status.R, "green");
   });
 
-  it("marks present-global letters yellow when not already green", () => {
+  it("marks present-global letters yellow ('elsewhere') when not already green", () => {
     const status = computeKeyStatus({
       ...emptyArgs,
       locked: [{ 0: "P" }, {}],
@@ -106,37 +113,6 @@ describe("computeKeyStatus", () => {
     assert.equal(status.P, "green");
   });
 
-  it("marks a letter absent only when ruled out in every word the player has tried", () => {
-    /* "Q" is in absentByWord[0] but absentByWord[1] is empty (untried).
-       Per the rule, absent only fires when every TRIED set contains it.
-       Word 1 has been tried (set is non-empty), word 2 hasn't, so Q is
-       absent. */
-    const status = computeKeyStatus({
-      ...emptyArgs,
-      absentByWord: [["Q"], []],
-    });
-    assert.equal(status.Q, "absent");
-  });
-
-  it("does not mark absent if no word has been tried yet", () => {
-    const status = computeKeyStatus({
-      ...emptyArgs,
-      absentByWord: [[], []],
-    });
-    assert.equal(status.Z, undefined);
-  });
-
-  it("does not mark absent if any tried word still considers the letter possible", () => {
-    /* Tried in word 1 → ruled out there. Tried in word 2 → NOT ruled
-       out (set non-empty but doesn't contain Q). So Q is still possible
-       in word 2; can't mark absent globally. */
-    const status = computeKeyStatus({
-      ...emptyArgs,
-      absentByWord: [["Q"], ["X"]],
-    });
-    assert.equal(status.Q, undefined);
-  });
-
   it("green wins over yellow even if presentGlobal is processed last", () => {
     const status = computeKeyStatus({
       ...emptyArgs,
@@ -144,6 +120,139 @@ describe("computeKeyStatus", () => {
       presentGlobal: ["A"],
     });
     assert.equal(status.A, "green");
+  });
+
+  it("marks a letter absent when it's ruled out in the ACTIVE word", () => {
+    const status = computeKeyStatus({
+      ...emptyArgs,
+      active: 0,
+      absentByWord: [["Q"], []],
+    });
+    assert.equal(status.Q, "absent");
+  });
+
+  it("a letter ruled out in word 1 is usable — and correctly styled — in word 2", () => {
+    /* This is the owner's exact bug report: "Q" was ruled out while
+       entering word 1 (absentByWord[0]). Word 2 hasn't been tried and
+       has said nothing about Q either way. Moving the active word to
+       word 2 must NOT carry word 1's "absent" verdict forward — Q
+       renders untried (no status, no "dead key" styling), same as any
+       other letter nobody's tried yet, and nothing about it prevents
+       typing it (computeKeyStatus never sets a `disabled` flag). */
+    const wordOneAbsent = { ...emptyArgs, active: 0, absentByWord: [["Q"], []] };
+    assert.equal(computeKeyStatus(wordOneAbsent).Q, "absent");
+
+    const movedToWordTwo = { ...wordOneAbsent, active: 1 };
+    assert.equal(computeKeyStatus(movedToWordTwo).Q, undefined);
+  });
+
+  it("a letter absent from the whole phrase renders 'absent' ('not in phrase') for the word that ruled it out", () => {
+    const status = computeKeyStatus({
+      ...emptyArgs,
+      active: 0,
+      presentGlobal: [], // never found present anywhere
+      absentByWord: [["Z"], []],
+    });
+    assert.equal(status.Z, "absent");
+  });
+
+  it("a letter present later in the phrase renders the 'elsewhere' state, not 'absent', even where it was ruled out", () => {
+    /* "L" was ruled out of the ACTIVE word specifically, but a later
+       (already-tried) word revealed it's present in the phrase
+       (presentGlobal). The ruling: highlight this differently from
+       plain "absent" — "not in this word but in the phrase". */
+    const status = computeKeyStatus({
+      ...emptyArgs,
+      active: 0,
+      presentGlobal: ["L"],
+      absentByWord: [["L"], []],
+    });
+    assert.equal(status.L, "yellow");
+  });
+
+  it("makes no absent claim with no single active word (e.g. ALL-IN mode)", () => {
+    /* Without one active word to scope "absent" to, no claim is safe —
+       green/yellow still work, but nothing is marked absent. */
+    const status = computeKeyStatus({
+      ...emptyArgs,
+      active: null,
+      locked: [{ 0: "P" }, {}],
+      presentGlobal: ["E"],
+      absentByWord: [["Q"], ["Q"]],
+    });
+    assert.equal(status.P, "green");
+    assert.equal(status.E, "yellow");
+    assert.equal(status.Q, undefined);
+  });
+});
+
+describe("KEY_STATE_INFO — non-colour cues", () => {
+  it("gives every non-default keyboard state its own glyph and aria suffix", () => {
+    const states = Object.keys(KEY_STATE_INFO);
+    assert.deepEqual(states.sort(), ["absent", "green", "yellow"]);
+    for (const s of states) {
+      assert.ok(KEY_STATE_INFO[s].glyph, `${s} needs a non-empty glyph`);
+      assert.ok(KEY_STATE_INFO[s].ariaSuffix, `${s} needs a non-empty aria suffix`);
+    }
+  });
+
+  it("is distinguishable without colour: no two states share a glyph or an aria suffix", () => {
+    const glyphs = Object.values(KEY_STATE_INFO).map(v => v.glyph);
+    const suffixes = Object.values(KEY_STATE_INFO).map(v => v.ariaSuffix);
+    assert.equal(new Set(glyphs).size, glyphs.length, "glyphs must be unique per state");
+    assert.equal(new Set(suffixes).size, suffixes.length, "aria suffixes must be unique per state");
+  });
+});
+
+describe("keyboard state contrast (WCAG AA, computed — not eyeballed)", () => {
+  /* Plain re-implementation of the WCAG 2.x relative-luminance /
+     contrast-ratio formulas (the same ones a browser's own contrast
+     checker uses), kept in the test file so a future re-theme of
+     src/styles.css's `.bn-kb` block can't silently regress a pairing
+     below AA without a failing test — exactly how the package's own
+     "5.0:1" comment (actually 2.31:1) shipped unnoticed. Values below
+     mirror the .bn-kb block in styles.css and theme.css's `[data-bn=
+     "keyboard"]` block; if either changes, update both. */
+  function srgb(c) {
+    c /= 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  }
+  function luminance(hex) {
+    const n = hex.replace("#", "");
+    const r = parseInt(n.slice(0, 2), 16);
+    const g = parseInt(n.slice(2, 4), 16);
+    const b = parseInt(n.slice(4, 6), 16);
+    return 0.2126 * srgb(r) + 0.7152 * srgb(g) + 0.0722 * srgb(b);
+  }
+  function contrast(a, b) {
+    const [l1, l2] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (l1 + 0.05) / (l2 + 0.05);
+  }
+
+  const AA_NORMAL_TEXT = 4.5;
+
+  const pairs = {
+    "ENTER (#1A0A00 on #E8920A)": ["#1A0A00", "#E8920A"],
+    "green (#0A1F12 on #4EAF7C)": ["#0A1F12", "#4EAF7C"],
+    "yellow (#1F1700 on #D4B445)": ["#1F1700", "#D4B445"],
+    "absent (#988570 on #1E1C18)": ["#988570", "#1E1C18"],
+  };
+
+  for (const [label, [fg, bg]] of Object.entries(pairs)) {
+    it(`${label} clears WCAG AA (${AA_NORMAL_TEXT}:1)`, () => {
+      assert.ok(
+        contrast(fg, bg) >= AA_NORMAL_TEXT,
+        `${label} is ${contrast(fg, bg).toFixed(2)}:1, needs >= ${AA_NORMAL_TEXT}:1`,
+      );
+    });
+  }
+
+  it("documents the two contrast defects this fix corrected (regression guard)", () => {
+    // Previously-shipped pairings that failed AA — the ENTER key was
+    // already fixed before this change; green/absent were not.
+    assert.ok(contrast("#F0EDE4", "#E8920A") < AA_NORMAL_TEXT, "ENTER pre-fix should still read as failing");
+    assert.ok(contrast("#FFFFFF", "#4EAF7C") < AA_NORMAL_TEXT, "green pre-fix (white text) should still read as failing");
+    assert.ok(contrast("#5A5550", "#1E1C18") < AA_NORMAL_TEXT, "absent pre-fix (package default) should still read as failing");
   });
 });
 
