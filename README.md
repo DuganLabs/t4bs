@@ -4,27 +4,33 @@ One subject. One phrase. No mercy.
 
 A Wordle-killer with poker mechanics. The server holds the answer; the client only ever sees per-tile feedback. Vegas-style per-tile wagers, agency-driven cascade rewards, and an all-in shove that ends the round one way or the other.
 
-- Stack: React 18 + Vite 5, Cloudflare Pages + Pages Functions + D1, WebAuthn passkeys.
+- Stack: BaseNative signal-driven SSR (`@basenative/server` + `@basenative/router` + `@basenative/runtime`) on Cloudflare Pages + Pages Functions + D1, WebAuthn passkeys via `@basenative/auth-webauthn`. No React — the pre-BaseNative React SPA (`src/App.jsx`) was fully removed during the SSR migration.
 - Live: <https://t4bs.com>
 
 ## Architecture
 
 ```
-┌──── React app (static, Cloudflare Pages) ────┐
-│  src/App.jsx, src/lib/api.js                 │
-└─────────────┬────────────────────────────────┘
+┌──── Cloudflare Pages Functions: SSR dispatch ─────────┐
+│  functions/_middleware.js — every GET/HEAD (default)  │
+│  src/bn/server/render.js  — renders lobby/play/submit/ │
+│    moderate/admin via @basenative/server               │
+│  ?legacy=1 escapes to dist/index.html + src/main.js    │
+│    (also BaseNative-based, not React)                  │
+└─────────────┬───────────────────────────────────────────┘
+              │  hydrated client: src/bn/client/hydrate.js
               │  /api/*  (same-origin fetch)
               ▼
-┌──── Cloudflare Pages Functions ──────────────┐
-│  functions/api/*  (game, auth, submit, mod)  │
-│  shared/engine.js (pure game logic)          │
-│  functions/_shared/d1.js (D1-backed stores)  │
-└─────────────┬────────────────────────────────┘
+┌──── Cloudflare Pages Functions: API ──────────────────┐
+│  functions/api/*  (game, auth, submit, moderate)       │
+│  shared/engine.js (pure game logic)                    │
+│  functions/_shared/d1.js (D1-backed stores)             │
+│  functions/_shared/og.js (SVG + @resvg/resvg-wasm)      │
+└─────────────┬───────────────────────────────────────────┘
               ▼
-┌──── D1 (SQLite) ─────────────────────────────┐
-│  puzzles, sessions, users, credentials,      │
-│  challenges, user_sessions, submissions       │
-└──────────────────────────────────────────────┘
+┌──── D1 (SQLite) ───────────────────────────────────────┐
+│  puzzles, sessions, users, credentials,                │
+│  challenges, user_sessions, submissions, share_cards    │
+└──────────────────────────────────────────────────────────┘
 ```
 
 The same `shared/engine.js` runs in two places:
@@ -84,7 +90,7 @@ Set the same `[vars]` from `wrangler.toml` in the Pages project's environment va
 - `RP_NAME=TABS`
 - `RP_ID=t4bs.com`
 - `RP_ORIGIN=https://t4bs.com`
-- `ADMIN_HANDLES=warren`        ← comma-separated handles allowed at `/moderate`
+- `ADMIN_HANDLES=wmd`        ← comma-separated handles allowed at `/moderate` (see `wrangler.toml [vars]` for the live value)
 - `SESSION_TTL_DAYS=30`
 
 ### 3. Bind the domain
@@ -114,14 +120,16 @@ See `doppler-template.yaml` for the full reference. (DuganLabs convention: every
 
 ### 5. GitHub Actions
 
-In the GitHub repo (`DuganLabs/t4bs`), add one secret:
+`.github/workflows/deploy.yml` is a thin caller of the `DuganLabs/.github` reusable workflows (`cf-deploy.yml@v2`, `d1-migrate.yml@v2`), authenticated via Doppler. In the GitHub repo (`DuganLabs/t4bs`), add:
 
-- `DOPPLER_TOKEN` — a Doppler service token for the `prod` config.
+- `DOPPLER_TOKEN` — a Doppler service token (config `repository`; see `doppler-template.yaml`).
+- `NPM_TOKEN` — passed through to both reusables for `@basenative/*` installs.
 
 Now `git push origin main` will:
-1. Build the static site.
-2. `wrangler pages deploy dist` against your Pages project.
-3. Re-apply `schema.sql` (idempotent — `CREATE TABLE IF NOT EXISTS`).
+1. `cf-deploy.yml` builds the project and runs `wrangler pages deploy dist` against the `t4bs` Pages project.
+2. `d1-migrate.yml` then runs `wrangler d1 migrations apply` against `tabs-db` (idempotent — tracked in the `d1_migrations` table; not a `schema.sql` re-apply).
+
+`ci.yml` (lint/typecheck/test) and `bundle-size.yml` are currently inlined rather than reusable-workflow calls — see `CLAUDE.md`'s Milestone status (M2) for why.
 
 ## Auth
 
@@ -149,37 +157,47 @@ In dev (Vite mock), there's a `dev-login` shortcut that skips the WebAuthn cerem
 
 ```
 .
-├── src/                       React app
-│   ├── App.jsx
+├── src/
+│   ├── bn/                    BaseNative SSR: server templates + client hydrator
+│   │   ├── server/render.js   renderPage() — layout+header+view template composition
+│   │   ├── server/manifest.js reads dist/asset-manifest.json for hashed JS/CSS
+│   │   ├── client/hydrate.js  default entry — hydrates the SSR shell
+│   │   ├── views/             lobby/play/submit/moderate/admin/header/layout templates
+│   │   └── route-table.js     path -> route name, shared with the client router
+│   ├── views/                  client-side signal-driven view renderers (post-hydration)
+│   ├── components/             toast, help-modal, auth-modal
 │   ├── lib/
-│   │   ├── api.js             fetch wrapper
-│   │   └── auth.js            passkey browser helpers
-│   └── main.jsx
-├── shared/                    Pure game logic (used by mock + Functions)
-│   ├── pure.js                evalWord, scoreGuess, openSlots, …
-│   ├── engine.js              startSession, submitGuess, spendCascade, allIn
-│   └── submission.js          submission validation
+│   │   ├── api.js              fetch wrapper
+│   │   └── auth.js             @basenative/auth-webauthn client glue
+│   └── main.js                 `?legacy=1` entry — same boot as hydrate.js minus the SSR seed
+├── shared/                    Pure game logic (used by mock + Functions + SSR)
+│   └── engine.js               startSession, submitGuess, spendCascade, allIn
 ├── server/                    Local Vite dev only
-│   ├── mock.js                middleware mounting engine on /api/*
-│   └── stores-memory.js       in-memory implementations
+│   ├── mock.js                 middleware mounting engine on /api/* (incl. dev-login)
+│   └── stores-memory.js        in-memory implementations
 ├── functions/                 Cloudflare Pages Functions
-│   ├── _middleware.js         security headers
+│   ├── _middleware.js          SSR dispatch (default) + `?legacy=1` escape + security headers
 │   ├── _shared/
-│   │   ├── d1.js              D1-backed engine stores
-│   │   ├── util.js            response helpers, auth context
-│   │   └── webauthn.js        WebAuthn config + helpers
-│   └── api/
-│       ├── puzzles.js
-│       ├── session.js
-│       ├── guess.js
-│       ├── cascade.js
-│       ├── allin.js
-│       ├── submit.js
-│       ├── auth/{register,login}-{options,verify}.js, me.js, logout.js
-│       └── moderate/{pending,decide}.js
+│   │   ├── d1.js               D1-backed engine stores
+│   │   ├── og.js                hand-built SVG + @resvg/resvg-wasm OG renderer
+│   │   ├── ssr.js               wires route-table + src/bn/server/render.js into a Response
+│   │   ├── util.js              response helpers, auth context
+│   │   └── webauthn.js          wraps @basenative/auth-webauthn
+│   ├── api/
+│   │   ├── puzzles.js, session.js, guess.js, cascade.js, allin.js, submit.js
+│   │   ├── auth/                register/login options+verify, me.js, logout.js, dev-login
+│   │   ├── moderate/             pending/decide
+│   │   └── share-cards.js        mint endpoint
+│   ├── og/                       /og/[name].png + /og/score/[id].png
+│   └── s/[id].js                 crawler-facing share landing
 ├── schema.sql                 D1 schema
 ├── seed.sql                   initial puzzles
-├── wrangler.toml              Pages + D1 binding config
-├── .github/workflows/deploy.yml   CI/CD via Doppler
-└── doppler-template.yaml      reference for Doppler secrets
+├── migrations/                D1 migrations (wrangler d1 migrations apply)
+├── wrangler.toml               Pages + D1 binding config
+├── .github/workflows/          deploy.yml (reusables), ci.yml + bundle-size.yml (inlined), lighthouse.yml (reusable), codeql.yml
+└── doppler-template.yaml       reference for Doppler secrets
 ```
+
+---
+
+_Last verified against the code: 2026-09-11 (commit `d1361ec`)._

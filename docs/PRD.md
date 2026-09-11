@@ -1,6 +1,6 @@
 # T4BS — Product Requirements Document
 
-> Status: **draft** · Owner: Warren Dugan · Last updated: 2026-04-26
+> Status: **draft** · Owner: Warren Dugan · Last updated: 2026-09-11 (architecture, milestones, glossary corrected against the code)
 >
 > This PRD is the canonical source of truth for what t4bs is, who it's for, and what it does. Issues and milestones in [DuganLabs/t4bs](https://github.com/DuganLabs/t4bs) reflect this document — when reality drifts, update the doc *and* the issues.
 
@@ -109,24 +109,21 @@ Stored in Cloudflare D1 (`tabs-db`).
 
 ## 7. Architecture
 
-### Today (Apr 2026)
-- Vite SPA (React 18) on Cloudflare Pages.
-- Cloudflare Pages Functions (Workers runtime) for `/api/*`, `/og/*`, `/s/*`.
+### Current (as of 2026-09-11)
+- **BaseNative signal-driven SSR is the default render path**, not a Vite React SPA. `@basenative/server` + `@basenative/router` + `@basenative/runtime` render every route (`src/bn/server/render.js`, `src/bn/views/*`); Vite builds the hydration client (`src/bn/client/hydrate.js`) and a `?legacy=1` fallback entry (`src/main.js`) — both BaseNative-based. There is no `App.jsx` and no React anywhere in the tree; that migration is complete, not a future milestone (see §8, M3).
+- Cloudflare Pages Functions (Workers runtime) for `/api/*`, `/og/*`, `/s/*`, and the SSR dispatch itself (`functions/_middleware.js`).
 - Cloudflare D1 for persistence.
-- Cloudflare KV for OG image cache.
-- WebAuthn auth via `@simplewebauthn/*`.
-- Satori + `@resvg/resvg-wasm` for OG image rendering.
-
-### Target (Phase 3 of [the program](../../../.claude/plans/how-does-anyone-become-sprightly-steele.md))
-- BaseNative SSR runtime replaces Vite SPA shell.
-- `@basenative/router`, `@basenative/components`, `@basenative/keyboard`, `@basenative/og-image`, `@basenative/admin`, `@basenative/persist`, `@basenative/share`, `@basenative/auth` (with WebAuthn adapter).
-- `shared/engine.js` is the only large piece staying bespoke — it encodes the game itself.
+- Cloudflare KV (`OG_CACHE`) for OG image + font/wasm cache.
+- WebAuthn auth via `@basenative/auth-webauthn` (wrapping `@simplewebauthn/server`) — also already adopted, not a target.
+- OG image rendering is hand-built SVG rasterized via `@resvg/resvg-wasm` — **not** satori/`@basenative/og-image`. That package was evaluated and rejected: satori's `harfbuzzjs` dependency reads `self.location.href` at module load, which doesn't exist under the Workers runtime, and neither of its WASM-loading strategies is viable there either (see `functions/_shared/og.js`'s file header for the full writeup).
+- BaseNative packages already in production: `@basenative/router`, `@basenative/components`, `@basenative/keyboard`, `@basenative/admin`, `@basenative/persist`, `@basenative/share`, `@basenative/auth-webauthn`, `@basenative/combobox`, `@basenative/eslint-config`, `@basenative/tsconfig`.
+- `shared/engine.js` is the only large piece that stayed bespoke through the SSR rewrite — it encodes the game itself and is shared unchanged between the SSR path and the mock dev server.
 
 ---
 
 ## 8. Milestones
 
-> Each milestone maps 1:1 to a GitHub milestone. Issues under the milestone reflect the work.
+> Each milestone maps 1:1 to a GitHub milestone. All four (#2-#5) are still open on GitHub as of 2026-09-11; the status below reflects what the code actually does, which is ahead of the tracker in three of the four cases.
 
 ### M0 — Phase 0 stop-gaps (✅ shipped Apr 2026)
 - Real moderator role + DB-driven permissions.
@@ -134,26 +131,24 @@ Stored in Cloudflare D1 (`tabs-db`).
 - Admin promotion UI.
 - **Commit:** `a4fddfe`.
 
-### M1 — BaseNative readiness (planned)
-- New BN packages: `og-image`, `keyboard`, `admin`, `persist`, `share`, `eslint-config`, `tsconfig`, `wrangler-preset`, `doppler`.
-- Each: signal-based API, <5KB where applicable, a11y audit, tests, docs.
-- BaseNative root → 0.4.0.
+### M1 — BaseNative readiness (✅ done, except one item rejected)
+- Adopted and in production: `@basenative/keyboard`, `@basenative/admin`, `@basenative/persist`, `@basenative/share`, `@basenative/auth-webauthn`, `@basenative/combobox`, `@basenative/router`, `@basenative/components`, `@basenative/eslint-config`, `@basenative/tsconfig` — see `package.json` and the import sites in `src/bn/`, `src/main.js`, `src/views/`.
+- `@basenative/og-image` — **rejected, not pending.** Satori's `harfbuzzjs` dependency is incompatible with the Workers runtime (crashes reading `self.location.href`, and its WASM-loading fallback needs runtime `WebAssembly.instantiate(bytes)`, which Workers disallow). `functions/_shared/og.js` ships a hand-built SVG renderer via `@resvg/resvg-wasm` instead — same package this repo already uses successfully for OG rendering via a static WASM import.
+- `wrangler-preset` and `doppler` BaseNative packages: not found in this repo's dependencies or the BaseNative package inventory; dropped from this list as unverifiable.
 
-### M2 — Org uniformity (planned)
-- All DuganLabs projects on shared eslint/tsconfig/wrangler/Doppler stack.
-- Reusable workflows in `DuganLabs/.github`.
-- Sequence: basenative → duganlabs → ralph-station/warren-sys → t4bs → warrendugan → pendingbusiness → greenput.
+### M2 — Org uniformity (mostly done)
+- `deploy.yml` and `lighthouse.yml` already call `DuganLabs/.github` reusable workflows (`cf-deploy.yml@v2`, `d1-migrate.yml@v2`, `lighthouse.yml@v2`) via Doppler-sourced secrets.
+- `ci.yml` and `bundle-size.yml` are still inlined — not blocked on repo visibility (t4bs is public) but on the reusable workflows not authenticating to GitHub Packages, which 401s `npm ci` on any PR that touches the lockfile (every Dependabot PR). `DuganLabs/.github` `v2` reportedly carries the fix; switching these two back to reusables is the remaining work here.
 
-### M3 — t4bs clean rewrite on BaseNative (planned)
-- Same DB, same domain. Migrate views one at a time behind `?next=1`.
-- SSR + streaming. Playable with JS off for first guess (showcase progressive enhancement).
-- View Transitions API for screen changes.
+### M3 — t4bs clean rewrite on BaseNative (✅ done)
+- BaseNative SSR (`src/bn/`) is the default for every route today, not a `?next=1` opt-in. The legacy static shell lives behind `?legacy=1` instead, and even that fallback is BaseNative/signals-based (`src/main.js`), not the original React SPA.
+- Same DB (`tabs-db`), same domain (`t4bs.com`).
+- View Transitions API adoption was not verified in this pass — re-check before claiming it.
 
-### M4 — Polish + launch (planned)
-- Lighthouse 100/100/100/100 on `/play`.
-- A11y audit (axe + manual SR).
-- ≤30KB JS gzipped first paint.
-- BaseNative blog post: "How we rebuilt t4bs on BaseNative."
+### M4 — Polish + launch (open)
+- `lighthouse.yml` currently gates PRs at 80/95/80/95 (perf/a11y/best-practices/seo) against production, not 100/100/100/100 — the ceiling on best-practices/perf is a third-party Cloudflare bot-mitigation script that can't be removed from the repo (see that file's comments).
+- No automated axe-core check runs in CI. Several axe-driven fixes exist as manual, one-off code comments (e.g. `src/bn/views/header.js`, `src/components/header.js`), not a repeatable 0-violations gate.
+- JS-gzip budget is enforced (`bundle-size.yml`, 60KB budget, ~31KB actual per that file's comments) but the ≤30KB target and the launch blog post are not verified done here.
 
 ---
 
@@ -172,4 +167,8 @@ Stored in Cloudflare D1 (`tabs-db`).
 - **Stake** — a 2× wager on a single tile letter, consumed on submit.
 - **ALL IN** — a single shove of the entire remaining phrase; max bonus or game over.
 - **House** — the default `submitted_by` value for puzzles bundled with the app.
-- **Cascade** — animation of a correct word locking from left to right.
+- **Cascade** — a spendable letter-reveal token, not an animation. Cold-solving a word on the first attempt (`priorWrongs === 0`) earns one cascade token (`shared/engine.js`'s `startSession`/guess handling sets `cascadeEarned` and increments `sess.tokens`); the player spends a token via `spendCascade(sessionId, wordIndex, letterIndex)` to reveal any unrevealed tile in any unsolved word. See §4.1 and §6 above for the player-facing flow.
+
+---
+
+_Last verified against the code: 2026-09-11 (commit `d1361ec`)._
