@@ -9,12 +9,15 @@
    passkey-vs-dev-login buttons) — none of that belongs in a pure
    string renderer. Attribute-driven visuals are unchanged too: form/
    field/input/hint/error from [data-bn-region="form|field|input|hint|
-   error"], the title accent from [data-bn-region="title"][data-tone=
-   "auth"], buttons from [data-bn-button="primary|secondary"]. */
+   error"] and the title accent from [data-bn-region="title"]
+   [data-tone="auth"]. The buttons are renderButton() and the card that
+   holds the whole thing is renderCard() — T4BS's own
+   [data-bn-button="primary|secondary"] vocabulary is retired. */
 
 import { signal, effect } from "@basenative/runtime";
-import { renderDialog, renderTabs, initTabs } from "@basenative/components";
-import { h, fromHTML } from "../lib/dom.js";
+import { renderButton, renderCard, renderDialog, renderTabs, initTabs } from "@basenative/components";
+import { bnAlert, bnButton, h, fromHTML } from "../lib/dom.js";
+import { bindDisabled, bindHidden, bindText } from "../lib/bind.js";
 import { isPasskeySupported, registerPasskey, loginPasskey, devLogin } from "../lib/auth.js";
 import { isDev } from "../lib/game.js";
 
@@ -67,7 +70,11 @@ export function authDialogHtml() {
     id: "auth-dialog",
     modal: true,
     closable: false,
-    content: `
+    /* renderCard() supplies the modal card — the surface, border,
+       radius and shadow that every T4BS dialog shares — so the dialog
+       element itself is left as the scrim it already was. */
+    content: renderCard({
+      body: `
       <!-- Plain <div>, not <header>: a <header> not nested inside an
            article/aside/main/nav/section computes as a top-level
            "banner" landmark (axe landmark-banner-is-top-level) even
@@ -78,8 +85,9 @@ export function authDialogHtml() {
       </div>
       ${tabsHtml}
       <div data-bn-region="form-slot"></div>
-      <button type="button" data-bn-button="secondary" data-bn-action="auth-cancel">Cancel</button>
+      ${renderButton("Cancel", { variant: "secondary", attrs: 'data-bn-action="auth-cancel"' })}
     `,
+    }),
   });
 }
 
@@ -115,28 +123,25 @@ export function createAuthModal({ open, onClose, onAuthed }) {
     onInput: (e) => handle.set(e.target.value),
   });
 
-  const errBox = h("p", {
-    "data-bn-region": "error",
-    role: "alert",
-    text: () => err() || "",
-    hidden: () => !err(),
-  });
+  /* The error variant of @basenative/components' alert carries
+     role="alert" itself, and the message lands in its escaped text slot
+     instead of being assigned as markup. */
+  const errAlert = bnAlert({ variant: "error" });
+  const errBox = errAlert.el;
+  bindText(errAlert.content, () => err() || "");
+  bindHidden(errBox, () => !err());
 
-  const passkeyBtn = h("button", {
-    type: "submit",
-    "data-bn-button": "primary",
-    disabled: () => busy() || !handle(),
-    text: () => busy() ? "…" : tab() === "login" ? "USE PASSKEY" : "CREATE PASSKEY",
-  });
+  const passkeyBtn = bnButton("USE PASSKEY", { variant: "primary", type: "submit" });
+  bindDisabled(passkeyBtn, () => busy() || !handle());
+  bindText(passkeyBtn, () => busy() ? "…" : tab() === "login" ? "USE PASSKEY" : "CREATE PASSKEY");
 
   const noPasskeyHint = h("p", { "data-bn-region": "hint" }, "This browser doesn't support passkeys.");
 
-  const devBtn = h("button", {
-    type: "button",
-    "data-bn-button": "secondary",
-    disabled: () => busy() || !handle(),
+  const devBtn = bnButton("DEV LOGIN (no passkey)", {
+    variant: "secondary",
     onClick: () => doIt(devLogin),
-  }, "DEV LOGIN (no passkey)");
+  });
+  bindDisabled(devBtn, () => busy() || !handle());
 
   const form = h("form", {
     "data-bn-region": "form",
@@ -157,9 +162,9 @@ export function createAuthModal({ open, onClose, onAuthed }) {
   );
 
   const dlg = /** @type {HTMLDialogElement} */ (fromHTML(authDialogHtml()));
-  /* renderDialog() (components 0.7.0) emits aria-labelledby only for
-     its own `title` slot; this dialog keeps its title inside `content`
-     (see authDialogHtml), so the label is pointed at that h2 here. */
+  /* renderDialog() emits aria-labelledby only for its own `title`
+     slot; this dialog keeps its title inside the card (see
+     authDialogHtml), so the label is pointed at that h2 here. */
   dlg.setAttribute("aria-labelledby", "auth-title");
   dlg.addEventListener("close", onClose);
   dlg.addEventListener("click", (e) => { if (e.target === dlg) onClose(); });

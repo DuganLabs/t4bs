@@ -110,24 +110,30 @@ main[data-bn-view="play"] [data-bn-region="play-sticky"] {
 [data-bn-region="toast"][data-tone="great"]   { background: #1E1C10; color: #FFD700; border: 1px solid rgba(255,215,0,.5); box-shadow: 0 0 28px rgba(255,215,0,.2); }
 [data-bn-region="toast"][data-tone="cascade"] { background: #121E17; color: #4EAF7C; border: 1px solid rgba(78,175,124,.5); }
 
-/* DIALOGS / END-OF-ROUND OVERLAY — attribute-driven card visuals.
-   Native <dialog> for help / auth / future; play's end-of-round still
-   uses <div role="dialog" data-bn-region="end-overlay"> because it's
-   gated by signal-driven `hidden` instead of imperative showModal().
-   Both wrap an <article> that gets the same card chrome. */
-[data-bn-region="end-overlay"] {
-  position: fixed; inset: 0;
-  background: rgba(10,9,7,.92); backdrop-filter: blur(6px);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 100; padding: 16px;
-}
-dialog[open] > article,
-[data-bn-region="end-overlay"] > article {
-  background: #1C1916; border: 1px solid #2C2926; border-radius: 14px;
-  padding: 24px 22px; width: min(420px, 96vw); text-align: center;
-  box-shadow: 0 28px 72px rgba(0,0,0,.7);
+/* MODAL CARD — every dialog in T4BS (help, auth, end-of-round) is now
+   @basenative/components' renderDialog() wrapping a renderCard()
+   <article data-bn="card">. The dialog element is the full-viewport
+   scrim (see the `dialog[open]` rule near the bottom of this file) and
+   the card is the thing it centres.
+
+   Surface, border, radius and shadow all come from the package's own
+   [data-bn="card"] / [data-bn="dialog"] rules reading theme.css's
+   --bn-* mapping. What's left here is the two things those tokens
+   can't carry — T4BS's modal width and its centred text — plus one
+   correction: [data-bn="card"] paints itself var(--bn-color-surface),
+   which in T4BS IS the page background (#0C0B09), so a card would
+   dissolve into the page. Point it at the raised surface, the same
+   #1C1916 T4BS's modal cards have always used. */
+[data-bn="card"] {
+  background: var(--bn-color-surface-raised);
+  /* Every card in T4BS is a modal card, so it takes the modal step of
+     the radius ladder (14px) rather than the container step (12px) the
+     package defaults a card to. */
+  border-radius: var(--bn-radius-modal);
+  width: min(420px, 96vw); text-align: center;
   max-height: 92vh; overflow: auto;
 }
+[data-bn="card-body"] { padding: 24px 22px; }
 
 /* Card title — <h2 data-bn-region="title"> with optional data-tone for
    accent color. */
@@ -180,20 +186,50 @@ dialog[open] > article,
 [data-bn-region="help-body"] b[data-tone="yellow"] { color: #FFD700; }
 [data-bn-region="help-body"] b[data-tone="red"]    { color: #FF4D4D; }
 
-/* SHARED BUTTONS — markup is <button data-bn-button="primary|secondary">.
+/* SHARED BUTTONS — markup now comes from @basenative/components'
+   renderButton(), i.e. <button data-bn="button" data-variant="primary|
+   secondary">. Colour, radius, height, focus ring and disabled state
+   all come from the package's own [data-bn="button"] rules reading the
+   --bn-* tokens theme.css maps onto T4BS's palette; what remains here
+   is the brand geometry those tokens can't express — Bebas Neue at 17px
+   with 2px tracking, full-bleed width, and the 9px rhythm between
+   stacked buttons.
+
    `data-bn-variant="back"` adds the narrower max-width / extra top
    margin for the "← Back" buttons in moderate / admin views. */
-button[data-bn-button] {
-  display: block; width: 100%; padding: 13px; border-radius: 8px; border: none;
+[data-bn="button"] {
+  display: flex; inline-size: 100%;
   font-family: 'Bebas Neue', sans-serif; font-size: 17px; letter-spacing: 2px;
-  cursor: pointer; transition: all .15s; margin-bottom: 9px; min-height: 44px;
+  margin-block-end: 9px;
 }
-button[data-bn-button]:last-child { margin-bottom: 0; }
-button[data-bn-button="primary"]   { background: #E8920A; color: #1A0A00; }
-button[data-bn-button="primary"]:hover { background: #FFA830; }
-button[data-bn-button="secondary"] { background: #1C1916; color: #F0EDE4; border: 1px solid #2C2926; }
-button[data-bn-button="secondary"]:hover { background: #242018; }
-button[data-bn-button][data-bn-variant="back"] { max-width: 300px; margin-top: 14px; }
+[data-bn="button"]:last-child { margin-block-end: 0; }
+[data-bn="button"][data-bn-variant="back"] { max-inline-size: 300px; margin-block-start: 14px; }
+
+/* One standing correction, because upstream's default assumes a light
+   theme: the secondary variant paints itself var(--bn-color-surface),
+   which in T4BS IS the page background (#0C0B09), so the button would
+   dissolve into the page and leave only its border. Point it at the
+   raised surface — the same #1C1916 T4BS's secondary buttons have
+   always used. */
+[data-bn="button"][data-variant="secondary"] { background: var(--bn-color-surface-raised); }
+
+/* Three declarations that are a no-op the moment @basenative/components
+   0.8.0 is installed, and are here only so the interim 0.7.0 install
+   doesn't regress:
+     - 0.7.0 hardcodes var(--bn-color-white) as the primary/destructive
+       label colour. On accent orange that measures 2.46:1. 0.8.0 reads
+       --bn-color-on-primary / --bn-color-on-error instead (theme.css
+       sets both), so these restate exactly what the package will then
+       resolve on its own.
+     - 0.7.0's button block re-declares border-radius: var(--bn-radius-md)
+       after the shared control group has already applied
+       var(--bn-radius-control), silently defeating the 8px T4BS sets —
+       buttons rendered at 6px while inputs stayed at 8px.
+   Both are fixed upstream in BaseNative#186, opened off the back of this
+   work. Delete this block with the version bump. */
+[data-bn="button"]                             { border-radius: var(--bn-radius-control); }
+[data-bn="button"][data-variant="primary"]     { color: var(--bn-color-on-primary); }
+[data-bn="button"][data-variant="destructive"] { color: var(--bn-color-on-error); }
 
 /* SHARED FORMS — markup is <form data-bn-region="form"> with
    <p data-bn-region="field"> wrappers. The flabel attribute targets
@@ -215,12 +251,15 @@ button[data-bn-button][data-bn-variant="back"] { max-width: 300px; margin-top: 1
 [data-bn-region="hint"] { font-size: 10px; color: #A09B95; letter-spacing: .5px; }
 
 /* Error output — used standalone (lobby) and inside forms (submit/auth).
-   The lobby variant under main[data-bn-view="lobby"] adds extra padding
-   and width caps; this is the unscoped baseline. */
-[data-bn-region="error"] {
-  font-size: 11px; color: #FF6E6E; letter-spacing: .5px;
-  background: rgba(255,77,77,.08); padding: 8px 10px; border-radius: 5px;
-  border: 1px solid rgba(255,77,77,.3);
+   The box itself is @basenative/components' [data-bn="alert"]
+   [data-variant="error"], whose background / border / text colour all
+   resolve through the --bn-color-error-bg | -border | -text tokens
+   theme.css points at T4BS's own error red — so the eight declarations
+   that used to restate that here are gone. What is left is the brand
+   typography those tokens can't carry. The lobby variant under
+   main[data-bn-view="lobby"] adds the extra padding and width caps. */
+[data-bn="alert"] {
+  font-size: 11px; letter-spacing: .5px; padding: 8px 10px;
 }
 
 /* TAGLINE — small uppercase muted subheading. Used under the sticky
@@ -356,7 +395,7 @@ button[data-bn-button][data-bn-variant="back"] { max-width: 300px; margin-top: 1
    fails AA) despite @basenative/keyboard's own --kb-key-primary-fg
    token existing for exactly this. Belt-and-suspenders: set the color
    directly on the class (theme.css sets the token too), same
-   #1A0A00/7.86:1 pairing data-bn-button="primary" uses. */
+   #1A0A00/7.86:1 pairing --bn-color-on-primary carries. */
 .bn-kb-key--enter { color: #1A0A00; }
 
 /* Non-colour cues for the four keyboard states (WCAG 1.4.1 — state
@@ -585,12 +624,9 @@ main[data-bn-view="lobby"] [data-bn-action="lobby-submit"]:hover {
   box-shadow: 0 8px 32px rgba(232,146,10,.6); color: #1A0A00;
 }
 main[data-bn-view="lobby"] [data-bn-action="lobby-submit"]:active { transform: scale(.95); }
-main[data-bn-view="lobby"] [data-bn-region="error"],
-main[data-bn-view="lobby"] [role="alert"] {
-  width: 100%; max-width: 540px; text-align: center;
-  color: #FF6E6E;
-  background: rgba(255,77,77,.08); border: 1px solid rgba(255,77,77,.3);
-  padding: 8px 12px; border-radius: 6px;
+main[data-bn-view="lobby"] [data-bn="alert"] {
+  width: 100%; max-width: 540px; justify-content: center; text-align: center;
+  padding: 8px 12px;
   font-size: 12px; letter-spacing: .5px;
 }
 
@@ -920,9 +956,20 @@ main[data-bn-view="submit"] [data-bn-region="preview"] [role="img"] {
 }
 
 /* DIALOGS — native <dialog> takes care of `display: none` when closed,
-   so we only dress the open state. The inner <article> picks up its
-   card chrome from the shared `dialog[open] > article,
-   [data-bn-region="end-overlay"] > article` rule earlier in this file. */
+   so we only dress the open state. The dialog element itself is the
+   scrim; the [data-bn="card"] inside it is the visible card (see the
+   MODAL CARD block earlier in this file).
+
+   renderDialog() always emits a [data-bn="dialog-header"] and wraps the
+   content in a [data-bn="dialog-body"]. Every T4BS dialog is called
+   without a `title` and with closable: false — the heading lives inside
+   the card as <h2 data-bn-region="title"> so all three modals share one
+   layout — which leaves that header empty. Left alone it contributes a
+   stray border-bottom and, under the flex centring below, a stray flex
+   item beside the card. Remove it when it has no element children, and
+   let the body pass its child straight through (BaseNative's own
+   `display: contents` on host elements axiom) so the card is the direct
+   flex child the centring expects. */
 dialog[open] {
   position: fixed; inset: 0; width: 100%; height: 100%;
   background: rgba(10,9,7,.92); backdrop-filter: blur(6px);
@@ -931,6 +978,8 @@ dialog[open] {
   color: #F0EDE4; max-width: none; max-height: none;
   overflow: auto;
 }
+dialog[data-bn="dialog"] > [data-bn="dialog-header"]:not(:has(*)) { display: none; }
+dialog[data-bn="dialog"] > [data-bn="dialog-body"] { display: contents; }
 dialog::backdrop { background: rgba(10,9,7,.92); }
 
 /* NOT-FOUND */

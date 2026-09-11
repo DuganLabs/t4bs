@@ -1,7 +1,23 @@
 /* submit.html — exported as a string for both worker and vite
    bundling. Edit this file to change the template; the .js wrapper
    keeps it portable across the @basenative/server SSR worker and
-   any node:test consumers. */
+   any node:test consumers.
+
+   The two buttons are @basenative/components' renderButton() output,
+   interpolated at module-evaluation time — the template is a plain JS
+   template literal, so a pure string renderer composes into it without
+   any build step. The category <input> deliberately stays hand-written:
+   it is the no-JS fallback for @basenative/combobox (which owns the
+   control after hydration) and carries a sibling <datalist> that
+   renderInput()'s field wrapper has no slot for.
+
+   The always-empty, always-hidden error placeholder that used to sit at
+   the end of the <fieldset> is gone: the SSR shell has no error to
+   report (renderPage's submit context carries none), it was replaced
+   wholesale on hydration, and nothing read its data-bn-bind marker. The
+   live error box is created by the client view's bnAlert(). */
+
+import { renderButton } from "@basenative/components";
 
 export default `<main aria-labelledby="submit-title" data-bn-view="submit">
   <h1 id="submit-title">Submit a phrase</h1>
@@ -51,13 +67,17 @@ export default `<main aria-labelledby="submit-title" data-bn-view="submit">
         <p>Type a phrase to see how it'll render.</p>
       </section>
 
-      <output role="alert" data-bn-region="error" data-bn-bind="submit-error" hidden></output>
     </fieldset>
 
-    <button type="submit" data-bn-button="primary" data-bn-action="submit-confirm">
-      SUBMIT FOR REVIEW
-    </button>
-    <button type="button" data-bn-button="secondary" data-bn-action="submit-cancel">Cancel</button>
+    ${renderButton("SUBMIT FOR REVIEW", {
+      variant: "primary",
+      type: "submit",
+      attrs: 'data-bn-action="submit-confirm"',
+    })}
+    ${renderButton("Cancel", {
+      variant: "secondary",
+      attrs: 'data-bn-action="submit-cancel"',
+    })}
   </form>
 </main>
 `;

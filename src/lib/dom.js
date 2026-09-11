@@ -2,6 +2,8 @@
    Axioms: semantic HTML, zero inline style (via class= only), hosts pass through. */
 
 import { effect } from "@basenative/runtime";
+import { renderAlert, renderButton } from "@basenative/components";
+import { escapeText } from "@basenative/runtime/shared/escape";
 
 /**
  * h(tag, props, ...children) — like createElement, but plain DOM.
@@ -111,6 +113,54 @@ export function fromHTML(html) {
   const tpl = document.createElement("template");
   tpl.innerHTML = html.trim();
   return /** @type {HTMLElement} */ (tpl.content.firstElementChild);
+}
+
+/**
+ * Build a live @basenative/components button: render the package's
+ * markup, parse it, and wire the click handler.
+ *
+ * The package ships `renderButton` as a pure string renderer, which is
+ * the right shape for SSR but awkward in the imperative views — every
+ * call site would otherwise repeat fromHTML() + addEventListener().
+ * Wrapping it here is what let T4BS retire its own
+ * [data-bn-button="primary|secondary"] vocabulary: one adapter, and the
+ * variant/size/disabled semantics stay the package's.
+ *
+ * The label is escaped here rather than handed to renderButton's HTML
+ * slot, so no caller can accidentally push a value into markup.
+ * (components 0.8.0 adds a `text` option that does this in the package —
+ * BaseNative#186, opened off the back of this work; this wrapper becomes
+ * a one-line pass-through then.)
+ *
+ * @param {string} label  Plain text, escaped before it reaches the slot
+ * @param {{ variant?: string, type?: string, attrs?: string, onClick?: (e: Event) => void }} [options]
+ * @returns {HTMLButtonElement}
+ */
+export function bnButton(label, options = {}) {
+  const { onClick, ...renderOptions } = options;
+  const el = /** @type {HTMLButtonElement} */ (
+    fromHTML(renderButton(escapeText(label), renderOptions))
+  );
+  if (onClick) el.addEventListener("click", onClick);
+  return el;
+}
+
+/**
+ * Build a live @basenative/components alert and hand back both the
+ * container (for bindHidden) and its text slot (for bindText), so a
+ * signal-driven message only ever reaches the DOM as textContent — the
+ * package's HTML slot is left empty.
+ *
+ * No T4BS hook attribute is added: styling keys off the package's own
+ * [data-bn="alert"] (see styles.css), which is also why this needs no
+ * `attrs` slot — components 0.7.0's renderAlert() has none.
+ *
+ * @param {{ variant?: string }} [options]
+ * @returns {{ el: HTMLElement, content: HTMLElement }}
+ */
+export function bnAlert(options = {}) {
+  const el = /** @type {HTMLElement} */ (fromHTML(renderAlert("", options)));
+  return { el, content: /** @type {HTMLElement} */ (el.querySelector('[data-bn="alert-content"]')) };
 }
 
 /** Quick className builder: cn("a", cond && "b", { c: true }) → "a b c". */

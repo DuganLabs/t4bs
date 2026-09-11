@@ -11,7 +11,7 @@
    under main[data-bn-view="lobby"]. */
 
 import { computed } from "@basenative/runtime";
-import { h } from "../lib/dom.js";
+import { bnAlert, h } from "../lib/dom.js";
 import { bindHidden, bindText } from "../lib/bind.js";
 import { groupLobby, dailyFromGroups } from "../lib/game.js";
 
@@ -48,13 +48,13 @@ export function createLobby({
   );
   bindHidden(statsSection, () => !hasStats());
 
-  /* Error — single status paragraph, hidden by default. Styled by
-     main[data-bn-view="lobby"] [data-bn-region="error"] in styles.css. */
-  const errorEl = h("p", {
-    role: "alert",
-    "data-bn-region": "error",
-  });
-  bindText(errorEl, () => `error: ${error() || ""}`);
+  /* Error — @basenative/components' alert, hidden by default. The
+     error variant supplies role="alert"; the message lands in the
+     escaped text slot. Styled by main[data-bn-view="lobby"]
+     [data-bn-region="error"] in styles.css. */
+  const errAlert = bnAlert({ variant: "error" });
+  const errorEl = errAlert.el;
+  bindText(errAlert.content, () => `error: ${error() || ""}`);
   bindHidden(errorEl, () => !error());
 
   /* Daily card — three mutually-exclusive sub-views, each shown via

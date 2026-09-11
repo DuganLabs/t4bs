@@ -1,15 +1,20 @@
 /* admin.html — exported as a string for both worker and vite
    bundling. Edit this file to change the template; the .js wrapper
    keeps it portable across the @basenative/server SSR worker and
-   any node:test consumers. */
+   any node:test consumers.
+
+   The forbidden notice and the two role buttons come from
+   @basenative/components (renderAlert / renderButton), interpolated at
+   module-evaluation time. renderAlert already picks role="alert" for
+   the error variant, so the role is no longer asserted by hand. */
+
+import { renderAlert, renderButton } from "@basenative/components";
 
 export default `<main aria-labelledby="admin-title" data-bn-view="admin">
   <h1 id="admin-title">Moderator administration</h1>
 
   <template @if="forbidden">
-    <p role="alert">
-      You need admin access. <a href="/">Back to lobby</a>.
-    </p>
+    ${renderAlert('You need admin access. <a href="/">Back to lobby</a>.', { variant: "error" })}
   </template>
 
   <template @else>
@@ -38,15 +43,15 @@ export default `<main aria-labelledby="admin-title" data-bn-view="admin">
               </p>
               <template @if="user.handle !== currentHandle">
                 <p>
-                  <button type="button"
-                          data-bn-action="admin-set-role"
-                          :data-handle="user.handle"
-                          data-role="user">Demote to user</button>
+                  ${renderButton("Demote to user", {
+                    variant: "secondary",
+                    attrs: 'data-bn-action="admin-set-role" :data-handle="user.handle" data-role="user"',
+                  })}
                   <template @if="user.role === 'moderator'">
-                    <button type="button"
-                            data-bn-action="admin-set-role"
-                            :data-handle="user.handle"
-                            data-role="admin">Promote to admin</button>
+                    ${renderButton("Promote to admin", {
+                      variant: "primary",
+                      attrs: 'data-bn-action="admin-set-role" :data-handle="user.handle" data-role="admin"',
+                    })}
                   </template>
                 </p>
               </template>

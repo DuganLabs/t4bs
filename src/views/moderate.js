@@ -8,7 +8,7 @@
 
 import { signal, effect } from "@basenative/runtime";
 import { renderAdminQueueList } from "@basenative/admin/components";
-import { h } from "../lib/dom.js";
+import { bnAlert, bnButton, h } from "../lib/dom.js";
 import { bindHidden, bindText } from "../lib/bind.js";
 import { api } from "../lib/api.js";
 
@@ -33,8 +33,11 @@ export function createModerate({ toaster, onLobbyChange, goLobby }) {
     }
   }
 
-  const errBox = h("p", { role: "alert", "data-bn-region": "error" });
-  bindText(errBox, () => err() || "");
+  /* @basenative/components' alert: role="alert" comes from the error
+     variant, and the message goes into its escaped text slot. */
+  const errAlert = bnAlert({ variant: "error" });
+  const errBox = errAlert.el;
+  bindText(errAlert.content, () => err() || "");
   bindHidden(errBox, () => !err());
 
   const queueRoot = h("section", {
@@ -72,12 +75,10 @@ export function createModerate({ toaster, onLobbyChange, goLobby }) {
     ),
     errBox,
     queueRoot,
-    h("button", {
-      type: "button",
-      "data-bn-button": "secondary",
-      "data-bn-variant": "back",
-      "data-bn-action": "back",
+    bnButton("← Back", {
+      variant: "secondary",
+      attrs: 'data-bn-variant="back" data-bn-action="back"',
       onClick: goLobby,
-    }, "← Back"),
+    }),
   );
 }

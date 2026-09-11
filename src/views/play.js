@@ -2,17 +2,18 @@
 
    Same shape the SSR template produces (<main data-bn-view="play"> with
    <header data-bn-region="play-summary">, <section data-bn-region="grid">,
-   <section data-bn-region="bank">, <section data-bn-region="keyboard">,
-   <dialog data-bn-region="end-overlay">). The bind helpers in lib/bind.js
+   <section data-bn-region="bank">, <section data-bn-region="keyboard">)
+   plus the end-of-round <dialog data-bn-region="end-overlay">, which is
+   client-only. The bind helpers in lib/bind.js
    wire signals into the existing nodes — no class-soup div builders, no
    imperative children-replace except for the phrase grid and letter bank
    where the cell count is inherently dynamic. */
 
 import { signal, computed, effect } from "@basenative/runtime";
 import { Keyboard } from "@basenative/keyboard";
-import { h } from "../lib/dom.js";
+import { renderCard, renderDialog } from "@basenative/components";
+import { bnButton, fromHTML, h } from "../lib/dom.js";
 import { bindAttr, bindHidden, bindText } from "../lib/bind.js";
-import { trapFocus } from "../lib/focus-trap.js";
 import { api } from "../lib/api.js";
 import { openSlots, fullCount, computeKeyStatus, KEY_STATE_INFO } from "../lib/game.js";
 import { confetti } from "../lib/confetti.js";
@@ -668,32 +669,36 @@ export function createPlay({
     });
   });
 
-  /* End-of-round dialog — overlay <div role="dialog"> wrapping a single
-     <article> card. Markup is purely attribute-driven; styling is in
-     styles.css under [data-bn-region="end-overlay"] and the shared
-     dialog/card selectors. The <h2>'s data-tone toggles the win/lose
-     accent color via [data-bn-region="title"][data-tone="..."]. */
-  const endTitle  = h("h2", { "data-bn-region": "title" });
+  /* End-of-round dialog — a real native <dialog> from
+     @basenative/components' renderDialog(), wrapping a renderCard()
+     <article>. Both are pure string renderers, so the card's children
+     are appended into [data-bn="card-body"] afterwards and keep their
+     signal bindings.
+
+     This replaces a hand-built <div role="dialog" aria-modal="true">
+     whose visibility was toggled by bindHidden(). That shape had to
+     reimplement everything a modal <dialog> gives for free: focus had
+     to be moved in, Tab had to be fenced, and focus had to be restored
+     on close — all of it lib/focus-trap.js's trapFocus(), which this
+     was the last caller of and which is deleted with this change.
+     showModal() does all three natively, and also makes
+     the page behind it inert (which the hand-rolled version never did:
+     a screen-reader user could still read and activate the keyboard
+     underneath the "dialog").
+
+     The <h2>'s data-tone still toggles the win/lose accent via
+     [data-bn-region="title"][data-tone="..."]; styling otherwise comes
+     from the package's [data-bn="dialog"] / [data-bn="card"] rules
+     reading theme.css's --bn-* tokens. */
+  const endTitle  = h("h2", { id: "play-end-title", "data-bn-region": "title" });
   const endSub    = h("p", { "data-bn-region": "subtitle" });
   const endReveal = h("p", { "data-bn-region": "reveal" });
   const endBy     = h("strong");
   const endCredit = h("p", { "data-bn-region": "credit" }, "submitted by ", endBy);
   const endScore  = h("output", { "data-bn-region": "end-score" });
-  const endShare  = h("button", {
-    type: "button",
-    "data-bn-button": "primary",
-    "data-bn-action": "share",
-  });
-  const endPrimary   = h("button", {
-    type: "button",
-    "data-bn-button": "secondary",
-    "data-bn-action": "primary",
-  });
-  const endSecondary = h("button", {
-    type: "button",
-    "data-bn-button": "secondary",
-    "data-bn-action": "secondary",
-  });
+  const endShare     = bnButton("Share result", { variant: "primary",   attrs: 'data-bn-action="share"' });
+  const endPrimary   = bnButton("Pick another", { variant: "secondary", attrs: 'data-bn-action="primary"' });
+  const endSecondary = bnButton("Pick another", { variant: "secondary", attrs: 'data-bn-action="secondary"' });
 
   bindText(endScore, () => String(score()));
   bindAttr(endScore, "aria-label", () => `Final score ${score()} points`);
@@ -704,7 +709,6 @@ export function createPlay({
   bindText(endSub, () => `${session()?.category || ""}${phase() === "lost" ? " · the answer was" : ""}`);
   bindText(endReveal, () => (reveal() || []).join(" "));
   bindText(endPrimary, () => phase() === "won" ? "Pick another" : "Try again");
-  endSecondary.textContent = "Pick another";
   bindHidden(endSecondary, () => phase() !== "lost");
 
   endShare.addEventListener("click", () => {
@@ -716,35 +720,48 @@ export function createPlay({
   });
   endSecondary.addEventListener("click", goLobby);
 
-  const endCard = h("article", {
-    role: "document",
-    onClick: (e) => e.stopPropagation(),
-  },
+  const endCard = fromHTML(renderCard());
+  /* role="document" is set here rather than passed to renderCard():
+     components 0.7.0 takes no `attrs` on a card (0.8.0 adds one —
+     BaseNative#186, opened off the back of this work). */
+  endCard.setAttribute("role", "document");
+  endCard.querySelector('[data-bn="card-body"]').append(
     endTitle, endSub, endReveal, endCredit,
     endScore, h("p", { "data-bn-region": "score-label" }, "points"),
     endShare, endSecondary, endPrimary,
   );
 
-  const endOverlay = h("div", {
-    role: "dialog",
-    "aria-modal": "true",
-    "aria-labelledby": "play-end-title",
-    "data-bn-region": "end-overlay",
-  }, endCard);
-  endTitle.id = "play-end-title";
+  const endOverlay = /** @type {HTMLDialogElement} */ (fromHTML(renderDialog({
+    id: "play-end",
+    modal: true,
+    closable: false,
+    attrs: 'data-bn-region="end-overlay"',
+  })));
+
+  /* renderDialog() emits aria-labelledby only for its own `title` slot;
+     this dialog keeps its title inside the card so the layout matches
+     the rest of T4BS's modals, so the label is pointed at that <h2>
+     here — same pattern as help-modal.js / auth-modal.js. */
+  endOverlay.setAttribute("aria-labelledby", "play-end-title");
+  endOverlay.querySelector('[data-bn="dialog-body"]').append(endCard);
+
+  /* Escape would close the dialog and leave the player stranded: the
+     round is over, every way forward (Share / Try again / Pick another)
+     lives inside this dialog, and nothing would reopen it — `phase` has
+     already settled, so the effect below would not re-fire. Cancelling
+     the `cancel` event keeps the native focus containment while
+     matching the old overlay's behaviour, which had no dismiss path
+     either. */
+  endOverlay.addEventListener("cancel", (e) => e.preventDefault());
+
   const endOpen = () => (phase() === "won" || phase() === "lost") && !!reveal();
-  bindHidden(endOverlay, () => !endOpen());
-  /* This overlay is a plain <div role="dialog"> (not a native <dialog>,
-     since it's gated by a signal-driven `hidden` rather than an
-     imperative showModal() call — see the comment above), so none of
-     the focus management a native dialog gives for free happens
-     automatically: focus stayed on <body> on open, Tab could escape to
-     the page behind it, and closing it didn't return focus anywhere.
-     trapFocus() moves focus into the card (Share is its first focusable
-     control) when the round ends, traps Tab inside it, and restores
-     focus to whatever had it when the round ended — the keyboard key
-     or ALL IN button the player just pressed — when it closes. */
-  trapFocus(endOverlay, endOpen);
+  effect(() => {
+    const open = endOpen();
+    /* Guard isConnected: the effect runs once at build time, before this
+       tree is mounted, and showModal() on a detached <dialog> throws. */
+    if (open && !endOverlay.open && endOverlay.isConnected) endOverlay.showModal();
+    else if (!open && endOverlay.open) endOverlay.close();
+  });
 
   /* ── Root <main>: same shape as src/bn/views/play.js SSR template. ── */
   return h("main", {

@@ -33,7 +33,7 @@ import { nativeShare, mintShareCard, composeShareText } from "@basenative/share/
 
 import { api } from "./lib/api.js";
 import { groupLobby } from "./lib/game.js";
-import { mount, h } from "./lib/dom.js";
+import { bnAlert, mount, h } from "./lib/dom.js";
 import { createHeader } from "./components/header.js";
 import { createToast, makeToaster } from "./components/toast.js";
 import { createHelpModal } from "./components/help-modal.js";
@@ -328,10 +328,9 @@ function mountLazy(label, importFn, build) {
     mount(viewSlot, build(mod));
   }).catch((err) => {
     if (view() !== label) return;
-    mount(viewSlot, h("p", {
-      "data-bn-region": "error",
-      role: "alert",
-    }, `Couldn't load ${label}: ${String(err?.message || err)}`));
+    const failed = bnAlert({ variant: "error" });
+    failed.content.textContent = `Couldn't load ${label}: ${String(err?.message || err)}`;
+    mount(viewSlot, failed.el);
   });
 }
 

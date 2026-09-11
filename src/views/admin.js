@@ -9,7 +9,8 @@
 
 import { signal, effect } from "@basenative/runtime";
 import { renderAdminUserList } from "@basenative/admin/components";
-import { h } from "../lib/dom.js";
+import { bnAlert, bnButton, h } from "../lib/dom.js";
+import { bindHidden, bindText } from "../lib/bind.js";
 import { api } from "../lib/api.js";
 
 const LABELS = {
@@ -56,7 +57,13 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
     }
   }
 
-  const errBox = h("p", { "data-bn-region": "error", role: "alert", text: () => err() || "", hidden: () => !err() });
+  /* @basenative/components' alert: it owns role="alert" for the error
+     variant, and the message goes into its escaped text slot rather
+     than an innerHTML assignment. */
+  const errAlert = bnAlert({ variant: "error" });
+  const errBox = errAlert.el;
+  bindText(errAlert.content, () => err() || "");
+  bindHidden(errBox, () => !err());
 
   const search = h("input", {
     class: "bn-admin-search",
@@ -121,11 +128,10 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
     ),
     errBox,
     root,
-    h("button", {
-      type: "button",
-      "data-bn-button": "secondary",
-      "data-bn-variant": "back",
+    bnButton("← Back", {
+      variant: "secondary",
+      attrs: 'data-bn-variant="back"',
       onClick: goLobby,
-    }, "← Back"),
+    }),
   );
 }
