@@ -619,8 +619,15 @@ export function createPlay({
   const kbActions = h("footer", { "data-bn-region": "kb-actions" }, allInBtn, stakeLbl);
   const kbHost = h("div", { html: kb.html });
 
+  /* No aria-label here: @basenative/keyboard's own root
+     ([data-bn="keyboard"], mounted into kbHost below) already exposes
+     itself as a `role="region" aria-label="On-screen keyboard"`
+     landmark. Labelling this wrapper section the same way nested a
+     second landmark with an identical name inside the first (axe
+     landmark-unique). This element stays a plain, unlabelled
+     grouping <section> — not a landmark — around the keyboard's
+     action row and the keyboard itself. */
   const keyboard = h("section", {
-    "aria-label": "On-screen keyboard",
     "data-bn-region": "keyboard",
   }, kbActions, kbHost);
   bindAttr(keyboard, "data-allin", () => allInMode() ? "" : null);

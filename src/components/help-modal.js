@@ -16,10 +16,14 @@ import { renderDialog } from "@basenative/components";
 import { fromHTML } from "../lib/dom.js";
 
 const HELP_CONTENT = `
-  <header>
+  <!-- Plain <div>, not <header>: a <header> not nested inside an
+       article/aside/main/nav/section computes as a top-level "banner"
+       landmark (axe landmark-banner-is-top-level) even while sitting
+       inside an open dialog. -->
+  <div>
     <h2 id="help-title" data-bn-region="title" data-tone="help">HOW TO PLAY</h2>
     <p data-bn-region="subtitle">One subject. One phrase. No mercy.</p>
-  </header>
+  </div>
   <div data-bn-region="help-body">
     <p><b>1 &middot; Type into tiles. </b>Pick a word, type its letters into the tiles. Press Enter or tap GO.</p>
     <p><b data-tone="green">2 &middot; Greens lock in. </b>Letters in the right spot stay revealed across attempts. Letters known to be in the phrase pile up below.</p>

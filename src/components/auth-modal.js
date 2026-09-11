@@ -43,10 +43,14 @@ export function authDialogHtml() {
     modal: true,
     closable: false,
     content: `
-      <header>
+      <!-- Plain <div>, not <header>: a <header> not nested inside an
+           article/aside/main/nav/section computes as a top-level
+           "banner" landmark (axe landmark-banner-is-top-level) even
+           while sitting inside an open dialog. -->
+      <div>
         <h2 id="auth-title" data-bn-region="title" data-tone="auth">SIGN IN</h2>
         <p data-bn-region="subtitle">Anonymous play · login only to submit</p>
-      </header>
+      </div>
       ${tabsHtml}
       <div data-bn-region="form-slot"></div>
       <button type="button" data-bn-button="secondary" data-bn-action="auth-cancel">Cancel</button>
