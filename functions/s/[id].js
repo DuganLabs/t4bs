@@ -18,12 +18,53 @@ const esc = (s) => String(s)
   .replace(/"/g, "&quot;")
   .replace(/'/g, "&#39;");
 
+/* Shared "wrap" chrome for both the real share landing page below and
+   the not-found page — same brand shell so an expired/typo'd link
+   doesn't dead-end on a bare plain-text response with no way back. */
+const PAGE_STYLE = `html,body{margin:0;height:100%;background:#0C0B09;color:#F0EDE4;font-family:-apple-system,BlinkMacSystemFont,"Inter",sans-serif;}
+    .wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:18px;padding:24px;text-align:center;}
+    h1{margin:0;font-size:clamp(40px,9vw,96px);letter-spacing:-2px;color:#E8920A;font-weight:800;}
+    p{margin:0;font-size:18px;color:#988570;}
+    a{color:#E8920A;text-decoration:none;font-weight:700;}`;
+
+function notFoundPage(message) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0C0B09" />
+  <title>Tabs — Link not found</title>
+  <meta name="robots" content="noindex" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <style>${PAGE_STYLE}</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Tabs</h1>
+    <p>${esc(message)}</p>
+    <p><a href="/">Play today's puzzle</a></p>
+  </div>
+</body>
+</html>`;
+}
+
 export const onRequestGet = async ({ request: _request, env, params }) => {
   const id = String(params.id || "");
-  if (!/^[a-z0-9]{4,16}$/i.test(id)) return new Response("bad id", { status: 400 });
+  if (!/^[a-z0-9]{4,16}$/i.test(id)) {
+    return new Response(notFoundPage("This share link looks broken."), {
+      status: 400,
+      headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+    });
+  }
 
   const card = await d1ShareCards(env.DB).get(id);
-  if (!card) return new Response("not found", { status: 404 });
+  if (!card) {
+    return new Response(notFoundPage("This share link has expired — the round it pointed to is gone."), {
+      status: 404,
+      headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+    });
+  }
 
   const origin = env.PUBLIC_ORIGIN || env.RP_ORIGIN || "https://t4bs.com";
   const title = `Tabs — Try this ${card.category} puzzle`;
@@ -65,13 +106,7 @@ export const onRequestGet = async ({ request: _request, env, params }) => {
   <meta name="twitter:image:alt" content="Tabs — try this ${esc(card.category)} puzzle" />
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <style>
-    html,body{margin:0;height:100%;background:#0C0B09;color:#F0EDE4;font-family:-apple-system,BlinkMacSystemFont,"Inter",sans-serif;}
-    .wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:18px;padding:24px;text-align:center;}
-    h1{margin:0;font-size:clamp(40px,9vw,96px);letter-spacing:-2px;color:#E8920A;font-weight:800;}
-    p{margin:0;font-size:18px;color:#988570;}
-    a{color:#E8920A;text-decoration:none;font-weight:700;}
-  </style>
+  <style>${PAGE_STYLE}</style>
   <script>
     // Instant redirect for human visitors. Crawlers do not run JS.
     // Recipients land directly on the same puzzle the original player took.
