@@ -63,13 +63,17 @@ function stripComments(html) {
  *  stripped first (index.html's comment quotes the tag name).
  *
  *  Tag matching throughout this file is case-insensitive and tolerates
- *  whitespace before a tag's closing bracket, because HTML does. These
- *  extractors feed assertions of the form "the shell ships no inline
- *  script this policy has not hashed" — a pattern that misses <SCRIPT>
- *  or `</script >` does not fail, it silently reports success, which is
- *  the one failure mode a drift guard must not have. */
+ *  anything HTML allows between an end tag's name and its `>` — so
+ *  `<SCRIPT>`, `</script >` and `</script foo=bar>` all match, which is
+ *  how a browser parses them.
+ *
+ *  That thoroughness is the point, not pedantry. These extractors feed
+ *  assertions of the form "the shell ships no inline script this policy
+ *  has not hashed". A pattern that fails to match does not fail the
+ *  test — it reports success and moves on, which is the one failure
+ *  mode a drift guard cannot have. */
 function criticalStyle(html, label) {
-  const m = stripComments(html).match(/<style data-bn-critical\s*>([\s\S]*?)<\/style\s*>/i);
+  const m = stripComments(html).match(/<style data-bn-critical\s*>([\s\S]*?)<\/style[^>]*>/i);
   assert.ok(m, `${label}: no <style data-bn-critical> block found`);
   return m[1];
 }
@@ -227,7 +231,7 @@ describe("inline-content hashes are current", () => {
     // inline <script> ever appears in the SSR shell it needs a hash,
     // so fail loudly here rather than in a browser console.
     const html = renderPage({ ...SSR_CONTEXT, route: "lobby" }, SSR_ASSETS);
-    for (const m of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+    for (const m of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script[^>]*>/gi)) {
       const attrs = m[1];
       const isDataBlock = /type\s*=\s*["']application\/(ld\+)?json["']/.test(attrs);
       const isExternal = /\ssrc\s*=/.test(attrs);
@@ -258,7 +262,7 @@ describe("inline-content hashes are current", () => {
     assert.equal(styleHash, SHARE_PAGE_STYLE_HASH,
       `SHARE_PAGE_STYLE_HASH is stale; set it to: ${styleHash}`);
 
-    const script = src.match(/<script\s*>([\s\S]*?)<\/script\s*>/i);
+    const script = src.match(/<script\s*>([\s\S]*?)<\/script[^>]*>/i);
     assert.ok(script, "redirect <script> not found in functions/s/[id].js");
     const scriptHash = sha256(script[1]);
     assert.equal(scriptHash, SHARE_REDIRECT_SCRIPT_HASH,
