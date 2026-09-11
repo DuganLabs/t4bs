@@ -979,3 +979,185 @@ describe("Game Engine", () => {
     });
   });
 });
+
+/* ── The stake is a real bet now ──────────────────────────────────────
+   Before this change `scoreGuess` was the only thing a wager touched,
+   and `score` is floored at zero — so a stake could never end a round,
+   and at zero score it cost literally nothing. It was billed as
+   "Vegas-style" and was mechanically decorative. A staked tile now
+   costs a life if that position comes back anything but green. */
+describe("Stake — the wager carries a life", () => {
+  it("costs one EXTRA life when a staked position misses", async () => {
+    const { puzzles, sessions } = createMockStores();
+    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
+    const engine = createEngine({ puzzles, sessions });
+    const started = await engine.startSession("puzzle-1");
+
+    // HELLO guessed as HXLLO, staking slot 1 (the X) — that position is wrong.
+    const r = await engine.submitGuess(started.sessionId, 0, ["H", "X", "L", "L", "O"], [1]);
+
+    assert.equal(r.stakeBusted, true);
+    assert.equal(r.livesDelta, -2, "one for the miss, one for the busted stake");
+    assert.equal(r.lives, 2);
+  });
+
+  it("costs only the ordinary life when the staked positions were right", async () => {
+    const { puzzles, sessions } = createMockStores();
+    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
+    const engine = createEngine({ puzzles, sessions });
+    const started = await engine.startSession("puzzle-1");
+
+    // H is right; only the staked position matters, not the word.
+    const r = await engine.submitGuess(started.sessionId, 0, ["H", "X", "L", "L", "O"], [0]);
+
+    assert.equal(r.stakeBusted, false);
+    assert.equal(r.livesDelta, -1, "the word missed, but the bet was sound");
+    assert.equal(r.lives, 3);
+  });
+
+  it("never bites on a fully correct word — every staked tile is green", async () => {
+    const { puzzles, sessions } = createMockStores();
+    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
+    const engine = createEngine({ puzzles, sessions });
+    const started = await engine.startSession("puzzle-1");
+
+    const r = await engine.submitGuess(started.sessionId, 0, ["H", "E", "L", "L", "O"], [0, 1, 2]);
+    assert.equal(r.stakeBusted, false);
+    assert.equal(r.livesDelta, 0);
+    assert.equal(r.lives, 4);
+  });
+
+  it("caps the extra cost at one life however many tiles are staked", async () => {
+    const { puzzles, sessions } = createMockStores();
+    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
+    const engine = createEngine({ puzzles, sessions });
+    const started = await engine.startSession("puzzle-1");
+
+    const r = await engine.submitGuess(started.sessionId, 0, ["X", "Y", "Z", "Q", "W"], [0, 1, 2, 3, 4]);
+    assert.equal(r.livesDelta, -2, "worst case stays legible at -2");
+    assert.equal(r.lives, 2);
+  });
+
+  it("is no longer free at zero score — it can end the round", async () => {
+    const { puzzles, sessions } = createMockStores();
+    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
+    const engine = createEngine({ puzzles, sessions });
+    const started = await engine.startSession("puzzle-1");
+
+    // Score is floored at 0, so this is exactly the state the old
+    // wager cost nothing in.
+    const sess = await sessions.get(started.sessionId);
+    sess.score = 0;
+    sess.lives = 2;
+    await sessions.save(started.sessionId, sess);
+
+    const r = await engine.submitGuess(started.sessionId, 0, ["X", "Y", "Z", "Q", "W"], [0]);
+    assert.equal(r.lives, 0);
+    assert.equal(r.finished, "lost");
+  });
+
+  it("never drives lives below zero", async () => {
+    const { puzzles, sessions } = createMockStores();
+    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
+    const engine = createEngine({ puzzles, sessions });
+    const started = await engine.startSession("puzzle-1");
+
+    const sess = await sessions.get(started.sessionId);
+    sess.lives = 1;
+    await sessions.save(started.sessionId, sess);
+
+    const r = await engine.submitGuess(started.sessionId, 0, ["X", "Y", "Z", "Q", "W"], [0]);
+    assert.equal(r.lives, 0);
+  });
+});
+
+/* ── Daily sessions ─────────────────────────────────────────────────── */
+describe("Session mode + the finish hook", () => {
+  it("defaults to free play, which records nothing", async () => {
+    const { puzzles, sessions } = createMockStores();
+    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
+    const finished = [];
+    const engine = createEngine({
+      puzzles, sessions,
+      onFinish: (info) => { finished.push(info); },
+    });
+
+    const started = await engine.startSession("puzzle-1");
+    assert.equal(started.mode, "free");
+    assert.equal(started.day, null);
+
+    await engine.submitGuess(started.sessionId, 0, ["H", "E", "L", "L", "O"]);
+    await engine.submitGuess(started.sessionId, 1, ["W", "O", "R", "L", "D"]);
+    assert.equal(finished.length, 1, "the hook still fires; the recorder decides what counts");
+    assert.equal(finished[0].state.mode, "free");
+    assert.equal(finished[0].outcome, "won");
+  });
+
+  it("tags a daily session with its UTC day and player key", async () => {
+    const { puzzles, sessions } = createMockStores();
+    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
+    const engine = createEngine({ puzzles, sessions });
+
+    const started = await engine.startSession("puzzle-1", {
+      mode: "daily", day: "2026-09-11", playerKey: "a:abc",
+    });
+    assert.equal(started.mode, "daily");
+    assert.equal(started.day, "2026-09-11");
+
+    const sess = await sessions.get(started.sessionId);
+    assert.equal(sess.playerKey, "a:abc");
+
+    const resumed = await engine.resumeSession(started.sessionId);
+    assert.equal(resumed.mode, "daily");
+    assert.equal(resumed.day, "2026-09-11");
+  });
+
+  it("fires onFinish exactly once, after the session is saved", async () => {
+    const { puzzles, sessions } = createMockStores();
+    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
+    const seen = [];
+    const engine = createEngine({
+      puzzles, sessions,
+      onFinish: async ({ sessionId, state, outcome }) => {
+        const persisted = await sessions.get(sessionId);
+        seen.push({ outcome, persistedFinished: persisted.finished, score: state.score });
+      },
+    });
+
+    const started = await engine.startSession("puzzle-1", { mode: "daily", day: "2026-09-11", playerKey: "a:x" });
+    // Burn all four lives.
+    for (let i = 0; i < 4; i++) {
+      await engine.submitGuess(started.sessionId, 0, ["X", "Y", "Z", "Q", "W"]);
+    }
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].outcome, "lost");
+    assert.equal(seen[0].persistedFinished, "lost", "state was persisted before the hook ran");
+  });
+
+  it("fires onFinish for an ALL IN ending too", async () => {
+    const { puzzles, sessions } = createMockStores();
+    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
+    const seen = [];
+    const engine = createEngine({ puzzles, sessions, onFinish: (i) => seen.push(i.outcome) });
+
+    const started = await engine.startSession("puzzle-1", { mode: "daily", day: "2026-09-11", playerKey: "a:x" });
+    const r = await engine.allIn(started.sessionId, ["HELLO", "WORLD"]);
+    assert.equal(r.correct, true);
+    assert.equal(r.mode, "daily");
+    assert.deepEqual(seen, ["won"]);
+  });
+
+  it("does not let a recorder failure take down a finished round", async () => {
+    const { puzzles, sessions } = createMockStores();
+    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
+    const engine = createEngine({
+      puzzles, sessions,
+      onFinish: () => { throw new Error("D1 is having a day"); },
+    });
+
+    const started = await engine.startSession("puzzle-1", { mode: "daily", day: "2026-09-11", playerKey: "a:x" });
+    await engine.submitGuess(started.sessionId, 0, ["H", "E", "L", "L", "O"]);
+    const r = await engine.submitGuess(started.sessionId, 1, ["W", "O", "R", "L", "D"]);
+    assert.equal(r.finished, "won");
+  });
+});

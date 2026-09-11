@@ -48,6 +48,7 @@ async function renderError(ctx, err) {
     user: null,
     error: String(err?.message || err || "render failed"),
     lobby: null,
+    daily: null,
     play: null,
     submit: { existingCategories: [] },
     moderate: { pending: null, forbidden: false },

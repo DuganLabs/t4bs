@@ -1,101 +1,136 @@
-/* LOBBY view — daily-only mode.
+/* LOBBY view — server-authoritative daily + free play.
 
-   One puzzle per day, Wordle-style. Shows today's daily puzzle as the
-   only play target, OR a "come back tomorrow" card with the player's
-   last result if they've already finished today's daily. Submission
-   FAB is preserved so users can still contribute new puzzles.
+   What changed, and why:
 
-   Markup is attribute-driven: lobby-specific classes have been replaced
-   with semantic elements + data-bn-region / data-bn-action selectors,
-   matching the play.js refactor in #56. Styling lives in styles.css
-   under main[data-bn-view="lobby"]. */
+   - The daily used to be picked in the browser (`dailyFromGroups()`,
+     seeded off the LOCAL date) and auto-started. Nothing server-side
+     agreed with that pick, every puzzle stayed replayable, and the ten
+     house puzzles could be cleared in one sitting. The daily now comes
+     from `GET /api/daily`: one puzzle per UTC day, the same one for
+     everybody, recorded once and not replayable for score.
+   - A streak is the actual reason to come back, so it's the first thing
+     on the page rather than a chip that only appeared after a win.
+   - Free play is back as its own section: every approved puzzle, any
+     number of times, clearly marked as not counting.
 
-import { computed } from "@basenative/runtime";
+   Markup stays attribute-driven (data-bn-region / data-bn-action);
+   styling lives in styles.css under main[data-bn-view="lobby"]. */
+
+import { computed, effect, signal } from "@basenative/runtime";
 import { bnAlert, h } from "../lib/dom.js";
-import { bindHidden, bindText } from "../lib/bind.js";
-import { groupLobby, dailyFromGroups } from "../lib/game.js";
+import { bindAttr, bindHidden, bindText } from "../lib/bind.js";
+import { groupLobby } from "../lib/game.js";
+
+/** "6h 21m" / "12m" — how long until the next UTC daily unlocks. */
+export function formatCountdown(ms) {
+  const total = Math.max(0, Math.floor(ms / 60000));
+  const hrs = Math.floor(total / 60);
+  const mins = total % 60;
+  if (hrs > 0) return `${hrs}h ${mins}m`;
+  return `${mins}m`;
+}
 
 export function createLobby({
   lobby,
-  stats,
+  daily,
   error,
   user,
-  dailyDone,
-  onPick,
+  onDaily,
+  onFree,
   onSubmit,
 }) {
-  void user; // accepted for parity with hydrate.js wiring; unused right now
+  void user; // accepted for parity with the hydrate.js wiring; unused here
 
-  const groups = computed(() => groupLobby(lobby()));
-  const daily  = computed(() => dailyFromGroups(groups()));
-  const hasStats = computed(() => (stats()?.played || 0) > 0);
+  const groups   = computed(() => groupLobby(lobby()));
+  const d        = computed(() => daily());
+  const done     = computed(() => !!d()?.playedToday);
+  const loaded   = computed(() => !!d());
 
-  /* Stats — three little chips, only visible after the first played round. */
-  const winsB    = h("strong");
-  const bestB    = h("strong");
-  const streakB  = h("strong");
-  bindText(winsB,   () => String(stats()?.wins || 0));
-  bindText(bestB,   () => String(stats()?.best || 0));
-  bindText(streakB, () => (stats()?.streak || 0) > 0 ? `🔥${stats().streak}` : "—");
+  /* Live countdown to the next UTC day. `msUntilNext` is the server's
+     number at fetch time; ticking locally keeps it honest without
+     re-polling. */
+  const nowTick = signal(Date.now());
+  effect(() => {
+    if (!done()) return;
+    const id = setInterval(() => nowTick.set(Date.now()), 30_000);
+    return () => clearInterval(id);
+  });
+  const fetchedAt = computed(() => { void d(); return Date.now(); });
+  const remaining = computed(() => {
+    const info = d();
+    if (!info) return 0;
+    return info.msUntilNext - (nowTick() - fetchedAt());
+  });
+
+  /* ── Streak strip — the reason to come back, shown from day zero ── */
+  const streakB = h("strong");
+  const bestB   = h("strong");
+  const playedB = h("strong");
+  bindText(streakB, () => {
+    const n = d()?.streak || 0;
+    return n > 0 ? `🔥${n}` : "0";
+  });
+  bindText(bestB,   () => String(d()?.bestStreak || 0));
+  bindText(playedB, () => String(d()?.daysPlayed || 0));
 
   const statsSection = h("section", {
-    "aria-label": "Personal stats",
+    "aria-label": "Daily streak",
     "data-bn-region": "stats",
   },
-    h("p", { "data-bn-region": "stat" }, winsB,   h("small", null, "WINS")),
-    h("p", { "data-bn-region": "stat" }, bestB,   h("small", null, "BEST")),
     h("p", { "data-bn-region": "stat" }, streakB, h("small", null, "STREAK")),
+    h("p", { "data-bn-region": "stat" }, bestB,   h("small", null, "BEST")),
+    h("p", { "data-bn-region": "stat" }, playedB, h("small", null, "DAYS")),
   );
-  bindHidden(statsSection, () => !hasStats());
+  bindHidden(statsSection, () => !loaded());
 
-  /* Error — @basenative/components' alert, hidden by default. The
-     error variant supplies role="alert"; the message lands in the
-     escaped text slot. Styled by main[data-bn-view="lobby"]
-     [data-bn-region="error"] in styles.css. */
+  /* ── Error ──────────────────────────────────────────────────────── */
+  // @basenative/components' alert, hidden by default: the error variant
+  // supplies role="alert" itself, and the message lands in the escaped
+  // text slot. Styled by main[data-bn-view="lobby"]
+  // [data-bn-region="error"] in styles.css.
   const errAlert = bnAlert({ variant: "error" });
   const errorEl = errAlert.el;
   bindText(errAlert.content, () => `error: ${error() || ""}`);
   bindHidden(errorEl, () => !error());
 
-  /* Daily card — three mutually-exclusive sub-views, each shown via
-     bindHidden so the structure stays declarative (matches statsSection
-     pattern). The auto-start effect in hydrate.js means the player
-     usually only sees the "done" branch in practice; the active branch
-     is here for the deep-link case where the user lands on / before
-     auto-start has fired. */
+  /* ── Daily card ─────────────────────────────────────────────────── */
 
-  // (a) Done — last result + come-back-tomorrow hint.
+  // (a) Done — result, streak, and when the next one lands.
   const doneResult = h("p", { "data-bn-region": "daily-result" });
   const doneScore  = h("p", { "data-bn-region": "daily-score" });
   const doneCat    = h("p", { "data-bn-region": "daily-cat" });
-  bindText(doneResult, () => stats()?.lastResult === "won" ? "Solved" : "Busted");
-  bindText(doneScore,  () => `${stats()?.lastScore || 0} pts`);
-  bindText(doneCat,    () => stats()?.lastCategory || "");
+  bindText(doneResult, () => d()?.outcome === "won" ? "Solved" : "Busted");
+  bindText(doneScore,  () => `${d()?.score ?? 0} pts`);
+  bindText(doneCat,    () => d()?.category || "");
   const doneCard = h("div", { "data-bn-region": "daily-done" }, doneResult, doneScore, doneCat);
-  const nextHint = h("p", { "data-bn-region": "daily-next" }, "Come back tomorrow for a new puzzle");
-  bindHidden(doneCard, () => !dailyDone());
-  bindHidden(nextHint, () => !dailyDone());
+  const nextHint = h("p", { "data-bn-region": "daily-next" });
+  bindText(nextHint, () => `Next puzzle in ${formatCountdown(remaining())} · free play below`);
+  bindHidden(doneCard, () => !done());
+  bindHidden(nextHint, () => !done());
 
-  // (b) Active — today's daily play button.
+  // (b) Active — today's daily. One shot: it records when it ends.
   const dailyCat = h("strong");
   const dailyBy  = h("small");
-  bindText(dailyCat, () => daily()?.group?.category || "");
-  bindText(dailyBy,  () => daily() ? `by ${daily().puzzle.submittedBy}` : "");
+  bindText(dailyCat, () => d()?.category || "");
+  bindText(dailyBy,  () => d() ? `${d().day} · counts toward your streak` : "");
   const dailyBtn = h("button", {
     type: "button",
-    "data-bn-action": "lobby-pick",
+    "data-bn-action": "lobby-daily",
     "data-bn-variant": "daily",
-    onClick: () => { const d = daily(); if (d) onPick(d.puzzle.id); },
+    onClick: () => { if (d()?.puzzleId) onDaily(); },
   },
     h("span", { class: "sr-only" }, "Play today's puzzle: "),
     dailyCat,
     dailyBy,
   );
-  bindHidden(dailyBtn, () => dailyDone() || !daily());
+  bindAttr(dailyBtn, "aria-label", () => d()
+    ? `Play today's puzzle, ${d().category}. One attempt — it counts toward your streak.`
+    : "Play today's puzzle");
+  bindHidden(dailyBtn, () => done() || !loaded());
 
-  // (c) Loading — skeleton while lobby fetch is in flight.
+  // (c) Loading skeleton while /api/daily is in flight.
   const loadingCard = h("div", { "data-bn-region": "daily-loading", "aria-hidden": "true" });
-  bindHidden(loadingCard, () => dailyDone() || !!daily());
+  bindHidden(loadingCard, () => loaded());
 
   const dailyCard = h("section", {
     "aria-label": "Today's puzzle",
@@ -108,15 +143,57 @@ export function createLobby({
     nextHint,
   );
 
-  /* Floating "submit a phrase" CTA. The styling for this button is
-     driven entirely by [data-bn-action="lobby-submit"] in styles.css
-     (already in place from #54), so no class is needed. */
+  /* ── Free play ──────────────────────────────────────────────────── */
+  const freeList = h("ul", { role: "list", "data-bn-region": "list" });
+  effect(() => {
+    const gs = groups();
+    if (!gs || gs.length === 0) {
+      freeList.replaceChildren(h("li", null, h("p", null, "Loading puzzles…")));
+      return;
+    }
+    freeList.replaceChildren(...gs.map(group => {
+      /* Deterministic pick inside a category so the same card always
+         opens the same round — surprise belongs to the daily. */
+      const pick = group.puzzles.reduce((a, b) => (a.id <= b.id ? a : b));
+      return h("li", null,
+        h("button", {
+          type: "button",
+          "data-bn-action": "lobby-pick",
+          "aria-label": `Free play: ${group.category}, by ${pick.submittedBy}. Practice — does not count toward your streak.`,
+          onClick: () => onFree(pick.id),
+        },
+          h("strong", null, group.category),
+          h("small", null, group.puzzles.length === 1
+            ? `by ${pick.submittedBy}`
+            : `${group.puzzles.length} puzzles`),
+        ),
+      );
+    }));
+  });
+
+  const freeSection = h("section", {
+    "aria-labelledby": "lobby-free-title",
+    "data-bn-region": "free-play",
+  },
+    h("h2", { id: "lobby-free-title" }, "Free play"),
+    h("p", { "data-bn-region": "free-note" },
+      "Practice rounds. Replay anything, as often as you like — they never touch your streak."),
+    freeList,
+  );
+
+  /* Floating "submit a phrase" CTA. */
   const fab = h("button", {
     type: "button",
     "data-bn-action": "lobby-submit",
     "aria-label": "Submit a phrase",
     onClick: onSubmit,
   }, "+ SUBMIT A PHRASE");
+
+  /* One-line statement of the rule that decides every round. The help
+     modal explains it properly; this makes sure nobody meets it for the
+     first time by losing to it. */
+  const rules = h("p", { "data-bn-region": "rules-note" },
+    "Four lives for the whole phrase — any word guess that isn't fully correct costs one.");
 
   return h("main", {
     "aria-labelledby": "lobby-title",
@@ -132,6 +209,8 @@ export function createLobby({
     statsSection,
     errorEl,
     dailyCard,
+    rules,
+    freeSection,
     fab,
   );
 }

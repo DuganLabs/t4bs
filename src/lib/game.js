@@ -99,38 +99,69 @@ export function groupLobby(lobby) {
   return [...map.values()].sort((a, b) => a.category.localeCompare(b.category));
 }
 
-/* Date-seeded deterministic selection — everyone sees the same puzzle
-   for a given day. Uses a simple hash of the YYYY-MM-DD string to pick
-   an index from the available puzzle list. */
-export function dailySeed(date = new Date()) {
-  const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-  let h = 0;
-  for (let i = 0; i < key.length; i++) {
-    h = ((h << 5) - h + key.charCodeAt(i)) | 0;
-  }
-  return Math.abs(h);
-}
+/* The daily puzzle used to be picked HERE, in the browser, off the
+   local calendar date (`dailySeed`/`dailyPuzzle`/`dailyFromGroups`,
+   removed in this change). Nothing on the server agreed with that pick,
+   so players in different time zones got different "dailies" and any
+   client could POST /api/session with any id and clear the catalogue in
+   one sitting. Selection now lives in shared/daily.js and is resolved
+   server-side (`GET /api/daily`, `POST /api/session {mode:"daily"}`);
+   the client only renders what the server says today is. */
 
-/** Pick today's puzzle from a flat list of puzzles. Returns null if the list is empty. */
-export function dailyPuzzle(puzzles, date = new Date()) {
-  if (!puzzles || puzzles.length === 0) return null;
-  const seed = dailySeed(date);
-  return puzzles[seed % puzzles.length];
-}
+/**
+ * Everything the player has actually worked out, at phrase level.
+ *
+ * The grid and the keyboard show the state of ONE word at a time;
+ * nothing summarised the round. Resuming mid-phrase meant counting
+ * solved words and locked tiles by eye. This is the read-out behind
+ * <section data-bn-region="knowledge"> in the play view.
+ *
+ * @param {{
+ *   words: number[] | undefined,
+ *   locked: Array<Record<number, string>>,
+ *   wordSolved: boolean[],
+ *   presentGlobal: string[],
+ *   lives: number,
+ *   tokens: number,
+ *   livesAllowed?: number,
+ * }} input
+ */
+export function knowledgeSummary({
+  words, locked, wordSolved, presentGlobal, lives, tokens, livesAllowed = 4,
+}) {
+  const ws = words || [];
+  const totalLetters = ws.reduce((a, n) => a + n, 0);
+  const knownLetters = ws.reduce(
+    (acc, _n, wi) => acc + Object.keys(locked?.[wi] || {}).length,
+    0,
+  );
+  const solvedWords = (wordSolved || []).filter(Boolean).length;
+  /* Letters proven to be in the phrase but not yet placed anywhere —
+     the "you know more than the grid shows" number. */
+  const lockedLetters = new Set();
+  ws.forEach((_n, wi) => Object.values(locked?.[wi] || {}).forEach(L => lockedLetters.add(L)));
+  const floating = (presentGlobal || []).filter(L => !lockedLetters.has(L)).length;
 
-/** Pick today's category and puzzle from grouped lobby data. */
-export function dailyFromGroups(groups, date = new Date()) {
-  if (!groups || groups.length === 0) return null;
-  const seed = dailySeed(date);
-  const group = groups[seed % groups.length];
-  const puzzle = group.puzzles[seed % group.puzzles.length];
-  return { group, puzzle };
-}
-
-/** YYYY-MM-DD string for today (local time). Used as the persistence
- *  key so we know whether the player already finished today's daily. */
-export function todayKey(date = new Date()) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return {
+    solvedWords,
+    totalWords: ws.length,
+    knownLetters,
+    totalLetters,
+    floating,
+    lives,
+    livesAllowed,
+    tokens,
+    /* Which unsolved word has the highest share of letters already
+       locked — the cheapest next target, and the thing players were
+       eyeballing the grid to work out. */
+    bestTarget: ws.reduce((best, len, wi) => {
+      if (wordSolved?.[wi]) return best;
+      const known = Object.keys(locked?.[wi] || {}).length;
+      const ratio = len > 0 ? known / len : 0;
+      if (!best || ratio > best.ratio) return { wi, ratio, known, len };
+      return best;
+    }, /** @type {{wi:number,ratio:number,known:number,len:number}|null} */(null)),
+  };
 }
 
 export const isDev = () => !!(import.meta && import.meta.env && import.meta.env.DEV);

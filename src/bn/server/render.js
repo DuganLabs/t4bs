@@ -83,6 +83,25 @@ function lobbyGroups(lobby) {
   });
 }
 
+/* Presentation shaping for the server's daily status — the template
+   only ever prints strings, so the emoji/streak/verdict decisions
+   happen here rather than in template expressions.
+   @param {any} daily */
+function shapeDaily(daily) {
+  if (!daily) return null;
+  const streak = daily.streak || 0;
+  return {
+    category: daily.category || "",
+    day: daily.day || "",
+    score: daily.score ?? 0,
+    streak,
+    streakLabel: streak > 0 ? `\u{1F525}${streak}` : "0",
+    bestStreak: daily.bestStreak || 0,
+    daysPlayed: daily.daysPlayed || 0,
+    resultLabel: daily.outcome === "won" ? "Solved" : "Busted",
+  };
+}
+
 /** @param {import('./ssr-context.js').PlaySessionSsr | null} play */
 function shapePlay(play) {
   if (!play) return null;
@@ -122,6 +141,9 @@ function renderView(ctx) {
     case "lobby":
       return render(tpl, {
         groups: lobbyGroups(ctx.lobby),
+        daily: shapeDaily(ctx.daily),
+        dailyOpen: !!(ctx.daily && ctx.daily.puzzleId && !ctx.daily.playedToday),
+        dailyDone: !!(ctx.daily && ctx.daily.playedToday),
         error: ctx.error,
       });
     case "play":
@@ -168,6 +190,7 @@ function renderView(ctx) {
  *   user: { handle: string, role: string, isAdmin: boolean, isModerator: boolean } | null,
  *   error: string | null,
  *   lobby: any,
+ *   daily: any,
  *   play: any,
  *   submit: { existingCategories: string[] },
  *   moderate: { pending: any[] | null, forbidden?: boolean },
@@ -191,6 +214,7 @@ export function renderPage(ctx, assets) {
     user: ctx.user,
     error: ctx.error,
     lobby: ctx.lobby,
+    daily: ctx.daily ?? null,
     play: ctx.play,
     submit: ctx.submit,
     moderate: ctx.moderate,

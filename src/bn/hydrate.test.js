@@ -25,6 +25,7 @@ function baseCtx(overrides = {}) {
     user: null,
     error: null,
     lobby: null,
+    daily: null,
     play: null,
     submit: { existingCategories: [] },
     moderate: { pending: null, forbidden: false },
@@ -154,6 +155,68 @@ describe("renderPage — emits a complete BaseNative-rendered HTML document for 
       !/<button[^>]*data-bn-action="lobby-pick"/.test(lobbyHtml),
       "lobby SSR must not emit a <button> for picking — anchors only",
     );
+  });
+
+  /* The daily is server-authoritative now: the lobby has to SSR the
+     puzzle the server picked and this player's streak, not wait for a
+     client-side date hash to guess one after hydration. */
+  it("lobby SSRs today's daily card and the streak when the server resolved one", () => {
+    const html = renderPage(baseCtx({
+      lobby: [{ id: 9, category: "FAIRY TALES", submittedBy: "house" }],
+      daily: {
+        day: "2026-09-11", puzzleId: 9, category: "FAIRY TALES", submittedBy: "house",
+        playedToday: false, outcome: null, score: null,
+        streak: 3, bestStreak: 5, daysPlayed: 12,
+      },
+    }), ASSETS);
+    assert.match(html, /data-bn-action="lobby-daily"/);
+    assert.match(html, /href="\/play\?daily=1"/);
+    assert.match(html, /2026-09-11/);
+    assert.match(html, /counts toward your streak/i);
+    // Streak strip, rendered from the server's numbers.
+    assert.match(html, /STREAK/);
+    assert.match(html, />5</, "best streak");
+    assert.match(html, />12</, "days played");
+  });
+
+  it("lobby SSRs the done state instead of a play link once today is recorded", () => {
+    const html = renderPage(baseCtx({
+      lobby: [{ id: 9, category: "FAIRY TALES", submittedBy: "house" }],
+      daily: {
+        day: "2026-09-11", puzzleId: 9, category: "FAIRY TALES", submittedBy: "house",
+        playedToday: true, outcome: "won", score: 96,
+        streak: 1, bestStreak: 1, daysPlayed: 1,
+      },
+    }), ASSETS);
+    assert.doesNotMatch(html, /data-bn-action="lobby-daily"/,
+      "a finished daily must not offer a play link — the server would refuse it");
+    assert.match(html, /data-bn-region="daily-done"/);
+    assert.match(html, />Solved</);
+    assert.match(html, /96 pts/);
+    assert.match(html, /Next puzzle at 00:00 UTC/);
+  });
+
+  it("lobby free-play shelf says plainly that it doesn't count", () => {
+    const html = renderPage(baseCtx({
+      lobby: [{ id: 1, category: "ANIMALS", submittedBy: "wmd" }],
+    }), ASSETS);
+    assert.match(html, /data-bn-region="free-play"/);
+    assert.match(html, /never touch your streak/i);
+    assert.match(html, /Does not count toward your streak/i);
+  });
+
+  it("lobby states the shared-life rule before a round starts", () => {
+    const html = renderPage(baseCtx({
+      lobby: [{ id: 1, category: "ANIMALS", submittedBy: "wmd" }],
+    }), ASSETS);
+    assert.match(html, /Four lives for the whole phrase/i);
+    assert.match(html, /isn't fully correct costs one/i);
+  });
+
+  it("lobby renders without a daily at all (D1 hiccup) rather than throwing", () => {
+    assert.doesNotThrow(() => renderPage(baseCtx({ daily: null }), ASSETS));
+    const html = renderPage(baseCtx({ daily: null }), ASSETS);
+    assert.doesNotMatch(html, /data-bn-action="lobby-daily"/);
   });
 
   it("lobby includes a <noscript> hint about JS-optional play", () => {
@@ -347,6 +410,36 @@ describe("decidePlayBoot", () => {
     // Callers that don't pass `pathname` (e.g. older call sites/tests)
     // must keep resolving start/resume normally, not silently no-op.
     assert.deepEqual(decidePlayBoot({ search: "?play=9" }, null), { kind: "start", puzzleId: 9 });
+  });
+});
+
+describe("decidePlayBoot — ?daily=1", () => {
+  it("routes a shareable daily link to the server-resolved daily", () => {
+    assert.deepEqual(
+      decidePlayBoot({ pathname: "/play", search: "?daily=1" }, null),
+      { kind: "daily" },
+    );
+  });
+
+  it("beats an explicit ?play= id, which could otherwise replay a finished day", () => {
+    assert.deepEqual(
+      decidePlayBoot({ pathname: "/play", search: "?daily=1&play=3" }, null),
+      { kind: "daily" },
+    );
+  });
+
+  it("beats a saved session id too — the link is the intent", () => {
+    assert.deepEqual(
+      decidePlayBoot({ pathname: "/play", search: "?daily=1" }, { sessionId: "abc" }),
+      { kind: "daily" },
+    );
+  });
+
+  it("still ignores routes boot policy does not own", () => {
+    assert.deepEqual(
+      decidePlayBoot({ pathname: "/moderate", search: "?daily=1" }, null),
+      { kind: "ignore" },
+    );
   });
 });
 

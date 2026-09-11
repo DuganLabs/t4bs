@@ -1,18 +1,14 @@
-/* In-memory stores for local Vite dev. The puzzle list is intentionally hard-coded
-   here (server-only) and never imported by anything in /src. */
+/* In-memory stores for local Vite dev.
 
-const PUZZLES_DEV = [
-  { id:1,  category:"MOVIE QUOTES",    phrase:"MAY THE FORCE BE WITH YOU", anchors:[], submittedBy:"house" },
-  { id:2,  category:"FAMOUS SPEECHES", phrase:"I HAVE A DREAM",            anchors:[], submittedBy:"house" },
-  { id:3,  category:"BEATLES SONGS",   phrase:"HERE COMES THE SUN",        anchors:[], submittedBy:"house" },
-  { id:4,  category:"SHAKESPEARE",     phrase:"TO BE OR NOT TO BE",        anchors:[], submittedBy:"house" },
-  { id:5,  category:"PROVERBS",        phrase:"PRACTICE MAKES PERFECT",    anchors:[], submittedBy:"house" },
-  { id:6,  category:"FILM TITLES",     phrase:"GONE WITH THE WIND",        anchors:[], submittedBy:"house" },
-  { id:7,  category:"ROCK ANTHEMS",    phrase:"BORN IN THE USA",           anchors:[], submittedBy:"house" },
-  { id:8,  category:"MOTIVATIONAL",    phrase:"NEVER GIVE UP",             anchors:[], submittedBy:"house" },
-  { id:9,  category:"FAIRY TALES",     phrase:"ONCE UPON A TIME",          anchors:[], submittedBy:"house" },
-  { id:10, category:"CARPE DIEM",      phrase:"SEIZE THE DAY",             anchors:[], submittedBy:"house" },
-];
+   The puzzle list is no longer duplicated here: it comes from
+   shared/seed-puzzles.js, the same module seed.sql is generated from,
+   so the dev mock and production D1 can't drift (they had: the dev copy
+   still carried the two phrases with one-letter words, and all ten rows
+   carried `anchors: []`). */
+
+import { SEED_PUZZLES } from "../shared/seed-puzzles.js";
+
+const PUZZLES_DEV = SEED_PUZZLES.map(p => ({ ...p, anchors: p.anchors.map(a => ({ ...a })) }));
 
 export function memoryPuzzles() {
   const list = [...PUZZLES_DEV];
@@ -68,6 +64,26 @@ export function memoryUsers() {
       const u = { id, handle, createdAt: Date.now() };
       byHandle.set(handle, u); byId.set(id, u);
       return u;
+    },
+  };
+}
+
+
+/* Daily results for the dev mock — same contract as d1Dailies(). */
+export function memoryDailies() {
+  const rows = new Map();   // `${playerKey}|${day}` -> row
+  return {
+    async get(playerKey, day) { return rows.get(`${playerKey}|${day}`) || null; },
+    async record({ playerKey, day, puzzleId, outcome, score }) {
+      const k = `${playerKey}|${day}`;
+      if (rows.has(k)) return;                    // mirrors INSERT OR IGNORE
+      rows.set(k, { day, puzzleId, outcome, score: score || 0 });
+    },
+    async history(playerKey) {
+      return [...rows.entries()]
+        .filter(([k]) => k.startsWith(`${playerKey}|`))
+        .map(([, v]) => v)
+        .sort((a, b) => (a.day < b.day ? 1 : -1));
     },
   };
 }

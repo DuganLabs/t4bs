@@ -18,7 +18,12 @@ const post = (p, body) => req(p, { method: "POST", body: JSON.stringify(body || 
 export const api = {
   /* game */
   listPuzzles:  ()                                 => get("/puzzles"),
-  startSession: (puzzleId)                         => post("/session", { puzzleId }),
+  /* The daily is resolved server-side — the client asks what today is
+     and asks to start it; it never names the puzzle. Free play still
+     names one, and is never recorded. */
+  daily:        ()                                 => get("/daily"),
+  startDaily:   ()                                 => post("/session", { mode: "daily" }),
+  startSession: (puzzleId)                         => post("/session", { puzzleId, mode: "free" }),
   resumeSession:(sessionId)                        => get(`/session/${encodeURIComponent(sessionId)}`),
   guess:        (sessionId, wordIndex, letters, wagers = []) =>
                                                       post("/guess",   { sessionId, wordIndex, letters, wagers }),

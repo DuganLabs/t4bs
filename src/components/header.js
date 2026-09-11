@@ -31,17 +31,28 @@ export function createHeader({
 
   // Playing-mode stats — <output> matches the SSR <output aria-label="Score"> shape
   const tokenOut = h("output", {
+    "data-bn-role": "tokens",
     "aria-label": "Tokens",
     text: () => `⚡ ${tokens()}`,
     hidden: () => !(view() === "playing" && tokens() > 0),
   });
   const scoreOut = h("output", {
+    "data-bn-role": "score",
     "aria-label": "Score",
     text: () => `${score()} pts`,
     hidden: () => view() !== "playing",
   });
+  /* The lives counter is the only place the game's harshest rule is
+     visible, so the accessible name says what the hearts actually mean:
+     one pool for the entire phrase, spent by any imperfect word guess. */
   const livesOut = h("output", {
-    "aria-label": () => `${lives()} of 4 lives remaining`,
+    /* Styling hooks off data-bn-role, not aria-label: the label is
+       reactive (it names the current count), so an
+       [aria-label="Lives"] CSS selector silently stopped matching once
+       the SPA hydrated. */
+    "data-bn-role": "lives",
+    "aria-label": () => `${lives()} of 4 lives left — one pool for the whole phrase; any word guess that isn't fully correct costs one`,
+    title: "Lives are shared across the whole phrase",
     text: () => "♥".repeat(Math.max(0, lives())) || "—",
     hidden: () => view() !== "playing",
   });

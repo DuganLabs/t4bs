@@ -24,6 +24,7 @@ function baseCtx(overrides = {}) {
     user: null,
     error: null,
     lobby: null,
+    daily: null,
     play: null,
     submit: { existingCategories: [] },
     moderate: { pending: null, forbidden: false },
@@ -40,6 +41,13 @@ const ROUTE_FIXTURES = {
       { id: 2, category: "ANIMALS", submittedBy: "bob" },
       { id: 3, category: "FOODS",   submittedBy: "carol" },
     ],
+    /* The lobby's hero is the server-picked daily + this player's
+       streak, so the audit fixture has to carry one. */
+    daily: {
+      day: "2026-09-11", puzzleId: 3, category: "FOODS", submittedBy: "carol",
+      playedToday: false, outcome: null, score: null,
+      streak: 2, bestStreak: 4, daysPlayed: 9,
+    },
   },
   play: {
     pathname: "/play",
