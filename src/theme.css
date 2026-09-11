@@ -122,13 +122,25 @@
 }
 
 /* @basenative/combobox ships a WCAG-AA *light* default palette (see its
-   own styles.css header comment) as `--cb-*` custom properties scoped to
-   `[data-bn="combobox"]` — with no T4BS override, the category combobox
-   on /submit rendered as a plain white box with black text, the one
-   light-surface leak inside an otherwise all-dark UI. Deliberately
-   unlayered for the same reason as the `--bn-*` block above: the
-   package's own tokens live in `@layer combobox`, so an unlayered rule
-   here wins regardless of import order.
+   own styles.css header comment) as `--cb-*` custom properties set
+   DIRECTLY on `[data-bn="combobox"]` (not `:root`) inside `@layer
+   combobox` — with no T4BS override, the category combobox on /submit
+   rendered as a plain white box with black text, the one light-surface
+   leak inside an otherwise all-dark UI.
+
+   This block used to target `:root` on the theory that "unlayered
+   always wins over layered" (same reasoning as the `--bn-*` block
+   above). That's true for a cascade *tie* on the same element, but
+   it isn't one here: the package's rule sets `--cb-fg` etc. directly
+   on [data-bn="combobox"] itself, so that specified value always wins
+   over whatever [data-bn="combobox"] would otherwise *inherit* from
+   :root, regardless of layering — inheritance only applies when
+   nothing in the cascade targets the element directly. A `:root`
+   override for one of the package's own component-scoped tokens is a
+   no-op; it has to target the same selector the package uses.
+   Deliberately unlayered here (like the --bn-* block) so this still
+   wins over the package's `@layer combobox` declaration once both are
+   competing for the same element.
      bg/listbox-bg #0F0E0C, fg #F0EDE4 — one step darker than
        --bn-color-surface (#0C0B09) so the field reads as a raised
        control against the page, same relationship styles.css already
@@ -140,7 +152,7 @@
      option-bg-hover #242018 / -active #2E2A22 — distinguishable dark
        steps up from the field bg, same "hover < active" relationship
        as [data-bn="cb-option"] expects. */
-:root {
+[data-bn="combobox"] {
   --cb-bg: #0F0E0C;
   --cb-fg: #F0EDE4;
   --cb-muted-fg: #988570;
