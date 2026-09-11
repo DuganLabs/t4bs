@@ -628,9 +628,11 @@ main[data-bn-view="play"] > header[data-bn-region="play-summary"] > h1 {
   max-width: 320px;
 }
 
-/* "#42 · capital cities" */
+/* "#42 · capital cities" — #7A7570 measured 4.31:1 at 12px (fails AA's
+   4.5:1 for normal-size text). #988570 is the same brand muted token
+   already used elsewhere (theme.css --bn-color-text-muted) at 5.55:1. */
 main[data-bn-view="play"] [data-bn-bind="num"] {
-  font-size: 12px; text-transform: uppercase; letter-spacing: 2.5px; color: #7A7570;
+  font-size: 12px; text-transform: uppercase; letter-spacing: 2.5px; color: #988570;
   margin-bottom: 10px; width: 100%; max-width: 540px; text-align: center;
 }
 
@@ -649,13 +651,18 @@ main[data-bn-view="play"] > header[data-bn-region="play-summary"] > p:not([data-
   color: #9A9590;
 }
 
-/* hint line — orange when a word is active */
+/* hint line — orange when a word is active. Both colors below were
+   raised for AA contrast at 12px: the active #A06020 measured 3.92:1
+   (fails 4.5:1); the default #7A7570 shares the meta line's failing
+   color above. #988570 is the brand muted token (5.55:1); #C97A2A
+   keeps the same hue as the old active-state orange while clearing
+   4.5:1 on this background. */
 main[data-bn-view="play"] [data-bn-region="play-hint"] {
   width: 100%; max-width: 540px; text-align: center;
   font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;
-  color: #7A7570; margin-bottom: 12px; min-height: 14px; transition: color .4s;
+  color: #988570; margin-bottom: 12px; min-height: 14px; transition: color .4s;
 }
-main[data-bn-view="play"] [data-bn-region="play-hint"][data-active] { color: #A06020; }
+main[data-bn-view="play"] [data-bn-region="play-hint"][data-active] { color: #C97A2A; }
 
 /* cbar — green by default, red in all-in mode */
 main[data-bn-view="play"] [data-bn-region="play-cbar"] {
