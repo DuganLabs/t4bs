@@ -1,8 +1,14 @@
 /* Top-level middleware: BaseNative SSR dispatch (default) + ?legacy=1
-   escape + security headers + no-store for API responses. */
+   escape + response hardening.
+
+   The hardening headers come from @basenative/middleware's
+   securityHeaders() via ./_shared/security.js, which is where the
+   policy and the reasoning behind each source live. This file only
+   decides what gets rendered; it no longer hand-rolls a header set. */
 
 import { shouldRenderSsr } from "../src/bn/route-table.js";
 import { renderSsr } from "./_shared/ssr.js";
+import { harden } from "./_shared/security.js";
 
 export const onRequest = async (ctx) => {
   const { request, next } = ctx;
@@ -17,7 +23,7 @@ export const onRequest = async (ctx) => {
   // route saw a different resource than the GET that followed it.
   if ((request.method === "GET" || request.method === "HEAD") && shouldRenderSsr(url.pathname, url.searchParams)) {
     try {
-      return withoutBody(decorate(await renderSsr(ctx), url), request.method);
+      return withoutBody(harden(await renderSsr(ctx), { request }), request.method);
     } catch (err) {
       // Surface the error in logs so it can actually be debugged. The
       // user reported reload as broken because the previous middleware
@@ -26,12 +32,12 @@ export const onRequest = async (ctx) => {
       // and serve a 500 page rendered from the same SSR pipeline; the
       // SPA boots from there and recovers via client-side routing.
       try { console.error("SSR error", err?.stack || err); } catch { /* ignore */ }
-      return withoutBody(decorate(await renderError(ctx, err), url), request.method);
+      return withoutBody(harden(await renderError(ctx, err), { request }), request.method);
     }
   }
 
   const res = await next();
-  return decorate(res, url);
+  return harden(res, { request });
 };
 
 /** Render a graceful 500 page through the same template pipeline. */
@@ -71,15 +77,3 @@ function withoutBody(res, method) {
   return new Response(null, { status: res.status, headers: res.headers });
 }
 
-/** @param {Response} res @param {URL} url */
-function decorate(res, url) {
-  const headers = new Headers(res.headers);
-  headers.set("X-Content-Type-Options", "nosniff");
-  headers.set("X-Frame-Options", "DENY");
-  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  headers.set("Permissions-Policy", "publickey-credentials-get=(self), publickey-credentials-create=(self)");
-  if (url.pathname.startsWith("/api/")) {
-    headers.set("Cache-Control", "no-store");
-  }
-  return new Response(res.body, { status: res.status, headers });
-}

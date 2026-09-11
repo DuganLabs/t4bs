@@ -27,6 +27,20 @@ const PAGE_STYLE = `html,body{margin:0;height:100%;background:#0C0B09;color:#F0E
     p{margin:0;font-size:18px;color:#988570;}
     a{color:#E8920A;text-decoration:none;font-weight:700;}`;
 
+/* Instant redirect for human visitors. Crawlers do not run JS, so they
+   stay on this page and scrape the OG meta above.
+
+   The destination is read out of <meta name="bn-play-url"> rather than
+   interpolated into the script body, so this block is a compile-time
+   constant with a stable CSP hash — see SHARE_REDIRECT_SCRIPT_HASH in
+   functions/_shared/security.js. Interpolating the URL here would make
+   the script text vary per response, which no hash could cover and
+   which would leave the CSP with no way to allow it short of
+   'unsafe-inline'. The meta tag is parsed before this script runs, so
+   the redirect is still immediate. */
+const REDIRECT_SCRIPT =
+  `<script>window.location.replace(document.querySelector('meta[name="bn-play-url"]').content)</script>`;
+
 function notFoundPage(message) {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -106,12 +120,9 @@ export const onRequestGet = async ({ request: _request, env, params }) => {
   <meta name="twitter:image:alt" content="Tabs — try this ${esc(card.category)} puzzle" />
 
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="bn-play-url" content="${esc(playUrl)}" />
   <style>${PAGE_STYLE}</style>
-  <script>
-    // Instant redirect for human visitors. Crawlers do not run JS.
-    // Recipients land directly on the same puzzle the original player took.
-    window.location.replace(${JSON.stringify(playUrl)});
-  </script>
+  ${REDIRECT_SCRIPT}
 </head>
 <body>
   <div class="wrap">
