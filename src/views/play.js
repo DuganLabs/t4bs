@@ -643,15 +643,10 @@ export function createPlay({
     const root = kbHost.querySelector('[data-bn="keyboard"]');
     if (!root) return;
     kb.hydrate(root);
-    /* iOS Safari: @basenative/keyboard@1.0.0 calls preventDefault on
-       touchstart, suppressing the synthetic click the dispatcher relies
-       on. Synthesize the click on touchend until the upstream fix lands. */
-    root.addEventListener("touchend", (e) => {
-      const btn = e.target && e.target.closest && e.target.closest("[data-bn-kb-key]");
-      if (!btn || btn.disabled) return;
-      e.preventDefault();
-      btn.click();
-    }, { passive: false });
+    /* @basenative/keyboard >= 1.0.5 handles touchend itself (dispatches the
+       key, then preventDefault()s to stop the synthetic click double-firing).
+       The local workaround that used to synthesize btn.click() here is gone:
+       running both produced two letters per tap on touch devices. */
 
     /* @basenative/keyboard@1.0.5's hydrateKeyboard() only toggles the
        bn-kb-key--{green,yellow,absent} classes when `state` changes —
