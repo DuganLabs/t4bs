@@ -43,11 +43,29 @@ const ROOT = process.cwd();
 const sha256 = (text) =>
   `'sha256-${createHash("sha256").update(text, "utf8").digest("base64")}'`;
 
+/** Strip HTML comments, repeating until the string stops changing.
+ *  A single pass can leave a bare `<!--` behind when comments nest or
+ *  overlap, which is what CodeQL's js/incomplete-multi-character-
+ *  sanitization flags. Nothing here is rendered, so it is a parsing
+ *  nicety rather than an injection fix — but a half-stripped document
+ *  is exactly how an extractor silently grabs the wrong block. */
+function stripComments(html) {
+  let prev;
+  let out = html;
+  do {
+    prev = out;
+    out = out.replace(/<!--[\s\S]*?-->/g, "");
+  } while (out !== prev);
+  return out;
+}
+
 /** The text between <style data-bn-critical> and </style>, HTML comments
- *  stripped first (index.html's comment quotes the tag name). */
+ *  stripped first (index.html's comment quotes the tag name). Tag
+ *  matching is case-insensitive throughout this file: HTML tag names
+ *  are, and an extractor that only sees lowercase would quietly find
+ *  nothing rather than fail. */
 function criticalStyle(html, label) {
-  const stripped = html.replace(/<!--[\s\S]*?-->/g, "");
-  const m = stripped.match(/<style data-bn-critical>([\s\S]*?)<\/style>/);
+  const m = stripComments(html).match(/<style data-bn-critical>([\s\S]*?)<\/style>/i);
   assert.ok(m, `${label}: no <style data-bn-critical> block found`);
   return m[1];
 }
@@ -205,7 +223,7 @@ describe("inline-content hashes are current", () => {
     // inline <script> ever appears in the SSR shell it needs a hash,
     // so fail loudly here rather than in a browser console.
     const html = renderPage({ ...SSR_CONTEXT, route: "lobby" }, SSR_ASSETS);
-    for (const m of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)) {
+    for (const m of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)) {
       const attrs = m[1];
       const isDataBlock = /type\s*=\s*["']application\/(ld\+)?json["']/.test(attrs);
       const isExternal = /\ssrc\s*=/.test(attrs);
@@ -220,7 +238,7 @@ describe("inline-content hashes are current", () => {
   it("covers every event-handler attribute the SSR shell emits", () => {
     const html = renderPage({ ...SSR_CONTEXT, route: "lobby" }, SSR_ASSETS);
     const handlers = new Set(
-      [...html.matchAll(/\son[a-z]+\s*=\s*"([^"]*)"/g)].map((m) => m[1]),
+      [...html.matchAll(/\son[a-z]+\s*=\s*"([^"]*)"/gi)].map((m) => m[1]),
     );
     assert.deepEqual([...handlers], ["this.media='all'"],
       "a new inline event handler appeared; 'unsafe-hashes' only covers hashes listed in script-src");
@@ -236,7 +254,7 @@ describe("inline-content hashes are current", () => {
     assert.equal(styleHash, SHARE_PAGE_STYLE_HASH,
       `SHARE_PAGE_STYLE_HASH is stale; set it to: ${styleHash}`);
 
-    const script = src.match(/<script>([\s\S]*?)<\/script>/);
+    const script = src.match(/<script>([\s\S]*?)<\/script>/i);
     assert.ok(script, "redirect <script> not found in functions/s/[id].js");
     const scriptHash = sha256(script[1]);
     assert.equal(scriptHash, SHARE_REDIRECT_SCRIPT_HASH,
@@ -258,7 +276,7 @@ describe("inline-content hashes are current", () => {
        policy to cover whatever it emits. */
     const { renderKeyboard } = await import("@basenative/keyboard");
     const html = renderKeyboard({ layout: "qwerty", primary: "ENTER" });
-    const emitted = new Set([...html.matchAll(/\sstyle="([^"]*)"/g)].map((m) => m[1]));
+    const emitted = new Set([...html.matchAll(/\sstyle="([^"]*)"/gi)].map((m) => m[1]));
 
     assert.ok(emitted.size > 0, "keyboard emitted no style attribute — has the package changed shape?");
     for (const value of emitted) {
