@@ -23,11 +23,16 @@ export default `<header role="banner" data-bn-region="header">
     </template>
 
     <ul role="list">
+      <!-- Labels are "MOD"/"ADM" to match src/components/header.js
+           (the hydrated client) — this used to say "Moderate"/"Admin",
+           a copy mismatch visible on hydration (and to no-JS/crawler
+           visitors permanently). Abbreviated also keeps these anchors
+           narrower, which helps the mobile header-overflow budget. -->
       <template @if="user &amp;&amp; user.isModerator">
-        <li><a href="/moderate" :aria-current="route === 'moderate' ? 'page' : false">Moderate</a></li>
+        <li><a href="/moderate" :aria-current="route === 'moderate' ? 'page' : false">MOD</a></li>
       </template>
       <template @if="user &amp;&amp; user.isAdmin">
-        <li><a href="/admin" :aria-current="route === 'admin' ? 'page' : false">Admin</a></li>
+        <li><a href="/admin" :aria-current="route === 'admin' ? 'page' : false">ADM</a></li>
       </template>
       <li>
         <button type="button" data-bn-action="help" aria-label="How to play">?</button>
