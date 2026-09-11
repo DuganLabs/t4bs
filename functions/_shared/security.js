@@ -51,11 +51,17 @@
    Function constructor (verified against dist/assets/*.js).
    No worker-src: nothing calls `new Worker` or `URL.createObjectURL`.
    No service worker exists in this repo at all.
-   No script-src entry for Cloudflare Web Analytics: the beacon is not
-   enabled on this zone — verified against the production HTML at
-   https://t4bs.com/, which contains no cloudflareinsights reference.
-   If it is ever switched on in the dashboard it will need adding here,
-   and it will announce itself as a CSP violation first.
+   Cloudflare Web Analytics IS enabled on this zone. It was recorded here
+   as "not enabled — verified against the production HTML", and that check
+   was wrong in a way worth naming: Cloudflare injects the beacon at the
+   EDGE, after the Worker has responded, so it appears in what a browser
+   receives and never in what the origin emits. curl and a Worker-side
+   render both show a clean page. A browser shows two blocked scripts.
+   Check the delivered document, not the origin response.
+   The beacon is now a hand-written external <script src> in the SSR shell
+   (src/bn/views/layout.js) rather than the zone's automatic injection,
+   which emits an inline loader that no CSP can admit without
+   'unsafe-inline' or a hash of text Cloudflare rotates per release.
    The JSON-LD and `#bn-ssr-state` blocks are <script type="application/
    ld+json"> and <script type="application/json"> — HTML data blocks,
    never executed, so script-src does not apply and they need no hash. */
@@ -138,6 +144,10 @@ export const KEYBOARD_WIDE_KEY_STYLE_HASH =
  *  files from another; both <link>s are in layout.js and index.html. */
 export const FONT_CSS_ORIGIN = "https://fonts.googleapis.com";
 export const FONT_FILE_ORIGIN = "https://fonts.gstatic.com";
+/* Cloudflare Web Analytics: the beacon is served from one host and reports to
+   another. Both are required — see the script-src and connect-src notes below. */
+export const ANALYTICS_SCRIPT_ORIGIN = "https://static.cloudflareinsights.com";
+export const ANALYTICS_REPORT_ORIGIN = "https://cloudflareinsights.com";
 
 /**
  * The finalizer. Stamps the hardened header set onto any Response.
@@ -153,7 +163,12 @@ export const harden = securityHeaders({
        imported view chunk — all same-origin /assets/*.js. t4bs loads no
        third-party script at all. The two hashes are the font-swap
        handler and the share-landing redirect; see above. */
-    "script-src": ["'unsafe-hashes'", FONT_SWAP_HANDLER_HASH, SHARE_REDIRECT_SCRIPT_HASH],
+    "script-src": [
+      "'unsafe-hashes'",
+      FONT_SWAP_HANDLER_HASH,
+      SHARE_REDIRECT_SCRIPT_HASH,
+      ANALYTICS_SCRIPT_ORIGIN,
+    ],
 
     /* The Google Fonts stylesheet (both the <link rel=stylesheet> and
        its <link rel=preload as=style>, which style-src also governs),
@@ -202,13 +217,18 @@ export const harden = securityHeaders({
     /* woff2 files. */
     "font-src": [FONT_FILE_ORIGIN],
 
-    /* connect-src stays at the baseline 'self'. Every fetch this app
-       makes is same-origin /api/* (src/lib/api.js, and the /api/log
-       error beacon in src/main.js + src/bn/client/hydrate.js). There is
-       no WebSocket and no service worker. The one cross-origin fetch in
-       the codebase — cdn.jsdelivr.net for the OG card's font, in
-       functions/_shared/og.js — runs inside the Worker, where CSP does
-       not apply, so it deliberately does NOT appear here. */
+    /* Every fetch this app itself makes is same-origin /api/*
+       (src/lib/api.js, and the /api/log error beacon in src/main.js +
+       src/bn/client/hydrate.js). There is no WebSocket and no service
+       worker. The one cross-origin fetch in the codebase —
+       cdn.jsdelivr.net for the OG card's font, in functions/_shared/og.js
+       — runs inside the Worker, where CSP does not apply, so it
+       deliberately does NOT appear here.
+       The one entry is where the Web Analytics beacon POSTs its page
+       views. Loading beacon.min.js without it gets a script that runs and
+       then has every report blocked, which looks like working analytics
+       and reports nothing. */
+    "connect-src": [ANALYTICS_REPORT_ORIGIN],
 
     /* img-src stays at the baseline 'self' data:. The OG cards are
        same-origin /og/*.png, the favicon is /favicon.svg, and nothing

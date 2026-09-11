@@ -33,6 +33,8 @@ import {
   SHARE_REDIRECT_SCRIPT_HASH,
   FONT_SWAP_HANDLER_HASH,
   KEYBOARD_WIDE_KEY_STYLE_HASH,
+  ANALYTICS_REPORT_ORIGIN,
+  ANALYTICS_SCRIPT_ORIGIN,
   FONT_CSS_ORIGIN,
   FONT_FILE_ORIGIN,
 } from "../functions/_shared/security.js";
@@ -155,12 +157,20 @@ describe("security headers", () => {
     assert.ok(csp["style-src"].includes(FONT_CSS_ORIGIN), "Google Fonts CSS origin");
     assert.ok(csp["font-src"].includes(FONT_FILE_ORIGIN), "Google Fonts woff2 origin");
 
-    // connect-src is same-origin only: every fetch is /api/*. The one
-    // cross-origin fetch (cdn.jsdelivr.net in functions/_shared/og.js)
-    // runs inside the Worker, where CSP does not apply.
-    assert.deepEqual(csp["connect-src"], ["'self'"]);
-    assert.ok(!csp["script-src"].some((s) => s.startsWith("http")),
-      "no third-party script origin should be allowed");
+    // Every fetch this app makes is same-origin /api/*; the one cross-origin
+    // fetch (cdn.jsdelivr.net in functions/_shared/og.js) runs inside the
+    // Worker, where CSP does not apply. The one remote origin is where the
+    // Web Analytics beacon reports to.
+    assert.deepEqual(csp["connect-src"], ["'self'", ANALYTICS_REPORT_ORIGIN]);
+
+    // An allowlist, not "no remote origins at all" — that assertion was true
+    // right up until the moment a remote origin was needed, and then it only
+    // said so after the policy had already shipped. Name the hosts instead, so
+    // an unintended one still fails and an intended one is a one-line diff.
+    const ALLOWED_SCRIPT_ORIGINS = [ANALYTICS_SCRIPT_ORIGIN];
+    const remote = csp["script-src"].filter((s) => s.startsWith("http"));
+    assert.deepEqual(remote, ALLOWED_SCRIPT_ORIGINS,
+      "script-src must allow exactly the third-party origins t4bs loads");
   });
 
   it("never falls back to unsafe-inline or unsafe-eval", () => {
@@ -230,7 +240,10 @@ describe("inline-content hashes are current", () => {
     // not govern them, which is why no hash covers them. If a real
     // inline <script> ever appears in the SSR shell it needs a hash,
     // so fail loudly here rather than in a browser console.
-    const html = renderPage({ ...SSR_CONTEXT, route: "lobby" }, SSR_ASSETS);
+    // stripComments first: an HTML comment that merely mentions a <script>
+    // tag is not a script, and this scanner used to read one as an unhashed
+    // inline block whose body ran to the next real </script>.
+    const html = stripComments(renderPage({ ...SSR_CONTEXT, route: "lobby" }, SSR_ASSETS));
     for (const m of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script[^>]*>/gi)) {
       const attrs = m[1];
       const isDataBlock = /type\s*=\s*["']application\/(ld\+)?json["']/.test(attrs);
