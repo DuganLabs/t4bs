@@ -82,33 +82,47 @@ export default `<main aria-labelledby="lobby-title" data-bn-view="lobby">
     </template>
   </section>
 
+  <!-- Free play is where the choosing happens, so it comes BEFORE the
+       rules note rather than after it. With the note in between, the
+       shelf of other categories started at y=551 on an 844px viewport
+       and fell off the first screen entirely on shorter phones — which
+       is how "I can't see games from other categories" and "free play
+       should switch categories" ended up being the same report.
+
+       The shelf itself is @basenative/components' accordion, built by
+       renderBrowseShelf() in lib/game.js and interpolated here as
+       trusted markup. One collapsible section per category, and inside
+       each one a real <a href="/play?play={id}"> per round — so the
+       rounds inside a category are both visible and reachable, and the
+       whole thing still works with JavaScript off. src/views/lobby.js
+       calls the same helper after hydration with <button> controls.
+
+       The daily above is deliberately NOT part of this: it is
+       server-picked per UTC day and recorded once, which is the only
+       thing that makes the streak mean anything. -->
+  <section aria-labelledby="lobby-free-title" data-bn-region="free-play">
+    <h2 id="lobby-free-title">Free play · pick any category</h2>
+    <p data-bn-region="free-note">
+      This is where you choose. Open a category to see every round in it —
+      all replayable as often as you like, and they never touch your streak.
+    </p>
+    <!-- Same host-div shape the moderation queue uses for
+         @basenative/admin's list: the client owns this node's innerHTML
+         after hydration, so SSR emits it too and the two trees have the
+         same structure rather than the client growing an extra wrapper. -->
+    <div data-bn-bind="browse-host">
+      <template @if="hasGroups">
+        {{ browseHtml }}
+      </template>
+      <template @else>
+        <p data-bn-region="browse-empty">Loading puzzles…</p>
+      </template>
+    </div>
+  </section>
+
   <p data-bn-region="rules-note">
     Four lives for the whole phrase — any word guess that isn't fully correct costs one.
   </p>
-
-  <section aria-labelledby="lobby-list-title" data-bn-region="free-play">
-    <h2 id="lobby-list-title">Free play · pick any category</h2>
-    <p data-bn-region="free-note">
-      This is where you choose. Every approved category, replayable as
-      often as you like — they never touch your streak.
-    </p>
-    <ul role="list" data-bn-region="list">
-      <template @for="group of groups; track group.category">
-        <li>
-          <a :href="group.playHref"
-             data-bn-action="lobby-pick"
-             :data-puzzle-ids="group.puzzleIds"
-             :aria-label="'Free play: ' + group.category + ' — ' + group.credit + '. Does not count toward your streak.'">
-            <strong>{{ group.category }}</strong>
-            <small>{{ group.credit }}</small>
-          </a>
-        </li>
-      </template>
-      <template @empty>
-        <li><p>Loading puzzles…</p></li>
-      </template>
-    </ul>
-  </section>
 
   <a href="/submit" data-bn-action="lobby-submit" aria-label="Submit a phrase">
     <span aria-hidden="true">+ </span>Submit a phrase
