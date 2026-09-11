@@ -9,11 +9,15 @@ export const onRequest = async (ctx) => {
   const url = new URL(request.url);
 
   // SSR is the default. `?legacy=1` is the escape hatch back to the
-  // static SPA at dist/index.html. We only intercept GET — POSTs to
-  // /api/* must flow through Functions.
-  if (request.method === "GET" && shouldRenderSsr(url.pathname, url.searchParams)) {
+  // static SPA at dist/index.html. We intercept GET and HEAD — POSTs to
+  // /api/* must flow through Functions. HEAD matters for link checkers
+  // and unfurlers that probe before fetching: without it, HEAD fell
+  // through to dist/index.html's static headers (no X-T4BS-SSR,
+  // public max-age=0) instead of the SSR page's, so a HEAD probe of a
+  // route saw a different resource than the GET that followed it.
+  if ((request.method === "GET" || request.method === "HEAD") && shouldRenderSsr(url.pathname, url.searchParams)) {
     try {
-      return decorate(await renderSsr(ctx), url);
+      return withoutBody(decorate(await renderSsr(ctx), url), request.method);
     } catch (err) {
       // Surface the error in logs so it can actually be debugged. The
       // user reported reload as broken because the previous middleware
@@ -22,7 +26,7 @@ export const onRequest = async (ctx) => {
       // and serve a 500 page rendered from the same SSR pipeline; the
       // SPA boots from there and recovers via client-side routing.
       try { console.error("SSR error", err?.stack || err); } catch { /* ignore */ }
-      return decorate(await renderError(ctx, err), url);
+      return withoutBody(decorate(await renderError(ctx, err), url), request.method);
     }
   }
 
@@ -57,6 +61,13 @@ async function renderError(ctx, err) {
       "X-T4BS-SSR": "bn-error",
     },
   });
+}
+
+/** A HEAD response must carry the same status/headers as GET but no
+ *  body (fetch spec / RFC 9110 §9.3.2). @param {Response} res @param {string} method */
+function withoutBody(res, method) {
+  if (method !== "HEAD") return res;
+  return new Response(null, { status: res.status, headers: res.headers });
 }
 
 /** @param {Response} res @param {URL} url */
