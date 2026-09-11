@@ -73,7 +73,6 @@ export default `<!DOCTYPE html>
     </style>
 
     <link rel="canonical" :href="canonicalUrl" />
-    <link rel="preload" as="image" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
 
