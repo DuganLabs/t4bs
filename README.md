@@ -46,7 +46,8 @@ Optional — exercise the real Cloudflare runtime against a local D1:
 ```bash
 cp .dev.vars.example .dev.vars
 npm run db:apply:local      # apply schema + seed to local SQLite
-npm run build && npm run cf:dev   # wrangler pages dev on :8788
+npm run db:migrate:local    # apply migrations/*.sql on top (needed for /api/puzzles, /s/{id})
+npm run build && npm run cf:dev   # wrangler pages dev on :8788, bound to the seeded tabs-db
 ```
 
 ## Production setup runbook
