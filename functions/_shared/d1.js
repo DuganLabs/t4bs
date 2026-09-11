@@ -38,6 +38,34 @@ export function d1Sessions(DB) {
   };
 }
 
+/* Daily results — one row per (player, UTC day). The PRIMARY KEY is
+   what makes the daily un-replayable for score: `record()` uses
+   INSERT OR IGNORE, so a second finish on the same day is a no-op
+   rather than an overwrite. */
+export function d1Dailies(DB) {
+  return {
+    async get(playerKey, day) {
+      return await DB.prepare(
+        "SELECT day, puzzle_id AS puzzleId, outcome, score FROM daily_results WHERE player_key=?1 AND day=?2"
+      ).bind(playerKey, day).first();
+    },
+    async record({ playerKey, day, puzzleId, outcome, score }) {
+      await DB.prepare(
+        `INSERT OR IGNORE INTO daily_results (player_key, day, puzzle_id, outcome, score)
+           VALUES (?1, ?2, ?3, ?4, ?5)`
+      ).bind(playerKey, day, Number(puzzleId), outcome, Number(score) || 0).run();
+    },
+    /* Streaks only ever walk backwards from today until they hit a gap,
+       so a bounded window is plenty and keeps the read O(1)-ish. */
+    async history(playerKey, limit = 400) {
+      const r = await DB.prepare(
+        "SELECT day, outcome, score FROM daily_results WHERE player_key=?1 ORDER BY day DESC LIMIT ?2"
+      ).bind(playerKey, limit).all();
+      return r.results || [];
+    },
+  };
+}
+
 export function d1Submissions(DB) {
   return {
     async create({ category, phrase, anchors, submittedBy }) {

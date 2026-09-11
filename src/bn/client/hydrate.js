@@ -58,7 +58,7 @@ import {
 import { nativeShare, mintShareCard, composeShareText } from "@basenative/share/client";
 
 import { api } from "../../lib/api.js";
-import { groupLobby, dailyPuzzle, todayKey } from "../../lib/game.js";
+import { groupLobby } from "../../lib/game.js";
 import { bnAlert, mount, h } from "../../lib/dom.js";
 import { createHeader }    from "../../components/header.js";
 import { createToast, makeToaster } from "../../components/toast.js";
@@ -127,8 +127,10 @@ const lives         = signal(4);
 const tokens        = signal(0);
 const phase         = signal("lobby");
 const reveal        = signal(null);
-const dailyDone     = signal(false);  // true when today's daily is already finished
-const statsLoaded   = signal(false);  // flips true once the persisted-stats IIFE resolves
+/* Server's answer to "what is today's puzzle, and where does this
+   player stand?" — see GET /api/daily. The client no longer picks a
+   daily; it renders this. */
+const daily         = signal(SSR.daily || null);
 
 /* Distinguishes "we are actively trying to resolve a session" from
    "we definitively have no session". Without this the view effect can't
@@ -169,37 +171,35 @@ const STATS_KEY   = "t4bs:stats";
 const SESSION_KEY = "t4bs:session";
 
 (async () => {
-  try {
-    const s = await loadPersisted(STATS_KEY);
-    if (s) {
-      stats.set(s);
-      if (s.dailyDate === todayKey()) dailyDone.set(true);
-    }
-  } finally {
-    statsLoaded.set(true);
-  }
+  const s = await loadPersisted(STATS_KEY);
+  if (s) stats.set(s);
 })();
 
-async function recordResultPersist(won, finalScore, category) {
+/* Local stats are now a personal-best scratchpad only. The STREAK is
+   server-side (daily_results keyed by player + UTC day) — a streak a
+   player could reset by clearing localStorage, or inflate by replaying
+   the same ten puzzles, was never worth coming back for.
+   @param {boolean} won @param {number} finalScore
+   @param {string} category @param {string} mode "daily" | "free" */
+async function recordResultPersist(won, finalScore, category, mode) {
   const s = (await loadPersisted(STATS_KEY)) || {};
   s.played = (s.played || 0) + 1;
   if (won) {
     s.wins = (s.wins || 0) + 1;
-    s.streak = (s.streak || 0) + 1;
-    s.bestStreak = Math.max(s.bestStreak || 0, s.streak);
     s.best = Math.max(s.best || 0, finalScore);
-  } else {
-    s.streak = 0;
   }
   s.lastCategory = category;
   s.lastScore = finalScore;
   s.lastResult = won ? "won" : "lost";
+  s.lastMode = mode;
   s.lastAt = Date.now();
-  s.dailyDate = todayKey();           // stamp so we know today's daily is done
   await savePersisted(STATS_KEY, s);
   await clearPersisted(SESSION_KEY);
   stats.set(s);
-  dailyDone.set(true);
+  /* The authoritative daily snapshot arrives on the response that ended
+     the round (createPlay's onDailyUpdate). Refresh anyway for the
+     free-play case and for any round that ended without one. */
+  api.daily().then(daily.set).catch(() => {});
 }
 
 /* ── Initial fetches: skipped when SSR pre-populated the signal ───── */
@@ -208,6 +208,9 @@ if (!SSR.lobby) {
 }
 if (!SSR.user) {
   api.me().then(r => user.set(r.user)).catch(() => {});
+}
+if (!SSR.daily) {
+  api.daily().then(daily.set).catch(() => {});
 }
 
 /* Reload-safe play-route resume.
@@ -233,6 +236,14 @@ if (!SSR.user) {
       url.searchParams.delete("play");
       window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
       await start(intent.puzzleId);
+      return;
+    }
+
+    if (intent.kind === "daily") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("daily");
+      window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
+      await startDaily();
       return;
     }
 
@@ -266,29 +277,11 @@ if (!SSR.user) {
   }
 })();
 
-/* ── Daily auto-start ────────────────────────────────────────────────
-   When the lobby finishes loading and the user isn't already in a
-   round, auto-start today's daily puzzle so every visitor sees the
-   same puzzle per day (Wordle-style). Only fires once. */
-let dailyFired = false;
-effect(() => {
-  const lb = lobby();
-  if (!lb || dailyFired) return;
-  /* Wait for persisted stats — under SSR, lobby() is non-null on first
-     tick while loadPersisted() is still in flight. Without this gate the
-     effect fires with dailyDone() === false and bounces a player who has
-     already finished today's daily back into the puzzle on a hard refresh. */
-  if (!statsLoaded()) return;
-  /* Don't interrupt an active game or a resume in progress */
-  if (session() || playLoading()) return;
-  /* Only auto-start from the lobby — respect deep-links to other views */
-  if (view() !== "lobby") return;
-  /* Already finished today's daily — stay on lobby to show results */
-  if (dailyDone()) return;
-  dailyFired = true;
-  const pick = dailyPuzzle(lb);
-  if (pick) start(pick.id);
-});
+/* The lobby no longer auto-starts anything. Auto-start existed to sell
+   the Wordle-style "one puzzle a day" framing while the pick was
+   client-side and unenforced; now the daily is real, the lobby's job is
+   to show the streak, today's card and the free-play shelf and let the
+   player choose. */
 
 function hydrateSession(s, fresh) {
   const lm = s.words.map(() => ({}));
@@ -318,6 +311,30 @@ function hydrateSession(s, fresh) {
   view.set("playing");
 }
 
+/* Today's daily. The server picks the puzzle and refuses a second run
+   on the same UTC day — a 409 here means "already played", which is a
+   lobby state, not an error. */
+async function startDaily() {
+  error.set(null);
+  try {
+    const s = await withTimeout(api.startDaily(), RESUME_TIMEOUT_MS, "start-timeout");
+    if (s.daily) daily.set(s.daily);
+    hydrateSession(s, true);
+    await savePersisted(SESSION_KEY, { sessionId: s.sessionId }, 12 * 3600);
+    router.navigate("/play");
+  } catch (e) {
+    const err = /** @type {{ data?: { daily?: unknown }, message?: string }} */ (e);
+    if (err?.data?.daily) {
+      daily.set(err.data.daily);
+      toaster("TODAY'S PUZZLE IS DONE — free play below", "good");
+    } else {
+      error.set(String(err?.message || e));
+    }
+    if (window.location.pathname === "/play") router.navigate("/");
+  }
+}
+
+/** Free play — any approved puzzle, unlimited, never recorded. */
 async function start(puzzleId) {
   error.set(null);
   try {
@@ -456,8 +473,9 @@ effect(() => {
   const v = view();
   if (v === "lobby") {
     mount(viewSlot, createLobby({
-      lobby, stats, error, user, dailyDone,
-      onPick: start,
+      lobby, daily, error, user,
+      onDaily: startDaily,
+      onFree: start,
       onSubmit: () => {
         if (user()) router.navigate("/submit");
         else authOpen.set(true);
@@ -517,6 +535,7 @@ effect(() => {
       score, lives, tokens, phase, reveal,
       toaster,
       onResultRecorded: recordResultPersist,
+      onDailyUpdate: daily.set,
       onShare: shareResult,
       goLobby: () => { phase.set("lobby"); router.navigate("/"); },
       retry: () => { const id = session()?.id; if (id) start(id); },

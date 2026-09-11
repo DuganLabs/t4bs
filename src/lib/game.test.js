@@ -9,12 +9,9 @@ import {
   openSlots,
   fullCount,
   computeKeyStatus,
+  knowledgeSummary,
   KEY_STATE_INFO,
   groupLobby,
-  dailySeed,
-  dailyPuzzle,
-  dailyFromGroups,
-  todayKey,
 } from "./game.js";
 
 describe("openSlots", () => {
@@ -291,108 +288,69 @@ describe("groupLobby", () => {
   });
 });
 
-describe("dailySeed", () => {
-  it("is deterministic for the same date", () => {
-    const a = dailySeed(new Date(2026, 3, 30));
-    const b = dailySeed(new Date(2026, 3, 30));
-    assert.equal(a, b);
+/* The client-side daily pick (dailySeed / dailyPuzzle /
+   dailyFromGroups / todayKey) is GONE — it was seeded off the
+   browser's local date with nothing server-side agreeing with it, so
+   two players in different time zones got different "dailies" and any
+   client could replay the whole catalogue. Selection now lives in
+   shared/daily.js and is resolved server-side; its coverage lives in
+   shared/daily.test.js. */
+
+describe("knowledgeSummary — the phrase-level read-out", () => {
+  const base = {
+    words: [5, 4, 3],
+    locked: [{ 0: "H", 1: "E" }, {}, { 2: "T" }],
+    wordSolved: [false, false, false],
+    presentGlobal: ["H", "E", "T", "R"],
+    lives: 3,
+    tokens: 1,
+  };
+
+  it("counts solved words and locked letters across the whole phrase", () => {
+    const k = knowledgeSummary(base);
+    assert.equal(k.totalWords, 3);
+    assert.equal(k.solvedWords, 0);
+    assert.equal(k.totalLetters, 12);
+    assert.equal(k.knownLetters, 3);
   });
 
-  it("returns different seeds for different dates", () => {
-    const a = dailySeed(new Date(2026, 3, 30));
-    const b = dailySeed(new Date(2026, 3, 29));
-    assert.notEqual(a, b);
+  it("counts letters known to be in the phrase but not yet placed", () => {
+    // H, E, T are locked somewhere; only R is still floating.
+    assert.equal(knowledgeSummary(base).floating, 1);
   });
 
-  it("always returns a non-negative integer", () => {
-    /* Sample a year of dates to confirm the |0 + Math.abs hashing path
-       never lets a negative number leak through. */
-    for (let day = 0; day < 365; day++) {
-      const d = new Date(2026, 0, 1 + day);
-      const seed = dailySeed(d);
-      assert.ok(seed >= 0, `seed should be >= 0 for ${d.toDateString()}, got ${seed}`);
-      assert.ok(Number.isInteger(seed), `seed should be integer, got ${seed}`);
-    }
-  });
-});
-
-describe("dailyPuzzle", () => {
-  it("returns null for null/empty puzzle list", () => {
-    assert.equal(dailyPuzzle(null), null);
-    assert.equal(dailyPuzzle([]), null);
+  it("names the unsolved word with the highest share of letters known", () => {
+    const k = knowledgeSummary(base);
+    // word 0: 2/5 = .4 · word 1: 0/4 = 0 · word 2: 1/3 = .33
+    assert.equal(k.bestTarget.wi, 0);
+    assert.equal(k.bestTarget.known, 2);
+    assert.equal(k.bestTarget.len, 5);
   });
 
-  it("picks the same puzzle for the same date across calls", () => {
-    const puzzles = [
-      { id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 },
-    ];
-    const date = new Date(2026, 3, 30);
-    const a = dailyPuzzle(puzzles, date);
-    const b = dailyPuzzle(puzzles, date);
-    assert.equal(a, b); // identity, not deepEqual — should be the same object
+  it("never proposes a solved word as the next target", () => {
+    const k = knowledgeSummary({
+      ...base,
+      locked: [{ 0: "H", 1: "E", 2: "L", 3: "L", 4: "O" }, {}, { 2: "T" }],
+      wordSolved: [true, false, false],
+    });
+    assert.notEqual(k.bestTarget.wi, 0);
+    assert.equal(k.bestTarget.wi, 2);
+    assert.equal(k.solvedWords, 1);
   });
 
-  it("only returns puzzles from the given list", () => {
-    const puzzles = [{ id: 7 }, { id: 8 }, { id: 9 }];
-    /* Spot-check a handful of consecutive days, asserting the daily
-       always lands inside the input set. */
-    for (let day = 0; day < 30; day++) {
-      const d = new Date(2026, 3, 1 + day);
-      const picked = dailyPuzzle(puzzles, d);
-      assert.ok(puzzles.includes(picked));
-    }
-  });
-});
-
-describe("dailyFromGroups", () => {
-  it("returns null for null/empty groups", () => {
-    assert.equal(dailyFromGroups(null), null);
-    assert.equal(dailyFromGroups([]), null);
+  it("passes lives and tokens through with the shared-pool allowance", () => {
+    const k = knowledgeSummary(base);
+    assert.equal(k.lives, 3);
+    assert.equal(k.livesAllowed, 4);
+    assert.equal(k.tokens, 1);
   });
 
-  it("returns a {group, puzzle} pair where the puzzle belongs to the group", () => {
-    const groups = [
-      { category: "A", puzzles: [{ id: 1 }, { id: 2 }] },
-      { category: "B", puzzles: [{ id: 3 }] },
-    ];
-    const date = new Date(2026, 3, 30);
-    const result = dailyFromGroups(groups, date);
-    assert.ok(result.group);
-    assert.ok(result.puzzle);
-    assert.ok(result.group.puzzles.includes(result.puzzle));
-  });
-
-  it("is deterministic for the same date + groups", () => {
-    const groups = [
-      { category: "A", puzzles: [{ id: 1 }, { id: 2 }] },
-      { category: "B", puzzles: [{ id: 3 }, { id: 4 }] },
-    ];
-    const date = new Date(2026, 3, 30);
-    const a = dailyFromGroups(groups, date);
-    const b = dailyFromGroups(groups, date);
-    assert.equal(a.group, b.group);
-    assert.equal(a.puzzle, b.puzzle);
-  });
-});
-
-describe("todayKey", () => {
-  it("returns a YYYY-MM-DD string", () => {
-    assert.equal(todayKey(new Date(2026, 0, 5)), "2026-01-05"); // Jan
-    assert.equal(todayKey(new Date(2026, 11, 31)), "2026-12-31"); // Dec
-  });
-
-  it("zero-pads single-digit month and day", () => {
-    assert.equal(todayKey(new Date(2026, 0, 1)), "2026-01-01");
-    assert.equal(todayKey(new Date(2026, 8, 9)), "2026-09-09");
-  });
-
-  it("agrees with dailySeed on the same date string format", () => {
-    /* dailySeed and todayKey both build a YYYY-MM-DD key — confirm
-       they would not disagree on a date due to padding bugs. */
-    const date = new Date(2026, 2, 7);
-    assert.equal(todayKey(date), "2026-03-07");
-    // Recompute the seed-key inline so we know what string was hashed
-    const seedKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    assert.equal(seedKey, "2026-03-07");
+  it("survives a session that hasn't loaded yet", () => {
+    const k = knowledgeSummary({
+      words: undefined, locked: [], wordSolved: [], presentGlobal: [], lives: 4, tokens: 0,
+    });
+    assert.equal(k.totalWords, 0);
+    assert.equal(k.totalLetters, 0);
+    assert.equal(k.bestTarget, null);
   });
 });

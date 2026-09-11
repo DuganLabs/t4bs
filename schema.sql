@@ -65,3 +65,14 @@ CREATE TABLE IF NOT EXISTS submissions (
   decided_at   INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(status);
+
+CREATE TABLE IF NOT EXISTS daily_results (
+  player_key TEXT    NOT NULL,                       -- 'u:<user id>' or 'a:<anon uuid>'
+  day        TEXT    NOT NULL,                       -- UTC YYYY-MM-DD
+  puzzle_id  INTEGER NOT NULL,
+  outcome    TEXT    NOT NULL,                       -- 'won' | 'lost'
+  score      INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  PRIMARY KEY (player_key, day)
+);
+CREATE INDEX IF NOT EXISTS idx_daily_results_player_day ON daily_results(player_key, day DESC);

@@ -47,6 +47,12 @@ export function decidePlayBoot(location, saved) {
   }
 
   const params = new URLSearchParams(location.search || "");
+  /* `?daily=1` asks the SERVER for today's puzzle (POST /api/session
+     {mode:"daily"}) rather than naming an id — it's the shareable "play
+     today's Tabs" link, and it can't be used to replay a finished day
+     because the server refuses a second run. Checked before `?play=`
+     so a link carrying both resolves to the authoritative one. */
+  if (params.get("daily") === "1") return { kind: "daily" };
   const playRaw = params.get("play");
   if (playRaw !== null) {
     const playId = Number(playRaw);

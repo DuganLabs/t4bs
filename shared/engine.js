@@ -16,20 +16,55 @@ function newId() {
   return crypto.randomUUID();
 }
 
-export function createEngine({ puzzles, sessions }) {
+/**
+ * @param {object} deps
+ * @param {any} deps.puzzles
+ * @param {any} deps.sessions
+ * @param {(info: { sessionId: string, state: any, outcome: string }) => Promise<void> | void} [deps.onFinish]
+ *   Called exactly once, after the session is persisted, when a round
+ *   reaches a terminal state. The daily bookkeeping (one puzzle per UTC
+ *   day, streaks) hangs off this instead of living in the engine, so
+ *   the engine stays store-agnostic and the Vite mock and the D1
+ *   Functions can wire their own recorder.
+ */
+export function createEngine({ puzzles, sessions, onFinish }) {
+  /* Fire the terminal-state hook without letting a bookkeeping failure
+     take down a round the player already finished. */
+  async function finished(sessionId, sess) {
+    if (!sess.finished || !onFinish) return;
+    try {
+      await onFinish({ sessionId, state: sess, outcome: sess.finished });
+    } catch { /* recording a result must never fail the round */ }
+  }
+
   return {
     async listPuzzles() {
       const rows = await puzzles.listApproved();
       return rows.map(p => ({ id: p.id, category: p.category, submittedBy: p.submittedBy }));
     },
 
-    async startSession(puzzleId) {
+    /**
+     * @param {number|string} puzzleId
+     * @param {{ mode?: "daily"|"free", day?: string|null, playerKey?: string|null }} [opts]
+     *   `mode: "daily"` tags the session as the day's authoritative run —
+     *   the only kind that records a result and moves a streak.
+     */
+    async startSession(puzzleId, opts = {}) {
       const p = await puzzles.getApproved(puzzleId);
       if (!p) return { error: "puzzle-not-found" };
       const id = newId();
       const state = initialState(p);
+      state.mode      = opts.mode === "daily" ? "daily" : "free";
+      state.day       = opts.day || null;
+      state.playerKey = opts.playerKey || null;
       await sessions.create(id, state);
-      return { sessionId: id, ...publicShape(p), lives: state.lives };
+      return {
+        sessionId: id,
+        ...publicShape(p),
+        lives: state.lives,
+        mode: state.mode,
+        day: state.day,
+      };
     },
 
     async resumeSession(sessionId) {
@@ -41,6 +76,8 @@ export function createEngine({ puzzles, sessions }) {
       return {
         sessionId,
         ...publicShape(p),
+        mode: sess.mode || "free",
+        day: sess.day || null,
         lives: sess.lives,
         score: sess.score,
         tokens: sess.tokens,
@@ -101,6 +138,22 @@ export function createEngine({ puzzles, sessions }) {
       let scoreDelta = scoreGuess(fb, absoluteWagers, lockedBefore);
       let livesDelta = 0;
 
+      /* THE STAKE NOW HAS TEETH.
+         Until now a stake only ever moved `score`, and `score` is
+         floored at zero below — so a wager could not end a round, and
+         once you were at zero it cost literally nothing. It was sold as
+         "Vegas-style" risk and was, mechanically, a decorative score
+         multiplier. A staked tile is a side bet on ONE position: right
+         pays double, wrong costs a life on top of the guess's own.
+         Note this can only bite on a guess that already missed — if the
+         word comes back all-green, every staked tile is green by
+         definition — so the decision it asks is genuinely finer-grained
+         than "am I sure about the whole word": you can miss the word and
+         still keep your stake if the positions you backed were right.
+         Capped at one extra life per guess however many tiles are
+         staked, so the worst case stays legible: −2. */
+      const stakeBusted = absoluteWagers.some(i => fb[i] !== "green");
+
       if (allGreen) {
         sess.wordSolved[wordIndex] = true;
         scoreDelta += 10;
@@ -110,6 +163,11 @@ export function createEngine({ puzzles, sessions }) {
         sess.lives -= 1;
         livesDelta = -1;
       }
+      if (stakeBusted) {
+        sess.lives -= 1;
+        livesDelta -= 1;
+      }
+      sess.lives = Math.max(0, sess.lives);
 
       sess.score = Math.max(0, sess.score + scoreDelta);
       sess.guessLog.push({ wi: wordIndex, allGreen });
@@ -119,11 +177,14 @@ export function createEngine({ puzzles, sessions }) {
       else if (sess.lives <= 0) sess.finished = "lost";
 
       await sessions.save(sessionId, sess);
+      await finished(sessionId, sess);
 
       return {
         feedback: fb,
         scoreDelta,
         livesDelta,
+        stakeBusted,
+        mode: sess.mode || "free",
         locked: { ...lockedMap },
         presentGlobal: sess.presentGlobal,
         absentByWord: sess.absentByWord[wordIndex],
@@ -203,12 +264,14 @@ export function createEngine({ puzzles, sessions }) {
       }
 
       await sessions.save(sessionId, sess);
+      await finished(sessionId, sess);
 
       return {
         correct,
         scoreDelta,
         score: sess.score,
         lives: sess.lives,
+        mode: sess.mode || "free",
         finished: sess.finished,
         reveal: sess.finished ? words : null,
       };

@@ -8,7 +8,9 @@
 
 ## 1. Overview
 
-**Tabs** (visual mark `T4BS`, secret meaning *Time For BS*) is a quick category puzzle. The player gets a single category, a hidden multi-word phrase, and four lives. They type letters into the tiles, *stake* the ones they're sure about (2× wager), and gamble on a final ALL IN guess for the kill. Every guess is server-authoritative — the answer never crosses the wire until the round is over.
+**Tabs** (visual mark `T4BS`, secret meaning *Time For BS*) is a quick category puzzle. The player gets a single category, a hidden multi-word phrase, and four lives **shared across the whole phrase** — any word guess that isn't fully correct spends one, whichever word it was. They type letters into the tiles, *stake* the positions they're sure about (double points if right, one extra life if wrong), and gamble on a final ALL IN guess for the kill. Every guess is server-authoritative — the answer never crosses the wire until the round is over.
+
+There is one **daily** puzzle per UTC day, the same one for every player, chosen server-side and recorded once per player per day; solving it grows a streak. **Free play** is the rest of the catalogue, unlimited and unrecorded.
 
 The game is the public flagship for **BaseNative** (DuganLabs's open-source shared runtime + abstractions library). When BaseNative ships a new primitive — auth, OG image rendering, virtual keyboard, admin tooling — Tabs is where it gets shown off in production.
 
@@ -51,11 +53,17 @@ Approves submission queue, manages other moderators (admin-only). Lightweight to
 ## 4. Key flows
 
 ### 4.1 Play a round
-1. Lobby → tap a category card → server creates a session, returns words/anchors/lives/score.
+1. Lobby → *today's puzzle* (server-picked, one per UTC day, once per player) or a
+   free-play card → server creates a session, returns words/anchors/lives/score.
+   Anchor letters are mandatory content, not optional flavour: every puzzle opens
+   with at least one position revealed.
 2. Type letters into tiles using on-screen keyboard.
-3. Tap a tile to *stake* it (2× wager on that letter).
-4. Submit guess → server reveals green/yellow/absent feedback per position.
-5. Repeat until phrase solved or out of lives.
+3. Tap a tile to *stake* it — double points on that position if it's right, one
+   extra life lost if any staked position is wrong (capped at one extra per guess).
+4. Submit guess → server reveals green/yellow/absent feedback per position, and
+   spends a life unless the word came back fully correct.
+5. Repeat until phrase solved or out of lives. The knowledge panel under the grid
+   keeps words-solved / letters-known / lives-left visible throughout.
 6. End-state overlay: solved → confetti + share; busted → reveal answer + retry/share.
 7. Resume mid-round if user reloads (server is authoritative; client localStorage holds session id).
 
@@ -83,6 +91,7 @@ Stored in Cloudflare D1 (`tabs-db`).
 | Table | Purpose | Key fields |
 |---|---|---|
 | `puzzles` | Approved phrases playable from the lobby | `id`, `category`, `phrase`, `anchors` (JSON), `submitted_by`, `status` |
+| `daily_results` | One row per player per UTC day — makes the daily un-replayable and the streak real | `player_key`, `day`, `puzzle_id`, `outcome`, `score` (PK `player_key,day`) |
 | `submissions` | Pending/decided user submissions | `id`, `category`, `phrase`, `anchors`, `submitted_by`, `status`, `decided_by`, `decided_at` |
 | `sessions` | Active in-flight game sessions | `id`, `puzzle_id`, `state` (JSON of engine state), `updated_at` |
 | `users` | Authenticated users | `id`, `handle` (unique CI), `role` (`user`\|`moderator`\|`admin`), `role_changed_*` |
@@ -164,10 +173,22 @@ Stored in Cloudflare D1 (`tabs-db`).
 ## 10. Glossary
 
 - **Anchor** — a letter pre-revealed at game start (helps the player bootstrap).
-- **Stake** — a 2× wager on a single tile letter, consumed on submit.
+  Required: `validateSubmission` rejects a phrase with none, and the ten house
+  puzzles carry two each (`shared/seed-puzzles.js`).
+- **Stake** — a bet on a single tile position, consumed on submit. Double points
+  if that position comes back green; **one extra life** if any staked position
+  doesn't. It was score-only (and therefore free, since score floors at zero)
+  until 2026-09-11.
+- **Life** — one of four, **shared across the entire phrase**. Spent by any word
+  submission that isn't fully correct, and by a busted stake.
 - **ALL IN** — a single shove of the entire remaining phrase; max bonus or game over.
 - **House** — the default `submitted_by` value for puzzles bundled with the app.
 - **Cascade** — a spendable letter-reveal token, not an animation. Cold-solving a word on the first attempt (`priorWrongs === 0`) earns one cascade token (`shared/engine.js`'s `startSession`/guess handling sets `cascadeEarned` and increments `sess.tokens`); the player spends a token via `spendCascade(sessionId, wordIndex, letterIndex)` to reveal any unrevealed tile in any unsolved word. See §4.1 and §6 above for the player-facing flow.
+- **Daily** — the one puzzle available for a given UTC day, the same for every
+  player, picked by `shared/daily.js` and recorded once per player in
+  `daily_results`. Not replayable for score.
+- **Streak** — consecutive UTC days whose daily was solved. Server-side, so it
+  survives a new device and can't be inflated by replaying free play.
 
 ---
 

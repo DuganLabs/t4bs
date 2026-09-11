@@ -25,7 +25,52 @@ export function validateSubmission(input) {
     if (seen.has(k)) continue;
     seen.add(k); cleanAnchors.push({ wi: a.wi, li: a.li });
   }
-  if (cleanAnchors.length > Math.max(2, words.length)) return { error: "too-many-anchors" };
+  cleanAnchors.sort((x, y) => x.wi - y.wi || x.li - y.li);
+  if (cleanAnchors.length > maxAnchors(words)) return { error: "too-many-anchors" };
+  /* Anchors are the documented on-ramp ("a few free anchor letters" —
+     README + PRD §4). Shipping a phrase with none is what produced ten
+     house puzzles that start from a blank grid against a shared pool of
+     four lives, so the minimum is now enforced rather than implied. */
+  if (cleanAnchors.length < 1) {
+    return { error: "needs-anchor", detail: "reveal at least one starting letter" };
+  }
+  /* A phrase that starts fully revealed isn't a puzzle. */
+  if (cleanAnchors.length >= phrase.replace(/ /g, "").length) {
+    return { error: "too-many-anchors", detail: "leave something to solve" };
+  }
 
   return { normalized: { category, phrase, anchors: cleanAnchors } };
+}
+
+/** Upper bound on anchors for a phrase's word list. */
+export function maxAnchors(words) {
+  return Math.max(2, words.length);
+}
+
+/**
+ * A sensible default anchor set for a phrase — one letter inside the
+ * longest word, plus one in the word furthest from it. Used to
+ * pre-populate the submission form's anchor picker so every submitted
+ * puzzle ships with a bootstrap by default, and by nothing on the
+ * authoritative path (the validator above is the only gate).
+ *
+ * @param {string} phrase Normalized (upper-case, single-spaced) phrase.
+ * @returns {{ wi: number, li: number }[]}
+ */
+export function suggestAnchors(phrase) {
+  const words = String(phrase || "").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+  const byLength = words
+    .map((w, wi) => ({ wi, len: w.length }))
+    .sort((a, b) => b.len - a.len || a.wi - b.wi);
+  const first = byLength[0];
+  const out = [{ wi: first.wi, li: 0 }];
+  const second = byLength.find(w => w.wi !== first.wi);
+  if (second && out.length < maxAnchors(words)) {
+    out.push({ wi: second.wi, li: Math.min(second.len - 1, second.len > 2 ? 1 : 0) });
+  }
+  return out
+    .filter(a => a.li >= 0 && a.li < words[a.wi].length)
+    .slice(0, Math.max(1, Math.min(maxAnchors(words), phrase.replace(/ /g, "").length - 1)))
+    .sort((x, y) => x.wi - y.wi || x.li - y.li);
 }

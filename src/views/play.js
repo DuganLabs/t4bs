@@ -15,7 +15,7 @@ import { renderCard, renderDialog } from "@basenative/components";
 import { bnButton, fromHTML, h } from "../lib/dom.js";
 import { bindAttr, bindHidden, bindText } from "../lib/bind.js";
 import { api } from "../lib/api.js";
-import { openSlots, fullCount, computeKeyStatus, KEY_STATE_INFO } from "../lib/game.js";
+import { openSlots, fullCount, computeKeyStatus, knowledgeSummary, KEY_STATE_INFO } from "../lib/game.js";
 import { confetti } from "../lib/confetti.js";
 
 export function createPlay({
@@ -32,6 +32,7 @@ export function createPlay({
   reveal,
   toaster,
   onResultRecorded,
+  onDailyUpdate,
   onShare,
   goLobby,
   retry,
@@ -48,6 +49,9 @@ export function createPlay({
   const cascDrop   = signal(null);
   const shareLbl   = signal(null);
   const announcement = signal("");
+  /* The server's post-round daily snapshot (streak, day). Present only
+     on the response that ENDED a daily round; free play never sets it. */
+  const dailyAfter = signal(null);
   let resultRecorded = false;
 
   /* ── derived ───────────────────────────────────────────────────────── */
@@ -67,7 +71,11 @@ export function createPlay({
     if (!s?.words) return "";
     const slots = openSlots(s.words[active()], locked()[active()] || {});
     const room = slots.length - (typed()[active()]?.length || 0);
-    if (room === 0) return "Word complete. Press enter to submit or tap a tile to stake 2× points.";
+    if (room === 0) {
+      /* The rule that actually decides the round, said at the moment
+         the player is about to trigger it. */
+      return `Enter to submit — anything but a perfect word costs 1 of your ${lives()} lives.`;
+    }
     return `Type ${room} more letter${room === 1 ? "" : "s"} for word ${active() + 1}.`;
   });
 
@@ -83,11 +91,16 @@ export function createPlay({
     return fullCount(s.words, locked()) * 8;
   });
 
+  const wagerCount = computed(() => allInMode()
+    ? wagers().reduce((acc, w) => acc + (w?.length || 0), 0)
+    : (active() !== null ? (wagers()[active()]?.length || 0) : 0));
+
+  /* The stake carries a life now (see shared/engine.js), so the label
+     names the downside instead of only the upside — "2× STAKED" read as
+     free money, which is exactly what it used to be. */
   const stakeText = computed(() => {
-    const wagerCount = allInMode()
-      ? wagers().reduce((acc, w) => acc + (w?.length || 0), 0)
-      : (active() !== null ? (wagers()[active()]?.length || 0) : 0);
-    if (wagerCount > 0) return `${wagerCount}× STAKED`;
+    const n = wagerCount();
+    if (n > 0) return `${n} STAKED · 2× OR −1 LIFE`;
     if (allInMode()) return "TYPE THE REST";
     return "";
   });
@@ -107,7 +120,7 @@ export function createPlay({
     const p = phase();
     if (resultRecorded) return;
     if (p === "won" || p === "lost") {
-      onResultRecorded(p === "won", score(), session()?.category);
+      onResultRecorded(p === "won", score(), session()?.category, session()?.mode || "free");
       resultRecorded = true;
       if (p === "won") {
         confetti();
@@ -240,14 +253,23 @@ export function createPlay({
         }
       } else {
         shaking.set(wi); setTimeout(() => shaking.set(null), 480);
-        announcement.set(`Incorrect. ${result.lives} lives remaining.`);
+        const cost = Math.abs(result.livesDelta || 0);
+        announcement.set(result.stakeBusted
+          ? `Incorrect, and a staked letter missed — ${cost} lives lost. ${result.lives} remaining.`
+          : `Incorrect. ${result.lives} lives remaining.`);
         // A wrong guess can still earn points for the letters it got
         // right, so scoreDelta is often positive here — bare "9pts" in
         // a red/bad-tone toast read as a penalty. Sign it explicitly
         // and lead with "Not quite" so a positive number in a red
         // pill doesn't look like a deduction.
-        toaster(`Not quite · ${result.scoreDelta >= 0 ? "+" : ""}${result.scoreDelta}pts`, "bad");
+        toaster(
+          result.stakeBusted
+            ? `STAKE BUSTED · −${cost} lives · ${result.scoreDelta >= 0 ? "+" : ""}${result.scoreDelta}pts`
+            : `Not quite · ${result.scoreDelta >= 0 ? "+" : ""}${result.scoreDelta}pts`,
+          "bad",
+        );
       }
+      if (result.daily) { dailyAfter.set(result.daily); onDailyUpdate?.(result.daily); }
       setTimeout(() => {
         feedback.set(prev => { const n = { ...prev }; delete n[wi]; return n; });
         if (result.finished) {
@@ -336,6 +358,7 @@ export function createPlay({
         announcement.set("All-in busted. Game over.");
         toaster("ALL-IN BUSTED — GAME OVER", "bad");
       }
+      if (result.daily) { dailyAfter.set(result.daily); onDailyUpdate?.(result.daily); }
       setTimeout(() => {
         if (result.finished) {
           phase.set(result.finished);
@@ -545,6 +568,78 @@ export function createPlay({
     grid.replaceChildren(...wordEls);
   });
 
+  /* ── Knowledge read-out ──────────────────────────────────────────
+     Everything the player has deduced, at PHRASE level. The grid and
+     the keyboard only ever describe one word; before this, coming back
+     to a round mid-phrase meant recounting solved words and locked
+     tiles by eye. It also puts the lives rule where it actually bites:
+     one pool, whole phrase, stated next to the number.
+
+     Four <li> stats plus one summary line. Each stat carries its own
+     aria-label because "1/4 WORDS" read aloud as "one slash four
+     words" is not a sentence. */
+  const know = computed(() => knowledgeSummary({
+    words: session()?.words,
+    locked: locked(),
+    wordSolved: wordSolved(),
+    presentGlobal: presentGlobal(),
+    lives: lives(),
+    tokens: tokens(),
+  }));
+
+  function knowStat(valueFn, label, ariaFn, tone) {
+    const strong = h("strong");
+    bindText(strong, valueFn);
+    const li = h("li", { "data-bn-region": "know-stat" }, strong, h("small", null, label));
+    if (tone) li.setAttribute("data-tone", tone);
+    bindAttr(li, "aria-label", ariaFn);
+    return li;
+  }
+
+  const knowList = h("ul", { role: "list" },
+    knowStat(
+      () => `${know().solvedWords}/${know().totalWords}`,
+      "WORDS",
+      () => `${know().solvedWords} of ${know().totalWords} words solved`,
+    ),
+    knowStat(
+      () => `${know().knownLetters}/${know().totalLetters}`,
+      "LETTERS",
+      () => `${know().knownLetters} of ${know().totalLetters} letters locked in`,
+    ),
+    knowStat(
+      () => "♥".repeat(Math.max(0, know().lives)) || "—",
+      "LIVES · ONE POOL",
+      () => `${know().lives} of ${know().livesAllowed} lives left. One pool for the whole phrase — every word draws from it.`,
+      "lives",
+    ),
+    knowStat(
+      () => `⚡${know().tokens}`,
+      "REVEALS",
+      () => `${know().tokens} cascade reveal${know().tokens === 1 ? "" : "s"} banked`,
+    ),
+  );
+
+  const knowHint = h("p", { "data-bn-region": "know-hint" });
+  bindText(knowHint, () => {
+    const k = know();
+    const bits = [];
+    if (k.floating > 0) {
+      bits.push(`${k.floating} letter${k.floating === 1 ? "" : "s"} known to be in the phrase, not yet placed`);
+    }
+    if (k.bestTarget && k.bestTarget.known > 0) {
+      bits.push(`easiest next: word ${k.bestTarget.wi + 1} (${k.bestTarget.known}/${k.bestTarget.len} known)`);
+    }
+    if (bits.length === 0) return "Nothing deduced yet — solve a word to start filling this in.";
+    return bits.join(" · ");
+  });
+
+  const knowledge = h("section", {
+    "aria-label": "What you know so far",
+    "data-bn-region": "knowledge",
+  }, knowList, knowHint);
+  bindHidden(knowledge, () => phase() !== "playing");
+
   /* Letter bank — present / absent chips. */
   const presentRow = h("p", { "data-bn-region": "bank-present" });
   effect(() => {
@@ -615,10 +710,8 @@ export function createPlay({
   });
   bindText(stakeLbl, stakeText);
   bindAttr(stakeLbl, "aria-label", () => {
-    const wagerCount = allInMode()
-      ? wagers().reduce((acc, w) => acc + (w?.length || 0), 0)
-      : (active() !== null ? (wagers()[active()]?.length || 0) : 0);
-    if (wagerCount > 0) return `${wagerCount} positions staked for 2 times points`;
+    const n = wagerCount();
+    if (n > 0) return `${n} position${n === 1 ? "" : "s"} staked: double points if every staked letter is right, one extra life lost if any is wrong`;
     if (allInMode()) return "Type the remaining letters of the phrase";
     return null;
   });
@@ -695,6 +788,19 @@ export function createPlay({
   const endReveal = h("p", { "data-bn-region": "reveal" });
   const endBy     = h("strong");
   const endCredit = h("p", { "data-bn-region": "credit" }, "submitted by ", endBy);
+  /* Say which ledger this round landed in. A free-play round that
+     silently didn't move the streak is exactly the kind of thing that
+     makes a daily feel fake. */
+  const endMode = h("p", { "data-bn-region": "end-mode" });
+  bindText(endMode, () => {
+    const d = dailyAfter();
+    if (d) {
+      const n = d.streak || 0;
+      return n > 0 ? `Daily ${d.day} · streak 🔥${n}` : `Daily ${d.day} · streak reset`;
+    }
+    if (session()?.mode === "daily") return "Daily";
+    return "Free play · streak untouched";
+  });
   const endScore  = h("output", { "data-bn-region": "end-score" });
   const endShare     = bnButton("Share result", { variant: "primary",   attrs: 'data-bn-action="share"' });
   const endPrimary   = bnButton("Pick another", { variant: "secondary", attrs: 'data-bn-action="primary"' });
@@ -708,14 +814,20 @@ export function createPlay({
   bindAttr(endTitle, "data-tone", () => phase() === "won" ? "win" : "lose");
   bindText(endSub, () => `${session()?.category || ""}${phase() === "lost" ? " · the answer was" : ""}`);
   bindText(endReveal, () => (reveal() || []).join(" "));
-  bindText(endPrimary, () => phase() === "won" ? "Pick another" : "Try again");
-  bindHidden(endSecondary, () => phase() !== "lost");
+  bindText(endPrimary, () => {
+    if (phase() === "won") return "Pick another";
+    /* A daily is one attempt — offering "Try again" on the round that
+       just consumed it is a lie the server would refuse anyway. */
+    return session()?.mode === "daily" ? "Back to lobby" : "Try again";
+  });
+  /* endSecondary's label is baked in by bnButton("Pick another", ...). */
+  bindHidden(endSecondary, () => phase() !== "lost" || session()?.mode === "daily");
 
   endShare.addEventListener("click", () => {
     onShare({ won: phase() === "won" }).then(label => shareLbl.set(label));
   });
   endPrimary.addEventListener("click", () => {
-    if (phase() === "won") goLobby();
+    if (phase() === "won" || session()?.mode === "daily") goLobby();
     else retry();
   });
   endSecondary.addEventListener("click", goLobby);
@@ -726,7 +838,7 @@ export function createPlay({
      BaseNative#186, opened off the back of this work). */
   endCard.setAttribute("role", "document");
   endCard.querySelector('[data-bn="card-body"]').append(
-    endTitle, endSub, endReveal, endCredit,
+    endTitle, endSub, endReveal, endCredit, endMode,
     endScore, h("p", { "data-bn-region": "score-label" }, "points"),
     endShare, endSecondary, endPrimary,
   );
@@ -767,5 +879,5 @@ export function createPlay({
   return h("main", {
     "aria-labelledby": "play-title",
     "data-bn-view": "play",
-  }, announceEl, summary, grid, bank, keyboard, endOverlay);
+  }, announceEl, summary, grid, knowledge, bank, keyboard, endOverlay);
 }
