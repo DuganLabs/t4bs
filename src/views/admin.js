@@ -128,9 +128,12 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
     ),
     errBox,
     root,
-    bnButton("← Back", {
+    /* Same correction as the moderation queue's: this navigates to the
+       lobby, it is not a history "back". */
+    bnButton("Go to the puzzle lobby →", {
       variant: "secondary",
-      attrs: 'data-bn-variant="back"',
+      attrs: 'data-bn-variant="leave" data-bn-action="to-lobby" '
+        + 'aria-label="Leave moderator administration and go to the puzzle lobby"',
       onClick: goLobby,
     }),
   );

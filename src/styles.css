@@ -64,20 +64,61 @@ body { font-family: 'DM Sans', sans-serif; color: #F0EDE4; }
 }
 :focus-visible { outline: 2px solid #FFD700; outline-offset: 2px; border-radius: 4px; }
 
+/* PENDING / SKELETON / GATE — the three things a view can show instead
+   of itself, all built from @basenative/components primitives
+   (renderSpinner, renderSkeleton, renderAlert) in src/lib/dom.js rather
+   than hand-rolled here. Only placement and brand type live in T4BS.
+
+   These exist because "nothing yet" used to render as a bare line of
+   text, or as nothing at all: a slow /submit chunk left a form-shaped
+   hole where the category picker belonged, and a guarded route
+   redirected before it could say why. */
+[data-bn-region="pending"] {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 18px 0; color: #9A9590;
+  font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase;
+}
+[data-bn-region="skeleton"] {
+  display: flex; flex-direction: column; gap: 8px;
+  width: 100%; max-width: 480px; margin: 0 auto;
+}
+[data-bn-region="gate"] {
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  width: 100%; max-width: 480px; margin: 24px auto 0; text-align: center;
+}
+[data-bn-region="gate"] [data-bn-action="gate-lobby"] {
+  font-family: 'Bebas Neue', sans-serif; font-size: 15px; letter-spacing: 2px;
+  color: #E8920A; border-bottom: 1px solid rgba(232,146,10,.4); padding-bottom: 2px;
+}
+
 /* SHELL — top-level wrapper added imperatively by main.js / hydrate.js
-   inside the SSR-rendered <div id="app">. Mirrors #app's flex layout
-   so the SPA tree renders the same as the SSR first paint. The
-   [data-playing] toggle adds the keyboard-mode bottom padding when
-   the play view is mounted. */
+   INSIDE the SSR-rendered <div id="app">.
+
+   It used to restate #app's own box — min-height, gradient, and
+   `padding: max(safe-top,16px) 14px calc(40px + safe-bottom)`. Nested
+   inside #app, every one of those applied twice, so the instant the SPA
+   mounted, the whole page inset by another 14px per side and 16px from
+   the top. Measured at 390x844 on t4bs.com: the header went from
+   362x48 at (14,20) on the SSR paint to 334x48 at (28,36) once
+   hydration committed — a 16px vertical and 28px horizontal jump on
+   every single load, and the "the header keeps resizing" report.
+
+   The shell now contributes layout only: it stretches to #app's content
+   box and re-centres its children, so the SSR tree (#app > header,
+   #app > main) and the hydrated tree (#app > shell > header, ...) put
+   the header in exactly the same box. The gradient and min-height come
+   from <body>/#app, which paint behind it either way.
+
+   Keyboard-mode bottom padding is no longer a shell concern: both trees
+   now drive it off `body[data-route="play"] #app` (the router keeps
+   data-route in sync after hydration), so there is one rule instead of
+   two that had to be kept numerically in step. */
 [data-bn-region="shell"] {
   --rc: #E8920A;
   --rg: 232,146,10;
-  min-height: 100dvh;
-  background: radial-gradient(ellipse 110% 55% at 50% 0%, #1c1810 0%, #0C0B09 60%);
+  width: 100%;
   display: flex; flex-direction: column; align-items: center;
-  padding: max(env(safe-area-inset-top, 0px), 16px) 14px calc(40px + env(safe-area-inset-bottom, 0px));
 }
-[data-bn-region="shell"][data-playing] { padding-bottom: calc(232px + env(safe-area-inset-bottom, 0px)); }
 
 /* STICKY NOTE — yellow rotated paper visual reused as the page-title
    marker on lobby, submit, moderate, admin, and play. The "narrow"
@@ -203,7 +244,33 @@ main[data-bn-view="play"] [data-bn-region="play-sticky"] {
   margin-block-end: 9px;
 }
 [data-bn="button"]:last-child { margin-block-end: 0; }
-[data-bn="button"][data-bn-variant="back"] { max-inline-size: 300px; margin-block-start: 14px; }
+/* The "leave this view" control at the foot of the moderation queue and
+   the admin screen.
+
+   It used to read "← Back" with data-bn-variant="back", which described
+   a history action it has never performed: it navigates to the lobby,
+   a different view, and does it whether or not the lobby is where the
+   user came from. A moderator who reached the queue from the header's
+   MOD button read "← Back" as "undo that navigation" and instead landed
+   on the shelf of approved puzzles. The label now names the
+   destination, the arrow points forward, and the attribute is
+   data-bn-variant="leave" so the old name can't quietly come back.
+
+   Styled for both trees: the client renders @basenative/components'
+   <button data-bn="button">, the SSR templates render a plain <a> (the
+   no-JS surface), and both get the same box. */
+[data-bn="button"][data-bn-variant="leave"],
+a[data-bn-variant="leave"] {
+  max-inline-size: 300px; margin-block-start: 14px;
+}
+a[data-bn-variant="leave"] {
+  display: flex; align-items: center; justify-content: center;
+  inline-size: 100%; min-block-size: 44px; padding: 0 16px;
+  border: 1px solid var(--bn-color-border, #2E2C28); border-radius: 8px;
+  color: #F0EDE4; text-decoration: none;
+  font-family: 'Bebas Neue', sans-serif; font-size: 17px; letter-spacing: 2px;
+}
+a[data-bn-variant="leave"]:hover { border-color: #E8920A; color: #E8920A; }
 
 /* One standing correction, because upstream's default assumes a light
    theme: the secondary variant paints itself var(--bn-color-surface),
@@ -698,6 +765,13 @@ main[data-bn-view="lobby"] [data-bn-region="daily-cat"] {
 }
 main[data-bn-view="lobby"] [data-bn-region="daily-next"] {
   font-size: 12px; color: #9A9590; letter-spacing: 1px; margin-top: 8px;
+}
+/* The "this one isn't yours to pick" line under the daily card. Quiet
+   enough not to compete with the card, loud enough to be read before
+   the player concludes the card is a broken category switcher. */
+main[data-bn-view="lobby"] [data-bn-region="daily-note"] {
+  font-size: 11px; line-height: 1.45; color: #9A9590;
+  letter-spacing: .3px; text-align: center; margin-top: 2px;
 }
 main[data-bn-view="lobby"] [data-bn-region="daily-loading"] {
   width: 100%; min-height: 56px;

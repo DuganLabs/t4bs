@@ -120,6 +120,11 @@ effect(() => {
   else if (r.name === "submit")   view.set("submit");
   else if (r.name === "moderate") view.set("moderate");
   else if (r.name === "admin")    view.set("admin");
+
+  /* Mirror the SSR shell's <body data-route>, so the one rule that sizes
+     the play view's keyboard gutter (`body[data-route="play"] #app`)
+     works on this legacy entry too. */
+  if (typeof document !== "undefined" && document.body) document.body.dataset.route = r.name;
 });
 
 /* ── Stats + session resume via @basenative/persist ────────────────────── */
@@ -365,13 +370,12 @@ function mountLazy(label, importFn, build) {
   });
 }
 
-// Top-level shell — gradient + flex layout. The data-playing attribute
-// toggles the keyboard-mode bottom padding via
-// [data-bn-region="shell"][data-playing] in styles.css.
-const container = h("div", {
-  "data-bn-region": "shell",
-  "data-playing": () => view() === "playing" ? "" : null,
-});
+/* Top-level shell — layout only. It must NOT restate #app's padding or
+   min-height: it is mounted inside #app, so anything it repeats is
+   applied twice (see the [data-bn-region="shell"] note in styles.css).
+   Keyboard-mode bottom padding rides on `body[data-route="play"] #app`,
+   kept in sync by the router effect above. */
+const container = h("div", { "data-bn-region": "shell" });
 container.append(header, viewSlot);
 
 /* Mount BEFORE registering the view-switching effect below. That effect

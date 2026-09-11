@@ -48,16 +48,29 @@ export default `<main aria-labelledby="lobby-title" data-bn-view="lobby">
     ${renderAlert("{{ error }}", { variant: "error" })}
   </template>
 
+  <!-- The daily is deliberately FIXED: the server picks one puzzle per
+       UTC day, the same one for everybody, and refuses a second run —
+       that is the whole basis of the streak. But the card looked exactly
+       like the free-play cards below it, so it read as a category
+       picker; the owner reported not being able to "change from film
+       titles to motivational" from here. Nothing about the behaviour is
+       wrong, so the fix is entirely in what the card says about itself:
+       it states that today's category is set, and points at free play
+       as the place where the choosing happens. -->
   <section aria-labelledby="lobby-daily-title" data-bn-region="daily">
-    <h2 id="lobby-daily-title" data-bn-region="daily-label">Today's puzzle</h2>
+    <h2 id="lobby-daily-title" data-bn-region="daily-label">Today's puzzle · set by the server</h2>
     <template @if="dailyOpen">
       <a href="/play?daily=1"
          data-bn-action="lobby-daily"
          data-bn-variant="daily"
-         :aria-label="'Play today\\'s puzzle, ' + daily.category + '. One attempt — it counts toward your streak.'">
+         :aria-label="'Play today\\'s puzzle, ' + daily.category + '. This category is fixed for everyone today. One attempt — it counts toward your streak.'">
         <strong>{{ daily.category }}</strong>
-        <small>{{ daily.day }} · counts toward your streak</small>
+        <small>{{ daily.day }} · one attempt · counts toward your streak</small>
       </a>
+      <p data-bn-region="daily-note">
+        Everyone gets this same category today — it isn't a choice.
+        To pick your own, use free play below.
+      </p>
     </template>
     <template @if="dailyDone">
       <div data-bn-region="daily-done">
@@ -74,9 +87,10 @@ export default `<main aria-labelledby="lobby-title" data-bn-view="lobby">
   </p>
 
   <section aria-labelledby="lobby-list-title" data-bn-region="free-play">
-    <h2 id="lobby-list-title">Free play</h2>
+    <h2 id="lobby-list-title">Free play · pick any category</h2>
     <p data-bn-region="free-note">
-      Practice rounds. Replay anything, as often as you like — they never touch your streak.
+      This is where you choose. Every approved category, replayable as
+      often as you like — they never touch your streak.
     </p>
     <ul role="list" data-bn-region="list">
       <template @for="group of groups; track group.category">
