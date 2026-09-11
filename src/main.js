@@ -90,12 +90,11 @@ const reveal        = signal(null);
    "still loading" from "definitively no session". */
 const playLoading   = signal(window.location.pathname === "/play");
 
-/* Daily-done flag — accepted by createLobby() since #51. The SSR boot
-   path (src/bn/client/hydrate.js) computes this from a persisted
-   `dailyDate` stamp; the legacy `?legacy=1` SPA shell has no such
-   tracking, so the daily picker is always live here. Without this
-   signal, lobby.js hits `dailyDone is not a function`. */
-const dailyDone     = signal(false);
+/* Today's daily as the SERVER sees it (GET /api/daily): which puzzle,
+   whether this player already finished it, and their streak. Mirrors
+   src/bn/client/hydrate.js — this legacy `?legacy=1` shell is that file
+   minus the SSR seed. */
+const daily         = signal(null);
 
 const RESUME_TIMEOUT_MS = 8000;
 
@@ -132,29 +131,30 @@ const SESSION_KEY = "t4bs:session";
   if (s) stats.set(s);
 })();
 
-async function recordResultPersist(won, finalScore, category) {
+/* Local stats are a personal-best scratchpad; the streak is server-side
+   (daily_results, keyed by player + UTC day). See hydrate.js. */
+async function recordResultPersist(won, finalScore, category, mode) {
   const s = (await loadPersisted(STATS_KEY)) || {};
   s.played = (s.played || 0) + 1;
   if (won) {
     s.wins = (s.wins || 0) + 1;
-    s.streak = (s.streak || 0) + 1;
-    s.bestStreak = Math.max(s.bestStreak || 0, s.streak);
     s.best = Math.max(s.best || 0, finalScore);
-  } else {
-    s.streak = 0;
   }
   s.lastCategory = category;
   s.lastScore = finalScore;
   s.lastResult = won ? "won" : "lost";
+  s.lastMode = mode;
   s.lastAt = Date.now();
   await savePersisted(STATS_KEY, s);
   await clearPersisted(SESSION_KEY);
   stats.set(s);
+  api.daily().then(daily.set).catch(() => {});
 }
 
 /* ── Boot the lobby + me + resume / deep-link ──────────────────────────── */
 api.listPuzzles().then(lobby.set).catch(e => error.set(String(e.message || e)));
 api.me().then(r => user.set(r.user)).catch(() => {});
+api.daily().then(daily.set).catch(() => {});
 
 (async () => {
   try {
@@ -170,6 +170,14 @@ api.me().then(r => user.set(r.user)).catch(() => {});
       url.searchParams.delete("play");
       window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
       await start(intent.puzzleId);
+      return;
+    }
+
+    if (intent.kind === "daily") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("daily");
+      window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
+      await startDaily();
       return;
     }
 
@@ -229,6 +237,29 @@ function hydrateSession(s, fresh) {
   view.set("playing");
 }
 
+/* Today's daily — server-picked, once per UTC day. A 409 means it's
+   already been played, which is a lobby state and not an error. */
+async function startDaily() {
+  error.set(null);
+  try {
+    const s = await withTimeout(api.startDaily(), RESUME_TIMEOUT_MS, "start-timeout");
+    if (s.daily) daily.set(s.daily);
+    hydrateSession(s, true);
+    await savePersisted(SESSION_KEY, { sessionId: s.sessionId }, 12 * 3600);
+    router.navigate("/play");
+  } catch (e) {
+    const err = /** @type {{ data?: { daily?: unknown }, message?: string }} */ (e);
+    if (err?.data?.daily) {
+      daily.set(err.data.daily);
+      toaster("TODAY'S PUZZLE IS DONE — free play below", "good");
+    } else {
+      error.set(String(err?.message || e));
+    }
+    if (window.location.pathname === "/play") router.navigate("/");
+  }
+}
+
+/** Free play — any approved puzzle, unlimited, never recorded. */
 async function start(puzzleId) {
   error.set(null);
   try {
@@ -367,8 +398,9 @@ effect(() => {
   const v = view();
   if (v === "lobby") {
     mount(viewSlot, createLobby({
-      lobby, stats, error, user, dailyDone,
-      onPick: start,
+      lobby, daily, error, user,
+      onDaily: startDaily,
+      onFree: start,
       onSubmit: () => {
         if (user()) router.navigate("/submit");
         else authOpen.set(true);
@@ -425,6 +457,7 @@ effect(() => {
       score, lives, tokens, phase, reveal,
       toaster,
       onResultRecorded: recordResultPersist,
+      onDailyUpdate: daily.set,
       onShare: shareResult,
       goLobby: () => { phase.set("lobby"); router.navigate("/"); },
       retry: () => { const id = session()?.id; if (id) start(id); },

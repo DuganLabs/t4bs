@@ -3,7 +3,8 @@
 
 import { createEngine } from "../shared/engine.js";
 import { validateSubmission } from "../shared/submission.js";
-import { memoryPuzzles, memorySessions, memorySubmissions, memoryUsers } from "./stores-memory.js";
+import { memoryPuzzles, memorySessions, memorySubmissions, memoryUsers, memoryDailies } from "./stores-memory.js";
+import { computeStreak, pickDailyPuzzleId, utcDayKey, msUntilNextUtcDay } from "../shared/daily.js";
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
@@ -25,7 +26,42 @@ export function createMockApi() {
   const sessions = memorySessions();
   const submissions = memorySubmissions(puzzles);
   const users = memoryUsers();
-  const engine = createEngine({ puzzles, sessions });
+  const dailies = memoryDailies();
+  /* Same wiring as functions/_shared/game.js — finishing a daily
+     records the day's result, which is what makes it un-replayable and
+     what a streak is counted from. */
+  const engine = createEngine({
+    puzzles,
+    sessions,
+    onFinish: async ({ state, outcome }) => {
+      if (state.mode !== "daily" || !state.playerKey || !state.day) return;
+      await dailies.record({
+        playerKey: state.playerKey, day: state.day,
+        puzzleId: state.puzzleId, outcome, score: state.score,
+      });
+    },
+  });
+
+  async function dailyStatus(playerKey, now = new Date()) {
+    const day = utcDayKey(now);
+    const approved = await puzzles.listApproved();
+    const history = await dailies.history(playerKey);
+    const puzzleId = pickDailyPuzzleId(approved.map(p => Number(p.id)), day);
+    const meta = approved.find(p => Number(p.id) === puzzleId) || null;
+    const today = history.find(r => r.day === day) || null;
+    const { current, best } = computeStreak(history, day);
+    return {
+      day, puzzleId,
+      category: meta?.category || null,
+      submittedBy: meta?.submittedBy || null,
+      playedToday: !!today,
+      outcome: today?.outcome || null,
+      score: today?.score ?? null,
+      streak: current, bestStreak: best,
+      daysPlayed: history.length,
+      msUntilNext: msUntilNextUtcDay(now),
+    };
+  }
 
   // local-mock auth: cookie-based "fake passkey" — sets a session cookie on POST /api/auth/dev-login
   // This exists so the submission UI is exercisable without WebAuthn in dev.
@@ -37,6 +73,26 @@ export function createMockApi() {
   }
 
   const ADMIN_HANDLES = (process.env.ADMIN_HANDLES || "admin,warren").split(",").map(s => s.trim().toLowerCase());
+
+  /* Anonymous-player id, mirroring playerIdentity() in
+     functions/_shared/util.js. No Secure flag here — dev is http. */
+  function playerIdentity(req, res) {
+    const tok = getCookie(req, "t4bs_sess");
+    if (tok && userSessions.has(tok)) return `u:${userSessions.get(tok)}`;
+    let pid = getCookie(req, "t4bs_pid");
+    if (!pid) {
+      pid = crypto.randomUUID();
+      res.setHeader("Set-Cookie", `t4bs_pid=${pid}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 400}`);
+    }
+    return `a:${pid}`;
+  }
+
+  /* Attach the refreshed streak to the response that ended a daily —
+     mirrors withDaily() in functions/api/guess.js. */
+  async function withDaily(req, res, result) {
+    if (!result.finished || result.mode !== "daily") return result;
+    return { ...result, daily: await dailyStatus(playerIdentity(req, res)) };
+  }
 
   return async (req, res, next) => {
     try {
@@ -55,9 +111,23 @@ export function createMockApi() {
         return send(res, 200, { logged: true });
       }
 
+      if (M === "GET" && path === "/daily") {
+        return send(res, 200, await dailyStatus(playerIdentity(req, res)));
+      }
+
       if (M === "POST" && path === "/session") {
         const b = await readJson(req);
-        const r = await engine.startSession(b.puzzleId);
+        const playerKey = playerIdentity(req, res);
+        if (b.mode === "daily") {
+          const status = await dailyStatus(playerKey);
+          if (!status.puzzleId) return send(res, 503, { error: "no-puzzles" });
+          if (status.playedToday) return send(res, 409, { error: "daily-done", daily: status });
+          const r = await engine.startSession(status.puzzleId, {
+            mode: "daily", day: status.day, playerKey,
+          });
+          return send(res, r.error ? 400 : 200, r.error ? r : { ...r, daily: status });
+        }
+        const r = await engine.startSession(b.puzzleId, { mode: "free", playerKey });
         return send(res, r.error ? 400 : 200, r);
       }
       const sessionGet = path.match(/^\/session\/([\w-]+)$/);
@@ -68,7 +138,7 @@ export function createMockApi() {
       if (M === "POST" && path === "/guess") {
         const b = await readJson(req);
         const r = await engine.submitGuess(b.sessionId, b.wordIndex, (b.letters||[]).map(c=>String(c).toUpperCase()), b.wagers||[]);
-        return send(res, r.error ? 400 : 200, r);
+        return send(res, r.error ? 400 : 200, await withDaily(req, res, r));
       }
       if (M === "POST" && path === "/cascade") {
         const b = await readJson(req);
@@ -78,7 +148,7 @@ export function createMockApi() {
       if (M === "POST" && path === "/allin") {
         const b = await readJson(req);
         const r = await engine.allIn(b.sessionId, b.wordsGuess);
-        return send(res, r.error ? 400 : 200, r);
+        return send(res, r.error ? 400 : 200, await withDaily(req, res, r));
       }
 
       // ── DEV-ONLY auth shim — production uses passkeys via /functions/api/auth/* ──

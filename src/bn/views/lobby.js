@@ -3,11 +3,19 @@
    keeps it portable across the @basenative/server SSR worker and
    any node:test consumers.
 
-   Each round is rendered as a real <a href="/play?play={id}"> so the
-   lobby is usable with JavaScript disabled (issue #24). When the SPA
-   hydrates, mount() replaces #app's children with the imperative tree
-   that uses <button> + signal-driven onclick — so the anchors are a
-   purely SSR-time degradation surface, no hydration mismatch. */
+   Two shelves, and the distinction between them is the point:
+
+     - TODAY'S PUZZLE is server-picked from the UTC day and recorded
+       once (`/play?daily=1` → POST /api/session {mode:"daily"}). The
+       streak lives here. It used to be a client-side date hash with
+       nothing behind it.
+     - FREE PLAY is every approved puzzle, replayable forever, and never
+       touches the streak. Each round is a real <a href="/play?play={id}">
+       so the lobby still works with JavaScript disabled (issue #24).
+
+   When the SPA hydrates, mount() replaces #app's children with the
+   imperative tree that uses <button> + signal-driven onclick — so the
+   anchors are purely an SSR-time degradation surface. */
 
 export default `<main aria-labelledby="lobby-title" data-bn-view="lobby">
   <h1 id="lobby-title">Pick a round</h1>
@@ -20,23 +28,56 @@ export default `<main aria-labelledby="lobby-title" data-bn-view="lobby">
     </p>
   </noscript>
 
-  <section aria-labelledby="lobby-stats-title" data-bn-region="stats" hidden>
-    <h2 id="lobby-stats-title">Your run</h2>
-  </section>
+  <template @if="daily">
+    <section aria-labelledby="lobby-stats-title" data-bn-region="stats">
+      <h2 id="lobby-stats-title" class="sr-only">Your run</h2>
+      <p data-bn-region="stat"><strong>{{ daily.streakLabel }}</strong><small>STREAK</small></p>
+      <p data-bn-region="stat"><strong>{{ daily.bestStreak }}</strong><small>BEST</small></p>
+      <p data-bn-region="stat"><strong>{{ daily.daysPlayed }}</strong><small>DAYS</small></p>
+    </section>
+  </template>
 
   <template @if="error">
     <p role="alert" data-bn-region="error">{{ error }}</p>
   </template>
 
-  <section aria-labelledby="lobby-list-title">
-    <h2 id="lobby-list-title">Available puzzles</h2>
+  <section aria-labelledby="lobby-daily-title" data-bn-region="daily">
+    <h2 id="lobby-daily-title" data-bn-region="daily-label">Today's puzzle</h2>
+    <template @if="dailyOpen">
+      <a href="/play?daily=1"
+         data-bn-action="lobby-daily"
+         data-bn-variant="daily"
+         :aria-label="'Play today\\'s puzzle, ' + daily.category + '. One attempt — it counts toward your streak.'">
+        <strong>{{ daily.category }}</strong>
+        <small>{{ daily.day }} · counts toward your streak</small>
+      </a>
+    </template>
+    <template @if="dailyDone">
+      <div data-bn-region="daily-done">
+        <p data-bn-region="daily-result">{{ daily.resultLabel }}</p>
+        <p data-bn-region="daily-score">{{ daily.score }} pts</p>
+        <p data-bn-region="daily-cat">{{ daily.category }}</p>
+      </div>
+      <p data-bn-region="daily-next">Next puzzle at 00:00 UTC · free play below</p>
+    </template>
+  </section>
+
+  <p data-bn-region="rules-note">
+    Four lives for the whole phrase — any word guess that isn't fully correct costs one.
+  </p>
+
+  <section aria-labelledby="lobby-list-title" data-bn-region="free-play">
+    <h2 id="lobby-list-title">Free play</h2>
+    <p data-bn-region="free-note">
+      Practice rounds. Replay anything, as often as you like — they never touch your streak.
+    </p>
     <ul role="list" data-bn-region="list">
       <template @for="group of groups; track group.category">
         <li>
           <a :href="group.playHref"
              data-bn-action="lobby-pick"
              :data-puzzle-ids="group.puzzleIds"
-             :aria-label="'Play ' + group.category + ' — ' + group.credit">
+             :aria-label="'Free play: ' + group.category + ' — ' + group.credit + '. Does not count toward your streak.'">
             <strong>{{ group.category }}</strong>
             <small>{{ group.credit }}</small>
           </a>

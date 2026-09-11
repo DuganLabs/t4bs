@@ -25,12 +25,14 @@ const HELP_CONTENT = `
     <p data-bn-region="subtitle">One subject. One phrase. No mercy.</p>
   </div>
   <div data-bn-region="help-body">
-    <p><b>1 &middot; Type into tiles. </b>Pick a word, type its letters into the tiles. Press Enter or tap GO.</p>
-    <p><b data-tone="green">2 &middot; Greens lock in. </b>Letters in the right spot stay revealed across attempts. Letters known to be in the phrase pile up below.</p>
-    <p><b data-tone="yellow">3 &middot; Read the keyboard. </b>Green key (&check;) = confirmed in this word. Gold key (&#9670;) = it's elsewhere in the phrase, not this word — still worth trying here. Dark key (&#10005;) = not in this word. Each state has its own mark as well as its own colour, and nothing is ever locked out for the next word.</p>
-    <p><b data-tone="yellow">4 &middot; Stake tiles 2&times;. </b>Tap any tile you've typed before submitting — right pays double, wrong costs double.</p>
-    <p><b data-tone="green">5 &middot; Cold solves earn ⚡. </b>Solve a word with no wrong attempts → tap any unrevealed tile in any unsolved word for a free letter.</p>
-    <p><b data-tone="red">6 &middot; ALL IN. </b>Shove the whole phrase. Right = +8 × every unrevealed tile. Wrong = game over.</p>
+    <p><b data-tone="red">1 &middot; Four lives. One phrase. </b>That's <b data-tone="red">four for the whole phrase</b>, not four per word — every word draws from the same pool. Any word you submit that isn't <em>fully</em> correct costs one, no matter which word it was or how close you got. Run out and the round is over.</p>
+    <p><b>2 &middot; Type into tiles. </b>Pick a word, type its letters into the tiles. Press Enter or tap GO. A few letters start revealed — those are your anchors, free.</p>
+    <p><b data-tone="green">3 &middot; Greens lock in. </b>Letters in the right spot stay revealed across attempts, and across words: what you learn in one word narrows every other word. The panel under the grid tracks where you stand.</p>
+    <p><b data-tone="yellow">4 &middot; Read the keyboard. </b>Green key (&check;) = confirmed in this word. Gold key (&#9670;) = it's elsewhere in the phrase, not this word — still worth trying here. Dark key (&#10005;) = not in this word. Each state has its own mark as well as its own colour, and nothing is ever locked out for the next word.</p>
+    <p><b data-tone="yellow">5 &middot; Stake a tile &mdash; a real bet. </b>Tap a tile you've typed before submitting. Right pays <b data-tone="yellow">double</b> points; if <em>any</em> staked letter comes back wrong it costs <b data-tone="red">one extra life</b> on top of the miss. Stake only the positions you'd bet the round on.</p>
+    <p><b data-tone="green">6 &middot; Cold solves earn ⚡. </b>Solve a word with no wrong attempts → tap any unrevealed tile in any unsolved word for a free letter.</p>
+    <p><b data-tone="red">7 &middot; ALL IN. </b>Shove the whole phrase. Right = +8 × every unrevealed tile. Wrong = game over.</p>
+    <p><b>8 &middot; Daily vs free play. </b>One daily puzzle per day, the same one for everyone, from 00:00 UTC — solve it to grow your streak. Free play is unlimited practice and never touches the streak.</p>
   </div>
   <button type="button" data-bn-button="primary" data-bn-action="help-close">Got it</button>
 `;

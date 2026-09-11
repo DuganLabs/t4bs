@@ -194,6 +194,16 @@ button[data-bn-button="primary"]:hover { background: #FFA830; }
 button[data-bn-button="secondary"] { background: #1C1916; color: #F0EDE4; border: 1px solid #2C2926; }
 button[data-bn-button="secondary"]:hover { background: #242018; }
 button[data-bn-button][data-bn-variant="back"] { max-width: 300px; margin-top: 14px; }
+/* A disabled primary rendered at full strength, so "SUBMIT FOR REVIEW"
+   looked live while it silently refused clicks — most visible now that
+   the submit form blocks until at least one starting letter is picked.
+   grayscale keeps the brand hue recognisable while clearly reading as
+   unavailable; the cursor confirms it on hover. */
+button[data-bn-button]:disabled {
+  opacity: .4; filter: grayscale(.5); cursor: not-allowed;
+}
+button[data-bn-button="primary"]:disabled:hover   { background: #E8920A; }
+button[data-bn-button="secondary"]:disabled:hover { background: #1C1916; }
 
 /* SHARED FORMS — markup is <form data-bn-region="form"> with
    <p data-bn-region="field"> wrappers. The flabel attribute targets
@@ -448,11 +458,11 @@ header[data-bn-region="header"] output {
   padding: 3px 8px; border-radius: 4px; color: #F0EDE4;
   display: inline-flex; align-items: center; gap: 4px;
 }
-header[data-bn-region="header"] output[aria-label="Score"] {
+header[data-bn-region="header"] output[data-bn-role="score"] {
   font-size: 19px; min-width: 60px; text-align: right; padding: 0;
 }
-header[data-bn-region="header"] output[aria-label="Lives"] { border: 1.5px solid #E8920A; color: #E8920A; }
-header[data-bn-region="header"] output[aria-label="Tokens"] {
+header[data-bn-region="header"] output[data-bn-role="lives"] { border: 1.5px solid #E8920A; color: #E8920A; }
+header[data-bn-region="header"] output[data-bn-role="tokens"] {
   border: 1.5px solid #4EAF7C; color: #4EAF7C; box-shadow: 0 0 10px rgba(78,175,124,.25);
 }
 
@@ -502,7 +512,7 @@ header[data-bn-region="header"] [aria-current="page"] { color: #E8920A; border-c
   header[data-bn-region="header"] output {
     font-size: 12px; padding: 2px 6px; gap: 2px;
   }
-  header[data-bn-region="header"] output[aria-label="Score"] { font-size: 16px; min-width: 0; }
+  header[data-bn-region="header"] output[data-bn-role="score"] { font-size: 16px; min-width: 0; }
   header[data-bn-region="header"] button,
   header[data-bn-region="header"] a[href="/moderate"],
   header[data-bn-region="header"] a[href="/admin"] {
@@ -528,7 +538,11 @@ main[data-bn-view="lobby"] > h1 {
   font-size: 11px; text-transform: uppercase; letter-spacing: 2.5px;
   color: #9A9590; font-weight: 400;
 }
-main[data-bn-view="lobby"] > p {
+/* The bare <p> directly under <main> is the SSR sticky-note tagline.
+   Scoped with :not([data-bn-region]) so the attribute-driven paragraphs
+   that now sit at the same level (the rules note) don't inherit a
+   yellow rotated sticky note. */
+main[data-bn-view="lobby"] > p:not([data-bn-region]) {
   font-family: 'Caveat', cursive;
   background: #F5E06A; color: #1E1600;
   font-size: 21px; font-weight: 700; padding: 10px 26px 12px;
@@ -552,6 +566,7 @@ main[data-bn-view="lobby"] [data-bn-region="list"] {
 }
 main[data-bn-view="lobby"] [data-bn-region="list"] > li { list-style: none; }
 main[data-bn-view="lobby"] [data-bn-action="lobby-pick"] {
+  font: inherit; text-align: left; cursor: pointer;
   display: flex; justify-content: space-between; align-items: center; gap: 10px;
   width: 100%; padding: 14px 16px;
   background: #161412; border: 1.5px solid #222; border-radius: 10px;
@@ -609,8 +624,25 @@ main[data-bn-view="lobby"] [data-bn-region="daily-label"] {
   font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
   color: #E8920A; font-weight: 700;
 }
-main[data-bn-view="lobby"] [data-bn-action="lobby-pick"][data-bn-variant="daily"] {
-  border-color: #E8920A; background: #1A1714;
+/* The daily card is an <a href="/play?daily=1"> pre-hydration and a
+   <button data-bn-action="lobby-daily"> after, so both get the shared
+   lobby-item visual plus the highlighted daily treatment. */
+main[data-bn-view="lobby"] [data-bn-action="lobby-daily"] {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  width: 100%; padding: 16px 14px; cursor: pointer; text-align: center;
+  background: #1A1714; border: 1.5px solid #E8920A; border-radius: 10px;
+  color: #F0EDE4; text-decoration: none; font: inherit;
+  transition: background .15s, box-shadow .15s;
+}
+main[data-bn-view="lobby"] [data-bn-action="lobby-daily"]:hover {
+  background: #221D16; box-shadow: 0 0 22px rgba(232,146,10,.22);
+}
+main[data-bn-view="lobby"] [data-bn-action="lobby-daily"] strong {
+  font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 2px;
+  color: #E8920A; font-weight: 400;
+}
+main[data-bn-view="lobby"] [data-bn-action="lobby-daily"] small {
+  font-size: 10px; letter-spacing: 1.4px; color: #988570; text-transform: uppercase;
 }
 main[data-bn-view="lobby"] [data-bn-region="daily-done"] {
   background: #161412; border: 1.5px solid #E8920A; border-radius: 10px;
@@ -653,6 +685,32 @@ main[data-bn-view="lobby"] [data-bn-region="stat"] > strong {
 }
 main[data-bn-view="lobby"] [data-bn-region="stat"] > small {
   font-size: 9px; letter-spacing: 1.2px; color: #9A9590; text-transform: uppercase;
+}
+
+/* RULES NOTE — the one rule that decides every round, stated on the
+   lobby so nobody meets it for the first time by losing to it. */
+main[data-bn-view="lobby"] [data-bn-region="rules-note"] {
+  width: 100%; max-width: 480px; margin-bottom: 18px;
+  padding: 8px 12px; border-left: 2px solid #E8920A;
+  background: #141210; border-radius: 0 6px 6px 0;
+  font-size: 12px; line-height: 1.45; color: #C0BBB5; text-align: left;
+}
+
+/* FREE PLAY — the practice shelf. Deliberately quieter than the daily
+   card above it: same list visual, muted heading, explicit "doesn't
+   count" note. */
+main[data-bn-view="lobby"] [data-bn-region="free-play"] {
+  width: 100%; max-width: 480px;
+}
+main[data-bn-view="lobby"] [data-bn-region="free-play"] > h2 {
+  font-family: 'Bebas Neue', sans-serif; font-size: 15px; letter-spacing: 2.5px;
+  font-weight: 400; color: #988570; text-transform: uppercase; margin-bottom: 2px;
+}
+main[data-bn-view="lobby"] [data-bn-region="free-note"] {
+  font-size: 11px; line-height: 1.45; color: #9A9590; margin-bottom: 10px;
+}
+main[data-bn-view="lobby"] [data-bn-region="free-play"] [data-bn-region="list"] {
+  display: flex; flex-direction: column; gap: 8px; padding: 0; margin: 0;
 }
 
 /* PLAY view — semantic, attribute-driven. Same rules cover the SSR-rendered
@@ -801,6 +859,52 @@ main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-allin-typed]
   box-shadow: 0 0 0 1.5px #FF6E6E, 0 0 12px rgba(255,77,77,.35);
 }
 
+/* KNOWLEDGE READ-OUT — <section data-bn-region="knowledge"> from
+   src/views/play.js. Phrase-level state: words solved, letters locked,
+   lives left (with the "one pool" label attached, because that's the
+   rule that decides the round), reveals banked, plus a one-line
+   summary of what's deduced but not yet placed. Sits directly under
+   the grid so it reads as part of the board, not chrome. */
+main[data-bn-view="play"] section[data-bn-region="knowledge"] {
+  width: 100%; max-width: 540px;
+  display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;
+  padding: 10px 12px; background: #100F0D; border: 1px solid #1F1C18;
+  border-radius: 8px;
+}
+main[data-bn-view="play"] [data-bn-region="knowledge"] > ul {
+  display: flex; gap: 8px; list-style: none; padding: 0; margin: 0;
+}
+main[data-bn-view="play"] [data-bn-region="know-stat"] {
+  flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 2px; background: #161412; border: 1px solid #23201C; border-radius: 6px;
+}
+main[data-bn-view="play"] [data-bn-region="know-stat"] > strong {
+  font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 1.2px;
+  color: #F0EDE4; font-weight: 400; line-height: 1.1;
+}
+main[data-bn-view="play"] [data-bn-region="know-stat"] > small {
+  font-size: 8px; letter-spacing: .9px; color: #A09B95; text-transform: uppercase;
+  text-align: center; line-height: 1.25;
+}
+/* Lives is the stat that ends rounds — orange, like the header counter,
+   and labelled with the pool rule rather than just "LIVES". */
+main[data-bn-view="play"] [data-bn-region="know-stat"][data-tone="lives"] {
+  border-color: rgba(232,146,10,.45);
+}
+main[data-bn-view="play"] [data-bn-region="know-stat"][data-tone="lives"] > strong { color: #E8920A; }
+main[data-bn-view="play"] [data-bn-region="know-stat"][data-tone="lives"] > small { color: #C08A4A; }
+main[data-bn-view="play"] [data-bn-region="know-hint"] {
+  font-size: 11px; line-height: 1.4; color: #A09B95; text-align: center;
+}
+
+/* END-OF-ROUND LEDGER LINE — "Daily 2026-09-11 · streak 🔥3" or
+   "Free play · streak untouched". */
+[data-bn-region="end-mode"] {
+  font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase;
+  color: #E8920A; margin-bottom: 10px;
+}
+
 /* KNOWLEDGE BANK */
 main[data-bn-view="play"] section[data-bn-region="bank"] {
   width: 100%; max-width: 540px;
@@ -912,11 +1016,21 @@ main[data-bn-view="submit"] [data-bn-region="preview"] > p {
 main[data-bn-view="submit"] [data-bn-region="preview"] > [role="group"] {
   display: flex; gap: 3px;
 }
-main[data-bn-view="submit"] [data-bn-region="preview"] [role="img"] {
-  width: 30px; height: 34px; border-radius: 4px;
+/* Tiles are real <button>s now: tapping one gives that letter away as
+   a starting anchor, which is how a submitted puzzle gets the bootstrap
+   the house puzzles were missing. */
+main[data-bn-view="submit"] [data-bn-region="preview"] [data-bn-region="preview-tile"] {
+  width: 30px; height: 34px; border-radius: 4px; padding: 0; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   font-family: 'Bebas Neue', sans-serif; font-size: 18px;
   background: #1E1C18; border: 1px solid #2A2724; color: #F0EDE4;
+  transition: background .15s, border-color .15s;
+}
+main[data-bn-view="submit"] [data-bn-region="preview"] [data-bn-region="preview-tile"]:hover {
+  border-color: #E8920A;
+}
+main[data-bn-view="submit"] [data-bn-region="preview"] [data-bn-region="preview-tile"][data-anchor] {
+  background: #4EAF7C; border-color: #4EAF7C; color: #0A1F12;
 }
 
 /* DIALOGS — native <dialog> takes care of `display: none` when closed,

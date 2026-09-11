@@ -2,7 +2,7 @@
 
 One subject. One phrase. No mercy.
 
-A Wordle-killer with poker mechanics. The server holds the answer; the client only ever sees per-tile feedback. Vegas-style per-tile wagers, agency-driven cascade rewards, and an all-in shove that ends the round one way or the other.
+A Wordle-killer with poker mechanics. The server holds the answer; the client only ever sees per-tile feedback. Four lives for an entire phrase, per-tile stakes that cost a life when they miss, agency-driven cascade rewards, and an all-in shove that ends the round one way or the other. One server-picked daily per UTC day, plus unlimited free play.
 
 - Stack: React 18 + Vite 5, Cloudflare Pages + Pages Functions + D1, WebAuthn passkeys.
 - Live: <https://t4bs.com>
@@ -137,13 +137,42 @@ In dev (Vite mock), there's a `dev-login` shortcut that skips the WebAuthn cerem
 
 ## Game rules (so the code makes sense)
 
-- Each round: one category + one phrase laid out word-by-word with a few free anchor letters.
+- **Lives are one pool for the whole phrase.** Four of them, shared across every
+  word — *not* four per word. Any word you submit that isn't fully correct costs
+  one, whichever word it was. Run out and the round ends. This is the rule the
+  whole design turns on, so the help modal leads with it and the play view
+  repeats it next to the counter.
+- Each round: one category + one phrase laid out word-by-word, with a few free
+  **anchor** letters already revealed. Anchors are required — `shared/submission.js`
+  rejects a phrase with none, house content is seeded with them
+  (`shared/seed-puzzles.js`), and the submission form makes you pick them.
 - Pick a word → type its letters into the tiles → press GO.
-- Per-tile wordle feedback: greens lock in across attempts, yellows tell you the letter is in the phrase, absents are ruled out for that word.
-- **Wager**: tap a typed tile before submitting to stake it 2× (right pays double, wrong costs double).
+- Per-tile wordle feedback: greens lock in across attempts (and across words —
+  what you learn in one word narrows every other), yellows tell you the letter is
+  in the phrase, absents are ruled out *for that word only*.
+- **Stake**: tap a typed tile before submitting to bet that position. Right pays
+  double points; if any staked letter comes back wrong it costs **one extra
+  life** on top of the miss (capped at one extra per guess, so the worst case is
+  −2). A fully correct word can never bust a stake, so the bet is finer-grained
+  than "am I sure about this word" — you can miss the word and keep the stake.
 - **Cascade**: cold-solve a word → earn a ⚡ token → spend it by tapping any unrevealed tile in any unsolved word.
 - **All-in**: at any point, fold or shove the entire phrase. Right = +8 × every unrevealed tile. Wrong = game over.
-- Lives: 4 wrong word-guesses → game over. All-in counts as one swing-or-bust.
+- **Knowledge panel**: under the grid — words solved, letters locked, lives left,
+  reveals banked, plus which unsolved word is cheapest to attack next. Resuming
+  mid-round doesn't mean re-reading the board.
+
+## Daily vs free play
+
+- **Daily** — one puzzle per **UTC day**, the same one for everybody, picked
+  server-side (`shared/daily.js` → `GET /api/daily`, `POST /api/session
+  {mode:"daily"}`). It records exactly once per player per day
+  (`daily_results`, PK `(player_key, day)`), so it cannot be replayed for score,
+  and solving it grows a **streak** shown on the lobby.
+- **Free play** — every approved puzzle, unlimited replays, never recorded and
+  never touches the streak.
+- Players are identified by their user id when signed in and otherwise by an
+  httpOnly `t4bs_pid` cookie, because Tabs is account-optional and the daily has
+  to work signed out.
 
 ## Repo layout
 

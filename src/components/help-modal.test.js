@@ -57,6 +57,45 @@ describe("helpDialogHtml", () => {
     assert.match(html, /never.*locked out.*next word|locked out.*next word/i);
   });
 
+
+  /* The design review's #4: "the lives rule is never explained, and
+     it's harsher than it looks." The help modal walked through typing,
+     staking, cascades and ALL IN without ever saying that a wrong guess
+     costs a life, or that all words draw from ONE pool of four. A
+     first-time player could lose a round to a rule the game never
+     stated. */
+  it("states the lives rule: one shared pool for the whole phrase", () => {
+    const html = helpDialogHtml();
+    assert.match(html, /four for the whole phrase/i);
+    assert.match(html, /not four per word/i);
+    assert.match(html, /same pool/i);
+    // …and what spends one.
+    assert.match(html, /isn't <em>fully<\/em> correct costs one|fully<\/em> correct costs one/i);
+  });
+
+  /* #5: the stake was sold as risk and only ever moved score, which
+     floors at zero. It costs a life now — the copy has to say so. */
+  it("states what a stake actually costs, not just what it pays", () => {
+    const html = helpDialogHtml();
+    assert.match(html, /double/i);
+    assert.match(html, /one extra life/i);
+    assert.doesNotMatch(html, /wrong costs double/i,
+      "the old score-only framing must not survive alongside the life cost");
+  });
+
+  it("explains the daily/free-play split and where the streak comes from", () => {
+    const html = helpDialogHtml();
+    assert.match(html, /one daily puzzle per day/i);
+    assert.match(html, /same one for everyone/i);
+    assert.match(html, /00:00 UTC/);
+    assert.match(html, /streak/i);
+    assert.match(html, /never touches the streak/i);
+  });
+
+  it("tells the player their anchors are free letters, not a bug", () => {
+    assert.match(helpDialogHtml(), /anchors/i);
+  });
+
   it("leaves aria-labelledby to createHelpModal() (title is in the content slot, not renderDialog's `title`)", () => {
     const html = helpDialogHtml();
     const openTag = html.match(/^<dialog [^>]*>/)[0];

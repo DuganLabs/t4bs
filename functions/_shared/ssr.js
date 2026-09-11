@@ -18,8 +18,9 @@ import {
   d1Puzzles, d1Sessions, d1Submissions, d1Users,
 } from "./d1.js";
 import {
-  currentUser, getRole, isAdmin, isModerator,
+  currentUser, getRole, isAdmin, isModerator, playerIdentity,
 } from "./util.js";
+import { dailyStatus } from "./game.js";
 
 /**
  * Render an SSR HTML response for the request.
@@ -55,9 +56,11 @@ export async function renderSsr({ request, env }) {
 
   const assetsPromise = loadAssets(env, url);
 
-  /** @type {{ lobby: any[] | null, play: any, modPending: any[] | null, adminElevated: any[] | null }} */
-  const fetched = { lobby: null, play: null, modPending: null, adminElevated: null };
+  /** @type {{ lobby: any[] | null, daily: any, play: any, modPending: any[] | null, adminElevated: any[] | null }} */
+  const fetched = { lobby: null, daily: null, play: null, modPending: null, adminElevated: null };
   let dataError = null;
+  /** Set when an anonymous player id had to be minted for the daily. */
+  let setCookie = null;
 
   /** @type {Promise<unknown>} */
   let dataPromise = Promise.resolve();
@@ -68,7 +71,16 @@ export async function renderSsr({ request, env }) {
         puzzles: d1Puzzles(env.DB),
         sessions: d1Sessions(env.DB),
       });
-      fetched.lobby = await engine.listPuzzles();
+      const listing = engine.listPuzzles();
+      /* The lobby's hero is now the server-picked daily + this player's
+         streak, so it has to be resolved before first paint or the card
+         pops in after hydration. `submit` doesn't need it. */
+      if (route === "lobby") {
+        const who = await playerIdentity(request, env);
+        setCookie = who.setCookie;
+        fetched.daily = await dailyStatus(env, who.key).catch(() => null);
+      }
+      fetched.lobby = await listing;
     })();
   } else if (route === "play") {
     dataPromise = resolvePlay(env, url.searchParams).then(p => { fetched.play = p; });
@@ -96,6 +108,7 @@ export async function renderSsr({ request, env }) {
     pathname: url.pathname,
     user,
     lobby: fetched.lobby,
+    daily: fetched.daily,
     error: dataError ? String(dataError?.message || dataError) : null,
     play: fetched.play,
     submit: {
@@ -115,20 +128,20 @@ export async function renderSsr({ request, env }) {
   const assets = await assetsPromise;
   const html = renderPage(ctx, assets);
 
-  return new Response(html, {
-    status: route === "not-found" ? 404 : 200,
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      /* `private` keeps shared caches (CDN, ISP) out so per-user
-         header content stays user-private; `no-cache` forces the
-         browser to revalidate before reuse; `must-revalidate`
-         disallows serving stale on revalidation failure. Unlike
-         `no-store`, this set still permits the back/forward cache,
-         which Lighthouse flagged as a perf regression on t4bs.com. */
-      "Cache-Control": "private, no-cache, must-revalidate",
-      "X-T4BS-SSR": "bn",
-    },
-  });
+  /* `private` keeps shared caches (CDN, ISP) out so per-user content
+     (the header, and now the lobby's streak) stays user-private;
+     `no-cache` forces the browser to revalidate before reuse;
+     `must-revalidate` disallows serving stale on revalidation failure.
+     Unlike `no-store`, this set still permits the back/forward cache,
+     which Lighthouse flagged as a perf regression on t4bs.com. */
+  const headers = {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "private, no-cache, must-revalidate",
+    "X-T4BS-SSR": "bn",
+  };
+  if (setCookie) headers["Set-Cookie"] = setCookie;
+
+  return new Response(html, { status: route === "not-found" ? 404 : 200, headers });
 }
 
 /** @param {Array<{category:string}>} lobby */

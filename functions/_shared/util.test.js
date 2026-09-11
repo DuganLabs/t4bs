@@ -17,6 +17,8 @@ import {
   isModerator,
   adminHandles,
   seedAdminRole,
+  readCookie,
+  PLAYER_COOKIE,
 } from "./util.js";
 
 describe("json()", () => {
@@ -262,5 +264,53 @@ describe("seedAdminRole()", () => {
     const out = await seedAdminRole(env, user);
     assert.equal(out.role, "admin");
     assert.equal(setRoleCalls.length, 1);
+  });
+});
+
+/* ─── Player identity for the daily ───────────────────────────────────
+   `playerIdentity` itself calls currentUser() (WebAuthn adapter + D1)
+   and stays integration-territory, same as the other auth helpers
+   above. `readCookie` is the pure half it's built on, and getting it
+   wrong would silently hand every anonymous visitor a brand-new streak
+   on each request. */
+describe("readCookie()", () => {
+  const req = (cookie) => new Request("https://t4bs.com/api/daily", {
+    headers: cookie === null ? {} : { Cookie: cookie },
+  });
+
+  it("returns null when there is no Cookie header at all", () => {
+    assert.equal(readCookie(req(null), PLAYER_COOKIE), null);
+  });
+
+  it("reads a lone cookie", () => {
+    assert.equal(readCookie(req("t4bs_pid=abc"), "t4bs_pid"), "abc");
+  });
+
+  it("reads a cookie from the middle of a list, whitespace and all", () => {
+    assert.equal(readCookie(req("a=1; t4bs_pid=abc ; z=9"), "t4bs_pid"), "abc");
+  });
+
+  it("does not match on a prefix or suffix of another cookie name", () => {
+    assert.equal(readCookie(req("xt4bs_pid=nope; t4bs_pidx=nope"), "t4bs_pid"), null);
+  });
+
+  it("percent-decodes the value", () => {
+    assert.equal(readCookie(req("t4bs_pid=a%3Ab"), "t4bs_pid"), "a:b");
+  });
+
+  it("tolerates a malformed segment without throwing", () => {
+    assert.equal(readCookie(req("brokenpair; t4bs_pid=abc"), "t4bs_pid"), "abc");
+  });
+
+  it("names the cookie the daily hangs off", () => {
+    assert.equal(PLAYER_COOKIE, "t4bs_pid");
+  });
+});
+
+describe("error() carries extra headers", () => {
+  it("passes a Set-Cookie through so a 409 can still mint a player id", () => {
+    const res = error("daily-done", 409, { daily: { day: "2026-09-11" } }, { "Set-Cookie": "t4bs_pid=x; Path=/" });
+    assert.equal(res.status, 409);
+    assert.equal(res.headers.get("Set-Cookie"), "t4bs_pid=x; Path=/");
   });
 });
