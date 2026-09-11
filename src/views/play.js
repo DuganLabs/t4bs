@@ -239,7 +239,12 @@ export function createPlay({
       } else {
         shaking.set(wi); setTimeout(() => shaking.set(null), 480);
         announcement.set(`Incorrect. ${result.lives} lives remaining.`);
-        toaster(`${result.scoreDelta}pts`, "bad");
+        // A wrong guess can still earn points for the letters it got
+        // right, so scoreDelta is often positive here — bare "9pts" in
+        // a red/bad-tone toast read as a penalty. Sign it explicitly
+        // and lead with "Not quite" so a positive number in a red
+        // pill doesn't look like a deduction.
+        toaster(`Not quite · ${result.scoreDelta >= 0 ? "+" : ""}${result.scoreDelta}pts`, "bad");
       }
       setTimeout(() => {
         feedback.set(prev => { const n = { ...prev }; delete n[wi]; return n; });
