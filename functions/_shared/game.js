@@ -7,9 +7,9 @@
    across /session, /guess, /allin and /cascade — so it lives here. */
 
 import { createEngine } from "../../shared/engine.js";
-import { d1Puzzles, d1Sessions, d1Dailies } from "./d1.js";
+import { d1Puzzles, d1Sessions, d1Dailies, d1Schedule } from "./d1.js";
 import { playerIdentity } from "./util.js";
-import { computeStreak, pickDailyPuzzleId, utcDayKey, msUntilNextUtcDay } from "../../shared/daily.js";
+import { computeStreak, nextDailyPuzzleId, pickDailyPuzzleId, utcDayKey, msUntilNextUtcDay } from "../../shared/daily.js";
 
 /** Engine wired to D1, with the daily recorder attached. @param {any} env */
 export function gameEngine(env) {
@@ -31,6 +31,35 @@ export function gameEngine(env) {
 }
 
 /**
+ * Which puzzle is `day`'s, from the schedule (migrations/0005): the pinned or
+ * previously-filled row if there is one; otherwise the next unused puzzle in
+ * the cycle, written down so every later reader agrees. A scheduled puzzle
+ * that has since been retired falls through to a fresh pick rather than a
+ * 503. If the table is not there at all (a deploy racing its migration),
+ * the old hash keeps the day answerable.
+ *
+ * @param {any} env @param {number[]} approvedIds @param {string} day
+ */
+async function scheduledPuzzleId(env, approvedIds, day) {
+  if (approvedIds.length === 0) return null;
+  const approved = new Set(approvedIds);
+  try {
+    const schedule = d1Schedule(env.DB);
+    const row = await schedule.get(day);
+    if (row && approved.has(Number(row.puzzleId))) return Number(row.puzzleId);
+    const used = await schedule.usedPuzzleIds();
+    const pick = nextDailyPuzzleId(approvedIds, used, day);
+    if (pick === null) return null;
+    if (row?.pinned) return pick;                   // pinned but retired: honour today, do not overwrite
+    await schedule.set(day, pick, 0);
+    const written = await schedule.get(day);
+    return written && approved.has(Number(written.puzzleId)) ? Number(written.puzzleId) : pick;
+  } catch {
+    return pickDailyPuzzleId(approvedIds, day);
+  }
+}
+
+/**
  * Today's daily, from the server's point of view: which puzzle, whether
  * this player has already finished it, and their streak.
  *
@@ -48,7 +77,8 @@ export async function dailyStatus(env, playerKey, now = new Date()) {
     dailies.history(playerKey),
   ]);
 
-  const puzzleId = pickDailyPuzzleId(approved.map(p => Number(p.id)), day);
+  const ids = approved.map(p => Number(p.id));
+  const puzzleId = await scheduledPuzzleId(env, ids, day);
   const meta = approved.find(p => Number(p.id) === puzzleId) || null;
   const today = history.find(r => r.day === day) || null;
   const { current, best } = computeStreak(history, day);

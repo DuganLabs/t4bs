@@ -14,6 +14,7 @@ import { matchRoute }   from "../../src/bn/route-table.js";
 import { renderPage }   from "../../src/bn/server/render.js";
 import { loadAssets }   from "../../src/bn/server/manifest.js";
 import { createEngine } from "../../shared/engine.js";
+import { LIVES, anchorLetters, boardFor, hiddenCount, publicShape, scoreFor, wordsOf } from "../../shared/pure.js";
 import {
   d1Puzzles, d1Sessions, d1Submissions, d1Users,
 } from "./d1.js";
@@ -170,15 +171,18 @@ async function resolvePlay(env, qs) {
   // Pull the full puzzle row so we can SSR word lengths + anchor letters.
   const puzzleRow = await d1Puzzles(env.DB).getApproved(playId);
   if (!puzzleRow) return null;
-  const phraseWords = puzzleRow.phrase.split(" ");
+  /* v2: the first paint shows the anchor letters everywhere they occur
+     (shared/pure.js anchorLetters), the par, and the number under Solve —
+     all from the same pure functions the engine uses, so SSR and the
+     hydrated board are one function of one row. The phrase itself stays
+     server-side: `board` carries letters only where they are revealed. */
+  const shape = publicShape(puzzleRow);
+  const revealed = anchorLetters(puzzleRow);
+  const words = wordsOf(puzzleRow.phrase);
   return {
-    id: puzzleRow.id,
-    category: puzzleRow.category,
-    submittedBy: puzzleRow.submittedBy,
-    words: phraseWords.map(w => w.length),
-    totalLetters: puzzleRow.phrase.replace(/ /g, "").length,
-    anchors: puzzleRow.anchors.map(a => ({
-      wi: a.wi, li: a.li, letter: phraseWords[a.wi][a.li],
-    })),
+    ...shape,
+    board: boardFor(words, revealed),
+    lives: LIVES,
+    scoreIfSolved: scoreFor(hiddenCount(words, revealed), LIVES),
   };
 }

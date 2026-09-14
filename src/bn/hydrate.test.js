@@ -234,8 +234,8 @@ describe("renderPage — emits a complete BaseNative-rendered HTML document for 
     const html = renderPage(baseCtx({
       lobby: [{ id: 1, category: "ANIMALS", submittedBy: "wmd" }],
     }), ASSETS);
-    assert.match(html, /Four lives for the whole phrase/i);
-    assert.match(html, /isn't fully correct costs one/i);
+    assert.match(html, /Every letter you didn't need is ten points/i);
+    assert.match(html, /solve when you know it/i);
   });
 
   it("lobby renders without a daily at all (D1 hiccup) rather than throwing", () => {
@@ -269,7 +269,8 @@ describe("renderPage — emits a complete BaseNative-rendered HTML document for 
     };
     const html = renderPage(baseCtx({ route: "play", pathname: "/play", play }), ASSETS);
     assert.match(html, /GREETINGS/);
-    assert.match(html, /data-locked="true"/);
+    assert.match(html, /data-anchor[\s>]/);
+    assert.match(html, /data-on[\s>]/);
     assert.match(html, />\s*H\s*</);
     assert.match(html, />\s*D\s*</);
   });

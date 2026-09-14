@@ -28,7 +28,6 @@ stale, fix it in the same PR that discovers it.
 ## Serious
 
 - [`T4-021`](T4-021.md) (small) — Rejecting a submission commits on the first tap, next to APPROVE, with no confirm, no undo, and no list the rejected phrase can be seen in again
-- [`T4-030`](T4-030.md) (small) — ALL IN mode tells the player to press SHOVE, a control that does not exist, while the per-word instruction from normal play stays on screen directly above it
 - [`T4-031`](T4-031.md) (small) — Every unknown URL renders the fully interactive lobby over the 404 the server sent, so a wrong link looks like a normal visit home
 
 ## Annoying
@@ -41,4 +40,4 @@ stale, fix it in the same PR that discovers it.
 
 ---
 
-9 open tickets.
+8 open tickets.

@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 
 import {
   utcDayKey, shiftDay, msUntilNextUtcDay, pickDailyPuzzleId, computeStreak,
-} from "./daily.js";
+ nextDailyPuzzleId } from "./daily.js";
 
 describe("utcDayKey", () => {
   it("is UTC, not local — that's the whole point", () => {
@@ -138,5 +138,36 @@ describe("computeStreak", () => {
   it("ignores malformed rows rather than throwing", () => {
     const r = computeStreak([null, undefined, { outcome: "won" }, won("2026-09-11")], "2026-09-11");
     assert.equal(r.current, 1);
+  });
+});
+
+describe("nextDailyPuzzleId — the no-repeat cycle", () => {
+  const ids = [3, 1, 2, 5, 4];
+
+  it("returns null with nothing to pick", () => {
+    assert.equal(nextDailyPuzzleId([], [], "2026-09-13"), null);
+  });
+
+  it("never picks a puzzle already used this cycle", () => {
+    const used = new Set();
+    for (let d = 0; d < ids.length; d++) {
+      const pick = nextDailyPuzzleId(ids, used, shiftDay("2026-09-13", d));
+      assert.ok(!used.has(pick), `day ${d} repeated ${pick}`);
+      used.add(pick);
+    }
+    assert.equal(used.size, ids.length, "every puzzle was today's exactly once");
+  });
+
+  it("starts a new cycle once every puzzle has been used", () => {
+    const pick = nextDailyPuzzleId(ids, ids, "2026-09-20");
+    assert.ok(ids.includes(pick));
+  });
+
+  it("is deterministic for a given day and used set", () => {
+    assert.equal(nextDailyPuzzleId(ids, [1, 2], "2026-09-13"), nextDailyPuzzleId(ids, [2, 1], "2026-09-13"));
+  });
+
+  it("does not depend on catalogue order", () => {
+    assert.equal(nextDailyPuzzleId([5, 4, 3, 2, 1], [], "2026-09-13"), nextDailyPuzzleId([1, 2, 3, 4, 5], [], "2026-09-13"));
   });
 });

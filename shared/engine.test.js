@@ -1,1163 +1,276 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createEngine } from "./engine.js";
+import { parFor, scoreFor, normalizePhrase, LIVES } from "./pure.js";
 
-/* Mock stores for in-memory testing. */
+/* In-memory stores with the exact interface functions/_shared/d1.js
+   implements. State is copied on the way in and out, as D1 JSON would be. */
 const createMockStores = () => {
   const puzzles = new Map();
   const sessions = new Map();
-
   return {
     puzzles: {
-      async listApproved() {
-        return Array.from(puzzles.values()).filter(p => p.approved);
-      },
-      async getApproved(id) {
-        const p = puzzles.get(id);
-        return p && p.approved ? p : null;
-      },
-      add(id, puzzle) {
-        puzzles.set(id, puzzle);
-      },
+      async listApproved() { return [...puzzles.values()].filter(p => p.approved); },
+      async getApproved(id) { const p = puzzles.get(id); return p && p.approved ? p : null; },
+      add(id, puzzle) { puzzles.set(id, puzzle); },
     },
     sessions: {
-      async create(id, state) {
-        sessions.set(id, { ...state });
-      },
-      async get(id) {
-        const sess = sessions.get(id);
-        return sess ? { ...sess } : null;
-      },
-      async save(id, state) {
-        sessions.set(id, { ...state });
-      },
+      async create(id, state) { sessions.set(id, JSON.parse(JSON.stringify(state))); },
+      async get(id) { const s = sessions.get(id); return s ? JSON.parse(JSON.stringify(s)) : null; },
+      async save(id, state) { sessions.set(id, JSON.parse(JSON.stringify(state))); },
+      raw(id) { return sessions.get(id); },
     },
   };
 };
 
-/* Helper to create a test puzzle. */
-function createTestPuzzle(overrides = {}) {
+/* HAPPILY EVER AFTER — 16 letters. Anchors H (0:0) and A (2:0); A appears
+   twice, so the anchors reveal 3 tiles and leave 13 hidden. */
+function puzzle(overrides = {}) {
   return {
-    id: "puzzle-1",
-    phrase: "HELLO WORLD",
-    category: "Test",
-    submittedBy: "testuser",
+    id: 9,
+    category: "FAIRY TALES",
+    phrase: "HAPPILY EVER AFTER",
+    submittedBy: "house",
     approved: true,
-    anchors: [
-      { wi: 0, li: 0 }, // H in HELLO
-      { wi: 1, li: 0 }, // W in WORLD
-    ],
+    anchors: [{ wi: 0, li: 0 }, { wi: 2, li: 0 }],   // H, A
     ...overrides,
   };
 }
 
-describe("Game Engine", () => {
-  describe("Initialization - startSession", () => {
-    it("should create a new session with correct initial state", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
+async function fresh(overrides) {
+  const stores = createMockStores();
+  const finishes = [];
+  stores.puzzles.add(9, puzzle(overrides));
+  const engine = createEngine({ ...stores, onFinish: info => { finishes.push(info); } });
+  const start = await engine.startSession(9, { mode: "free" });
+  return { stores, engine, start, finishes, id: start.sessionId };
+}
 
-      const result = await engine.startSession("puzzle-1");
-
-      assert.equal(result.error, undefined);
-      assert.ok(result.sessionId);
-      assert.deepEqual(result.words, [5, 5]); // HELLO, WORLD
-      assert.deepEqual(result.anchors, [
-        { wi: 0, li: 0, letter: "H" },
-        { wi: 1, li: 0, letter: "W" },
-      ]);
-      assert.equal(result.lives, 4);
-      assert.equal(result.totalLetters, 10);
-    });
-
-    it("should return error for non-existent puzzle", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const engine = createEngine({ puzzles, sessions });
-
-      const result = await engine.startSession("nonexistent");
-
-      assert.equal(result.error, "puzzle-not-found");
-    });
-
-    it("should generate unique session IDs", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const sess1 = await engine.startSession("puzzle-1");
-      const sess2 = await engine.startSession("puzzle-1");
-
-      assert.notEqual(sess1.sessionId, sess2.sessionId);
-    });
-
-    it("should initialize session with anchors locked", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      await engine.startSession("puzzle-1");
-      const sessData = await sessions.get((await engine.startSession("puzzle-1")).sessionId);
-
-      // First word (HELLO): H at position 0 should be locked
-      assert.equal(sessData.locked[0][0], "H");
-      // W at position 0 of second word should be locked
-      assert.equal(sessData.locked[1][0], "W");
-      // Other positions should not be locked
-      assert.equal(sessData.locked[0][1], undefined);
-      assert.equal(sessData.locked[1][1], undefined);
-    });
-
-    it("should initialize with correct starting values", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const result = await engine.startSession("puzzle-1");
-      const sessionId = result.sessionId;
-      const sess = await sessions.get(sessionId);
-
-      assert.equal(sess.lives, 4);
-      assert.equal(sess.score, 0);
-      assert.equal(sess.tokens, 0);
-      assert.deepEqual(sess.presentGlobal, []);
-      assert.deepEqual(sess.wordSolved, [false, false]);
-      assert.equal(sess.finished, null);
-    });
+describe("pure", () => {
+  it("normalises a solve attempt the way a phone types it", () => {
+    assert.equal(normalizePhrase("  happily,  ever-after! "), "HAPPILY EVER AFTER");
   });
-
-  describe("Initialization - resumeSession", () => {
-    it("should return existing session state", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const resumed = await engine.resumeSession(started.sessionId);
-
-      assert.equal(resumed.sessionId, started.sessionId);
-      assert.deepEqual(resumed.words, started.words);
-      assert.equal(resumed.lives, started.lives);
-    });
-
-    it("should return error for non-existent session", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const engine = createEngine({ puzzles, sessions });
-
-      const result = await engine.resumeSession("nonexistent-session");
-
-      assert.equal(result.error, "no-session");
-    });
-
-    it("should not reveal phrase when game is ongoing", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const resumed = await engine.resumeSession(started.sessionId);
-
-      assert.equal(resumed.reveal, null);
-    });
-
-    it("should reveal phrase when game is finished", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const sess = await sessions.get(started.sessionId);
-      sess.finished = "won";
-      await sessions.save(started.sessionId, sess);
-
-      const resumed = await engine.resumeSession(started.sessionId);
-
-      assert.deepEqual(resumed.reveal, ["HELLO", "WORLD"]);
-      assert.equal(resumed.finished, "won");
-    });
+  it("scores hidden tiles and kept lives", () => {
+    assert.equal(scoreFor(8, 3), 8 * 10 + 3 * 5);
+    assert.equal(scoreFor(0, 5), 25);
+    assert.equal(scoreFor(-1, -1), 0);
   });
-
-  describe("Letter Guessing - submitGuess", () => {
-    it("should reject guess on finished game", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const sess = await sessions.get(started.sessionId);
-      sess.finished = "won";
-      await sessions.save(started.sessionId, sess);
-
-      const result = await engine.submitGuess(started.sessionId, 0, ["E", "L", "L", "O"]);
-
-      assert.equal(result.error, "finished");
-    });
-
-    it("should reject guess for already-solved word", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const sess = await sessions.get(started.sessionId);
-      sess.wordSolved[0] = true;
-      await sessions.save(started.sessionId, sess);
-
-      const result = await engine.submitGuess(started.sessionId, 0, ["E", "L", "L", "O"]);
-
-      assert.equal(result.error, "word-already-solved");
-    });
-
-    it("should reject guess with wrong number of letters", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      // HELLO has 5 letters, but H is locked (anchor), so 4 slots available
-      const result = await engine.submitGuess(started.sessionId, 0, ["E", "L", "L"]); // Only 3
-
-      assert.equal(result.error, "incomplete-guess");
-    });
-
-    it("should reject guess with invalid word index", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      const result = await engine.submitGuess(started.sessionId, 5, ["X"]);
-
-      assert.equal(result.error, "bad-word-index");
-    });
-
-    it("should handle correct full word guess (allGreen)", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      // HELLO: H is locked (anchor at 0), need to guess E, L, L, O at positions 1, 2, 3, 4
-      const result = await engine.submitGuess(started.sessionId, 0, ["E", "L", "L", "O"]);
-
-      assert.equal(result.error, undefined);
-      assert.deepEqual(result.feedback, ["green", "green", "green", "green", "green"]);
-      assert.equal(result.wordSolved, true);
-      assert.equal(result.cascadeEarned, true); // First correct guess = token
-      assert.equal(result.tokens, 1);
-      assert.ok(result.scoreDelta > 0); // Should have score bonus
-      assert.equal(result.livesDelta, 0); // Correct guess doesn't cost a life
-    });
-
-    it("should handle incorrect guess (loses life)", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      // Guess wrong letters at some positions
-      const result = await engine.submitGuess(started.sessionId, 0, ["X", "Y", "Z", "Q"]);
-
-      assert.equal(result.error, undefined);
-      assert.equal(result.wordSolved, false);
-      assert.equal(result.livesDelta, -1);
-      assert.equal(result.lives, 3); // Started with 4
-      assert.equal(result.cascadeEarned, false);
-    });
-
-    it("should handle partial word guess (yellow and absent)", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      // E, L, L, O are correct letters but some in wrong positions for HELLO
-      // Actually, let's guess with letters that exist but not at position
-      // HELLO: A, B, C, D should all be absent (not in word)
-      const result = await engine.submitGuess(started.sessionId, 0, ["A", "B", "C", "D"]);
-
-      assert.ok(result.feedback);
-      assert.ok(result.absentByWord); // Should track absent letters
-      // presentGlobal includes H from anchor, so should have 1 element
-      assert.deepEqual(result.presentGlobal, ["H"]); // Only H (from anchor)
-    });
-
-    it("should update locked letters for green guesses", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      // Guess with some correct letters
-      const result = await engine.submitGuess(started.sessionId, 0, ["E", "L", "L", "O"]);
-
-      assert.deepEqual(result.locked, {
-        0: "H", // anchor
-        1: "E",
-        2: "L",
-        3: "L",
-        4: "O",
-      });
-    });
-
-    it("should track presentGlobal (known letters)", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      // Guess E, L, L, O - all are in HELLO
-      const result = await engine.submitGuess(started.sessionId, 0, ["E", "L", "L", "O"]);
-
-      assert.ok(result.presentGlobal.includes("E"));
-      assert.ok(result.presentGlobal.includes("L"));
-      assert.ok(result.presentGlobal.includes("O"));
-      assert.ok(result.presentGlobal.includes("H")); // Anchor was already known
-    });
-
-    it("should track absentByWord (letters not in word)", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      // Guess with letters not in HELLO
-      const result = await engine.submitGuess(started.sessionId, 0, ["X", "Y", "Z", "Q"]);
-
-      assert.ok(result.absentByWord.includes("X"));
-      assert.ok(result.absentByWord.includes("Y"));
-    });
-
-    it("should not grant cascade on second correct guess of same word", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      // First correct guess (should grant cascade)
-      let result = await engine.submitGuess(started.sessionId, 0, ["E", "L", "L", "O"]);
-      assert.equal(result.cascadeEarned, true);
-      assert.equal(result.tokens, 1);
-
-      // Try guessing the same word again (should fail - already solved)
-      result = await engine.submitGuess(started.sessionId, 0, ["E", "L", "L", "O"]);
-      assert.equal(result.error, "word-already-solved");
-    });
-
-    it("should not grant cascade if word was guessed incorrectly before", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      // First guess: incorrect
-      let result = await engine.submitGuess(started.sessionId, 0, ["X", "Y", "Z", "Q"]);
-      assert.equal(result.cascadeEarned, false);
-      assert.equal(result.tokens, 0);
-
-      // Second guess: correct
-      result = await engine.submitGuess(started.sessionId, 0, ["E", "L", "L", "O"]);
-      assert.equal(result.cascadeEarned, false); // No cascade because there was a prior wrong guess
-      assert.equal(result.tokens, 0);
-    });
-
-    it("should award 10 point bonus for solving word", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const result = await engine.submitGuess(started.sessionId, 0, ["E", "L", "L", "O"]);
-
-      // scoreDelta should include the 10-point word bonus
-      assert.ok(result.scoreDelta >= 10);
-    });
-
-    it("should end game with 'won' when all words solved", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      // Solve first word
-      await engine.submitGuess(started.sessionId, 0, ["E", "L", "L", "O"]);
-      // Solve second word
-      const result = await engine.submitGuess(started.sessionId, 1, ["O", "R", "L", "D"]);
-
-      assert.equal(result.finished, "won");
-      assert.deepEqual(result.reveal, ["HELLO", "WORLD"]);
-    });
-
-    it("should end game with 'lost' when lives reach 0", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      // Make 4 wrong guesses (starting with 4 lives)
-      for (let i = 0; i < 4; i++) {
-        const result = await engine.submitGuess(started.sessionId, 0, ["X", "Y", "Z", "Q"]);
-        if (i < 3) {
-          assert.equal(result.finished, null);
-        } else {
-          assert.equal(result.finished, "lost");
-        }
-      }
-    });
-
-    it("should handle wager (stake) multipliers on scoring", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      // Guess with wagers on positions (relative wager indices)
-      const resultWithWager = await engine.submitGuess(started.sessionId, 0, ["E", "L", "L", "O"], [0, 1]);
-      const resultNoWager = await engine.submitGuess(started.sessionId, 1, ["O", "R", "L", "D"], []);
-
-      // Both are correct, but wager should have higher score
-      assert.ok(resultWithWager.scoreDelta > 0);
-      assert.ok(resultNoWager.scoreDelta > 0);
-    });
-
-    it("should not count already-locked positions in scoring", async () => {
-      const { puzzles, sessions } = createMockStores();
-      // Create a puzzle with more anchors
-      const puzzle = createTestPuzzle({
-        anchors: [
-          { wi: 0, li: 0 }, // H
-          { wi: 0, li: 4 }, // O
-        ],
-      });
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      // Guess only the middle letters (E, L, L)
-      // HELLO: positions 0 and 4 are locked, need to guess 1, 2, 3
-      const result = await engine.submitGuess(started.sessionId, 0, ["E", "L", "L"]);
-
-      // H and O were already locked, so only E, L, L score
-      assert.ok(result.feedback);
-      assert.equal(result.wordSolved, true);
-      // Score should only count the 3 guessed positions
-      assert.ok(result.scoreDelta > 0);
-    });
-
-    it("should preserve immutability of input state", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const origSess = await sessions.get(started.sessionId);
-      const origLives = origSess.lives;
-      const origScore = origSess.score;
-
-      // Make a guess
-      await engine.submitGuess(started.sessionId, 0, ["X", "Y", "Z", "Q"]);
-
-      // Re-fetch and verify the session was properly saved
-      const updatedSess = await sessions.get(started.sessionId);
-      assert.equal(updatedSess.lives, origLives - 1);
-      assert.equal(updatedSess.score, origScore); // Depends on guess outcome
-    });
+  it("derives par from the non-anchor tiles when a puzzle carries none", () => {
+    // Anchors H and A reveal 3 of 16 tiles → 13 hidden → round(6.5)=7 → 70 + 15.
+    assert.equal(parFor(puzzle()), 85);
   });
-
-  describe("Cascade Mechanic - spendCascade", () => {
-    it("should reject cascade spend on finished game", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const sess = await sessions.get(started.sessionId);
-      sess.finished = "won";
-      sess.tokens = 1;
-      await sessions.save(started.sessionId, sess);
-
-      const result = await engine.spendCascade(started.sessionId, 0, 1);
-
-      assert.equal(result.error, "finished");
-    });
-
-    it("should reject cascade spend with no tokens", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      const result = await engine.spendCascade(started.sessionId, 0, 1);
-
-      assert.equal(result.error, "no-tokens");
-    });
-
-    it("should reject cascade spend on already-locked letter", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const sess = await sessions.get(started.sessionId);
-      sess.tokens = 1;
-      await sessions.save(started.sessionId, sess);
-
-      // Try to lock position 0 which is already locked (anchor)
-      const result = await engine.spendCascade(started.sessionId, 0, 0);
-
-      assert.equal(result.error, "already-locked");
-    });
-
-    it("should reject cascade spend on already-solved word", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const sess = await sessions.get(started.sessionId);
-      sess.wordSolved[0] = true;
-      sess.tokens = 1;
-      await sessions.save(started.sessionId, sess);
-
-      const result = await engine.spendCascade(started.sessionId, 0, 1);
-
-      assert.equal(result.error, "word-already-solved");
-    });
-
-    it("should successfully lock a letter with a cascade token", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const sess = await sessions.get(started.sessionId);
-      sess.tokens = 1;
-      await sessions.save(started.sessionId, sess);
-
-      const result = await engine.spendCascade(started.sessionId, 0, 1);
-
-      assert.equal(result.error, undefined);
-      assert.equal(result.locked[1], "E"); // Second letter of HELLO
-      assert.equal(result.tokens, 0); // Token spent
-    });
-
-    it("should add locked letter to presentGlobal", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const sess = await sessions.get(started.sessionId);
-      sess.tokens = 1;
-      await sessions.save(started.sessionId, sess);
-
-      const result = await engine.spendCascade(started.sessionId, 0, 1);
-
-      assert.ok(result.presentGlobal.includes("E"));
-    });
-
-    it("should reject cascade spend on invalid word index", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const sess = await sessions.get(started.sessionId);
-      sess.tokens = 1;
-      await sessions.save(started.sessionId, sess);
-
-      const result = await engine.spendCascade(started.sessionId, 5, 1);
-
-      assert.equal(result.error, "bad-word-index");
-    });
-
-    it("should allow multiple cascades on different positions", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const sess = await sessions.get(started.sessionId);
-      sess.tokens = 3;
-      await sessions.save(started.sessionId, sess);
-
-      let result = await engine.spendCascade(started.sessionId, 0, 1);
-      assert.equal(result.error, undefined);
-      assert.equal(result.tokens, 2);
-      assert.equal(result.locked[1], "E");
-
-      result = await engine.spendCascade(started.sessionId, 0, 2);
-      assert.equal(result.error, undefined);
-      assert.equal(result.tokens, 1);
-      assert.equal(result.locked[2], "L");
-    });
-  });
-
-  describe("All-In Mechanic - allIn", () => {
-    it("should reject all-in on finished game", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const sess = await sessions.get(started.sessionId);
-      sess.finished = "won";
-      await sessions.save(started.sessionId, sess);
-
-      const result = await engine.allIn(started.sessionId, ["HELLO", "WORLD"]);
-
-      assert.equal(result.error, "finished");
-    });
-
-    it("should reject all-in with shape mismatch (wrong word count)", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      const result = await engine.allIn(started.sessionId, ["HELLO"]); // Missing WORLD
-
-      assert.equal(result.error, "shape-mismatch");
-    });
-
-    it("should reject all-in with shape mismatch (wrong word length)", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      const result = await engine.allIn(started.sessionId, ["HELLO", "WOR"]); // Wrong length
-
-      assert.equal(result.error, "shape-mismatch");
-    });
-
-    it("should reject all-in if not an array", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      const result = await engine.allIn(started.sessionId, "HELLO WORLD");
-
-      assert.equal(result.error, "shape-mismatch");
-    });
-
-    it("should win on correct all-in guess", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      const result = await engine.allIn(started.sessionId, ["HELLO", "WORLD"]);
-
-      assert.equal(result.error, undefined);
-      assert.equal(result.correct, true);
-      assert.equal(result.finished, "won");
-      assert.deepEqual(result.reveal, ["HELLO", "WORLD"]);
-    });
-
-    it("should lose on incorrect all-in guess", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      const result = await engine.allIn(started.sessionId, ["HELLO", "WORDS"]);
-
-      assert.equal(result.error, undefined);
-      assert.equal(result.correct, false);
-      assert.equal(result.finished, "lost");
-      assert.equal(result.lives, 0);
-      assert.deepEqual(result.reveal, ["HELLO", "WORLD"]);
-    });
-
-    it("should be case-insensitive", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      const result = await engine.allIn(started.sessionId, ["hello", "world"]);
-
-      assert.equal(result.correct, true);
-      assert.equal(result.finished, "won");
-    });
-
-    it("should award score based on unsolved letters", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      const result = await engine.allIn(started.sessionId, ["HELLO", "WORLD"]);
-
-      // Both words have 10 letters, 2 are anchored (H, W), so 8 unsolved
-      // Score should be: 8 * 8 = 64
-      assert.equal(result.scoreDelta, 64);
-      assert.ok(result.score >= 64);
-    });
-
-    it("should award reduced score when letters are already locked", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const sess = await sessions.get(started.sessionId);
-      // Manually lock more letters
-      sess.locked[0][1] = "E";
-      sess.locked[0][2] = "L";
-      await sessions.save(started.sessionId, sess);
-
-      const result = await engine.allIn(started.sessionId, ["HELLO", "WORLD"]);
-
-      // Now only 6 unsolved letters (2 in word 0 locked: H, E, L; 5 in word 1)
-      assert.ok(result.scoreDelta < 64);
-      assert.ok(result.scoreDelta > 0);
-    });
-
-    it("should lock all letters on correct all-in", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      await engine.allIn(started.sessionId, ["HELLO", "WORLD"]);
-      const sess = await sessions.get(started.sessionId);
-
-      assert.equal(sess.locked[0][0], "H");
-      assert.equal(sess.locked[0][1], "E");
-      assert.equal(sess.locked[0][4], "O");
-      assert.equal(sess.locked[1][0], "W");
-      assert.equal(sess.locked[1][4], "D");
-    });
-
-    it("should mark all words as solved on correct all-in", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      await engine.allIn(started.sessionId, ["HELLO", "WORLD"]);
-      const sess = await sessions.get(started.sessionId);
-
-      assert.equal(sess.wordSolved[0], true);
-      assert.equal(sess.wordSolved[1], true);
-    });
-
-    it("should not modify locked state on incorrect all-in", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const sessBefore = await sessions.get(started.sessionId);
-      const lockedBefore = JSON.stringify(sessBefore.locked);
-
-      await engine.allIn(started.sessionId, ["HELLO", "WRONG"]);
-      const sessAfter = await sessions.get(started.sessionId);
-
-      // Locked state should not change on wrong guess
-      assert.equal(lockedBefore, JSON.stringify(sessAfter.locked));
-    });
-  });
-
-  describe("Edge Cases", () => {
-    it("should handle single-word phrase", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle({
-        phrase: "HELLO",
-        anchors: [{ wi: 0, li: 0 }],
-      });
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const result = await engine.startSession("puzzle-1");
-
-      assert.deepEqual(result.words, [5]);
-      assert.equal(result.totalLetters, 5);
-    });
-
-    it("should handle multi-word phrases", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle({
-        phrase: "THE QUICK BROWN FOX",
-        anchors: [
-          { wi: 0, li: 0 },
-          { wi: 1, li: 0 },
-          { wi: 2, li: 0 },
-          { wi: 3, li: 0 },
-        ],
-      });
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const result = await engine.startSession("puzzle-1");
-
-      assert.deepEqual(result.words, [3, 5, 5, 3]);
-      assert.equal(result.totalLetters, 16);
-    });
-
-    it("should handle phrase with many anchors", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle({
-        anchors: [
-          { wi: 0, li: 0 },
-          { wi: 0, li: 1 },
-          { wi: 0, li: 2 },
-          { wi: 0, li: 3 },
-          { wi: 0, li: 4 },
-        ],
-      });
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      // All letters of HELLO are locked
-      const result = await engine.submitGuess(started.sessionId, 0, []);
-
-      assert.equal(result.error, undefined);
-      assert.deepEqual(result.feedback, ["green", "green", "green", "green", "green"]);
-      assert.equal(result.wordSolved, true);
-    });
-
-    it("should handle duplicate letters in phrase", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle({
-        phrase: "BELL BELL",
-        anchors: [
-          { wi: 0, li: 0 },
-          { wi: 1, li: 0 },
-        ],
-      });
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-      const result = await engine.submitGuess(started.sessionId, 0, ["E", "L", "L"]);
-
-      assert.equal(result.error, undefined);
-      assert.equal(result.wordSolved, true);
-    });
-
-    it("should handle consecutive wrong guesses leading to game over", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      for (let i = 0; i < 5; i++) {
-        const result = await engine.submitGuess(started.sessionId, 0, ["X", "Y", "Z", "Q"]);
-        if (i < 3) {
-          assert.equal(result.lives, 4 - i - 1);
-          assert.equal(result.finished, null);
-        } else {
-          assert.equal(result.finished, "lost");
-          break;
-        }
-      }
-    });
-
-    it("should prevent operations after game is finished", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      // Win the game
-      await engine.submitGuess(started.sessionId, 0, ["E", "L", "L", "O"]);
-      await engine.submitGuess(started.sessionId, 1, ["O", "R", "L", "D"]);
-
-      // Try to make another guess
-      const result = await engine.submitGuess(started.sessionId, 0, ["E", "L", "L", "O"]);
-      assert.equal(result.error, "finished");
-
-      // Try to spend cascade
-      const cascadeResult = await engine.spendCascade(started.sessionId, 0, 1);
-      assert.equal(cascadeResult.error, "finished");
-
-      // Try all-in
-      const allInResult = await engine.allIn(started.sessionId, ["HELLO", "WORLD"]);
-      assert.equal(allInResult.error, "finished");
-    });
-
-    it("should maintain consistency across multiple operations", async () => {
-      const { puzzles, sessions } = createMockStores();
-      const puzzle = createTestPuzzle();
-      puzzles.add("puzzle-1", puzzle);
-      const engine = createEngine({ puzzles, sessions });
-
-      const started = await engine.startSession("puzzle-1");
-
-      // Guess 1: wrong
-      let result = await engine.submitGuess(started.sessionId, 0, ["X", "Y", "Z", "Q"]);
-      assert.equal(result.lives, 3);
-      assert.equal(result.cascadeEarned, false);
-
-      // Guess 2: correct
-      result = await engine.submitGuess(started.sessionId, 0, ["E", "L", "L", "O"]);
-      assert.equal(result.wordSolved, true);
-      assert.equal(result.cascadeEarned, false); // Not earned because prior wrong guess
-
-      // Spend cascade on word 2
-      const sess = await sessions.get(started.sessionId);
-      sess.tokens = 1;
-      await sessions.save(started.sessionId, sess);
-
-      result = await engine.spendCascade(started.sessionId, 1, 1);
-      assert.ok(result.locked[1]);
-
-      // Check final state
-      const finalSess = await sessions.get(started.sessionId);
-      assert.equal(finalSess.lives, 3);
-      assert.equal(finalSess.wordSolved[0], true);
-      assert.equal(finalSess.wordSolved[1], false);
-    });
+  it("prefers a puzzle's own par", () => {
+    assert.equal(parFor(puzzle({ par: 120 })), 120);
   });
 });
 
-/* ── The stake is a real bet now ──────────────────────────────────────
-   Before this change `scoreGuess` was the only thing a wager touched,
-   and `score` is floored at zero — so a stake could never end a round,
-   and at zero score it cost literally nothing. It was billed as
-   "Vegas-style" and was mechanically decorative. A staked tile now
-   costs a life if that position comes back anything but green. */
-describe("Stake — the wager carries a life", () => {
-  it("costs one EXTRA life when a staked position misses", async () => {
-    const { puzzles, sessions } = createMockStores();
-    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
-    const engine = createEngine({ puzzles, sessions });
-    const started = await engine.startSession("puzzle-1");
-
-    // HELLO guessed as HXLLO, staking slot 1 (the X) — that position is wrong.
-    const r = await engine.submitGuess(started.sessionId, 0, ["H", "X", "L", "L", "O"], [1]);
-
-    assert.equal(r.stakeBusted, true);
-    assert.equal(r.livesDelta, -2, "one for the miss, one for the busted stake");
-    assert.equal(r.lives, 2);
+describe("startSession", () => {
+  it("never sends the phrase, and describes the board by shape", async () => {
+    const { start } = await fresh();
+    assert.equal(start.error, undefined);
+    assert.equal(JSON.stringify(start).includes("HAPPILY"), false);
+    assert.deepEqual(start.words, [7, 4, 5]);
+    assert.equal(start.totalLetters, 16);
+    assert.equal(start.lives, LIVES);
+    assert.equal(start.finished, null);
+    assert.equal(start.reveal, null);
+    assert.equal(start.par, parFor(puzzle()));
   });
 
-  it("costs only the ordinary life when the staked positions were right", async () => {
-    const { puzzles, sessions } = createMockStores();
-    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
-    const engine = createEngine({ puzzles, sessions });
-    const started = await engine.startSession("puzzle-1");
-
-    // H is right; only the staked position matters, not the word.
-    const r = await engine.submitGuess(started.sessionId, 0, ["H", "X", "L", "L", "O"], [0]);
-
-    assert.equal(r.stakeBusted, false);
-    assert.equal(r.livesDelta, -1, "the word missed, but the bet was sound");
-    assert.equal(r.lives, 3);
+  it("reveals an anchor's letter in every tile it occurs, not just the anchored one", async () => {
+    const { start } = await fresh();
+    assert.deepEqual(start.revealed, ["A", "H"]);
+    // HAPPILY: H A _ _ _ _ _ ; EVER: _ _ _ _ ; AFTER: A _ _ _ _
+    assert.deepEqual(start.board[0], ["H", "A", null, null, null, null, null]);
+    assert.deepEqual(start.board[1], [null, null, null, null]);
+    assert.deepEqual(start.board[2], ["A", null, null, null, null]);
+    assert.equal(start.hiddenCount, 13);
+    assert.equal(start.scoreIfSolved, scoreFor(13, LIVES));
   });
 
-  it("never bites on a fully correct word — every staked tile is green", async () => {
-    const { puzzles, sessions } = createMockStores();
-    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
-    const engine = createEngine({ puzzles, sessions });
-    const started = await engine.startSession("puzzle-1");
-
-    const r = await engine.submitGuess(started.sessionId, 0, ["H", "E", "L", "L", "O"], [0, 1, 2]);
-    assert.equal(r.stakeBusted, false);
-    assert.equal(r.livesDelta, 0);
-    assert.equal(r.lives, 4);
+  it("errors on an unknown puzzle", async () => {
+    const stores = createMockStores();
+    const engine = createEngine(stores);
+    assert.deepEqual(await engine.startSession(404), { error: "puzzle-not-found" });
   });
 
-  it("caps the extra cost at one life however many tiles are staked", async () => {
-    const { puzzles, sessions } = createMockStores();
-    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
-    const engine = createEngine({ puzzles, sessions });
-    const started = await engine.startSession("puzzle-1");
+  it("issues distinct ids", async () => {
+    const a = await fresh(); const b = await fresh();
+    assert.notEqual(a.id, b.id);
+  });
+});
 
-    const r = await engine.submitGuess(started.sessionId, 0, ["X", "Y", "Z", "Q", "W"], [0, 1, 2, 3, 4]);
-    assert.equal(r.livesDelta, -2, "worst case stays legible at -2");
-    assert.equal(r.lives, 2);
+describe("guessLetter", () => {
+  it("turns over every instance of a hit and costs nothing", async () => {
+    const { engine, id } = await fresh();
+    const r = await engine.guessLetter(id, "e");
+    assert.equal(r.hit, true);
+    assert.equal(r.repeat, false);
+    assert.deepEqual(r.positions, [{ wi: 1, li: 0 }, { wi: 1, li: 2 }, { wi: 2, li: 3 }]);
+    assert.equal(r.lives, LIVES);
+    assert.deepEqual(r.board[1], ["E", null, "E", null]);
+    assert.equal(r.hiddenCount, 10);
   });
 
-  it("is no longer free at zero score — it can end the round", async () => {
-    const { puzzles, sessions } = createMockStores();
-    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
-    const engine = createEngine({ puzzles, sessions });
-    const started = await engine.startSession("puzzle-1");
+  it("a miss costs one life and reveals nothing", async () => {
+    const { engine, id } = await fresh();
+    const r = await engine.guessLetter(id, "Z");
+    assert.equal(r.hit, false);
+    assert.equal(r.lives, LIVES - 1);
+    assert.deepEqual(r.missed, ["Z"]);
+    assert.equal(r.hiddenCount, 13);
+    assert.equal(r.finished, null);
+  });
 
-    // Score is floored at 0, so this is exactly the state the old
-    // wager cost nothing in.
-    const sess = await sessions.get(started.sessionId);
-    sess.score = 0;
-    sess.lives = 2;
-    await sessions.save(started.sessionId, sess);
+  it("a repeated letter is a no-op — no life, no change", async () => {
+    const { engine, id } = await fresh();
+    await engine.guessLetter(id, "Z");
+    const again = await engine.guessLetter(id, "Z");
+    assert.equal(again.repeat, true);
+    assert.equal(again.lives, LIVES - 1);
+    const anchor = await engine.guessLetter(id, "H");
+    assert.equal(anchor.repeat, true);
+    assert.equal(anchor.hit, true);
+    assert.equal(anchor.lives, LIVES - 1);
+  });
 
-    const r = await engine.submitGuess(started.sessionId, 0, ["X", "Y", "Z", "Q", "W"], [0]);
+  it("rejects anything that is not one letter", async () => {
+    const { engine, id } = await fresh();
+    for (const bad of ["", "AB", "1", " ", null, undefined]) {
+      assert.deepEqual(await engine.guessLetter(id, bad), { error: "bad-letter" });
+    }
+  });
+
+  it("five misses lose the round, reveal the phrase, and score nothing", async () => {
+    const { engine, id, finishes } = await fresh();
+    let r;
+    for (const ch of "ZXQJK") r = await engine.guessLetter(id, ch);
     assert.equal(r.lives, 0);
     assert.equal(r.finished, "lost");
+    assert.equal(r.score, 0);
+    assert.deepEqual(r.reveal, ["HAPPILY", "EVER", "AFTER"]);
+    assert.deepEqual(r.board[1], ["E", "V", "E", "R"]);
+    assert.equal(finishes.length, 1);
+    assert.equal(finishes[0].outcome, "lost");
   });
 
-  it("never drives lives below zero", async () => {
-    const { puzzles, sessions } = createMockStores();
-    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
-    const engine = createEngine({ puzzles, sessions });
-    const started = await engine.startSession("puzzle-1");
+  it("revealing every letter wins — for the lives alone", async () => {
+    const { engine, id, finishes } = await fresh();
+    let r;
+    for (const ch of "EPILYVFTR") r = await engine.guessLetter(id, ch);
+    assert.equal(r.finished, "won");
+    assert.equal(r.hiddenCount, 0);
+    assert.equal(r.score, scoreFor(0, LIVES));
+    assert.equal(finishes.length, 1);
+  });
 
-    const sess = await sessions.get(started.sessionId);
-    sess.lives = 1;
-    await sessions.save(started.sessionId, sess);
-
-    const r = await engine.submitGuess(started.sessionId, 0, ["X", "Y", "Z", "Q", "W"], [0]);
-    assert.equal(r.lives, 0);
+  it("refuses moves on a finished round", async () => {
+    const { engine, id } = await fresh();
+    for (const ch of "ZXQJK") await engine.guessLetter(id, ch);
+    assert.deepEqual(await engine.guessLetter(id, "E"), { error: "finished" });
+    assert.deepEqual(await engine.solve(id, "happily ever after"), { error: "finished" });
   });
 });
 
-/* ── Daily sessions ─────────────────────────────────────────────────── */
-describe("Session mode + the finish hook", () => {
-  it("defaults to free play, which records nothing", async () => {
-    const { puzzles, sessions } = createMockStores();
-    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
-    const finished = [];
-    const engine = createEngine({
-      puzzles, sessions,
-      onFinish: (info) => { finished.push(info); },
-    });
-
-    const started = await engine.startSession("puzzle-1");
-    assert.equal(started.mode, "free");
-    assert.equal(started.day, null);
-
-    await engine.submitGuess(started.sessionId, 0, ["H", "E", "L", "L", "O"]);
-    await engine.submitGuess(started.sessionId, 1, ["W", "O", "R", "L", "D"]);
-    assert.equal(finished.length, 1, "the hook still fires; the recorder decides what counts");
-    assert.equal(finished[0].state.mode, "free");
-    assert.equal(finished[0].outcome, "won");
-  });
-
-  it("tags a daily session with its UTC day and player key", async () => {
-    const { puzzles, sessions } = createMockStores();
-    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
-    const engine = createEngine({ puzzles, sessions });
-
-    const started = await engine.startSession("puzzle-1", {
-      mode: "daily", day: "2026-09-11", playerKey: "a:abc",
-    });
-    assert.equal(started.mode, "daily");
-    assert.equal(started.day, "2026-09-11");
-
-    const sess = await sessions.get(started.sessionId);
-    assert.equal(sess.playerKey, "a:abc");
-
-    const resumed = await engine.resumeSession(started.sessionId);
-    assert.equal(resumed.mode, "daily");
-    assert.equal(resumed.day, "2026-09-11");
-  });
-
-  it("fires onFinish exactly once, after the session is saved", async () => {
-    const { puzzles, sessions } = createMockStores();
-    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
-    const seen = [];
-    const engine = createEngine({
-      puzzles, sessions,
-      onFinish: async ({ sessionId, state, outcome }) => {
-        const persisted = await sessions.get(sessionId);
-        seen.push({ outcome, persistedFinished: persisted.finished, score: state.score });
-      },
-    });
-
-    const started = await engine.startSession("puzzle-1", { mode: "daily", day: "2026-09-11", playerKey: "a:x" });
-    // Burn all four lives.
-    for (let i = 0; i < 4; i++) {
-      await engine.submitGuess(started.sessionId, 0, ["X", "Y", "Z", "Q", "W"]);
-    }
-    assert.equal(seen.length, 1);
-    assert.equal(seen[0].outcome, "lost");
-    assert.equal(seen[0].persistedFinished, "lost", "state was persisted before the hook ran");
-  });
-
-  it("fires onFinish for an ALL IN ending too", async () => {
-    const { puzzles, sessions } = createMockStores();
-    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
-    const seen = [];
-    const engine = createEngine({ puzzles, sessions, onFinish: (i) => seen.push(i.outcome) });
-
-    const started = await engine.startSession("puzzle-1", { mode: "daily", day: "2026-09-11", playerKey: "a:x" });
-    const r = await engine.allIn(started.sessionId, ["HELLO", "WORLD"]);
+describe("solve", () => {
+  it("a correct solve scores the hidden tiles and the kept lives", async () => {
+    const { engine, id, finishes } = await fresh();
+    await engine.guessLetter(id, "E");         // 10 hidden now
+    const r = await engine.solve(id, "happily ever after");
     assert.equal(r.correct, true);
-    assert.equal(r.mode, "daily");
-    assert.deepEqual(seen, ["won"]);
+    assert.equal(r.finished, "won");
+    assert.equal(r.hiddenAtSolve, 10);
+    assert.equal(r.score, scoreFor(10, LIVES));
+    assert.deepEqual(r.reveal, ["HAPPILY", "EVER", "AFTER"]);
+    assert.equal(r.par, parFor(puzzle()));
+    assert.equal(finishes.length, 1);
+    assert.equal(finishes[0].outcome, "won");
+    assert.equal(finishes[0].state.score, r.score);
   });
 
-  it("does not let a recorder failure take down a finished round", async () => {
-    const { puzzles, sessions } = createMockStores();
-    puzzles.add("puzzle-1", createTestPuzzle({ anchors: [] }));
-    const engine = createEngine({
-      puzzles, sessions,
-      onFinish: () => { throw new Error("D1 is having a day"); },
-    });
+  it("solving from the anchors alone is the maximum", async () => {
+    const { engine, id, start } = await fresh();
+    const r = await engine.solve(id, "HAPPILY EVER AFTER");
+    assert.equal(r.score, start.scoreIfSolved);
+    assert.equal(r.score, scoreFor(13, LIVES));
+  });
 
-    const started = await engine.startSession("puzzle-1", { mode: "daily", day: "2026-09-11", playerKey: "a:x" });
-    await engine.submitGuess(started.sessionId, 0, ["H", "E", "L", "L", "O"]);
-    const r = await engine.submitGuess(started.sessionId, 1, ["W", "O", "R", "L", "D"]);
+  it("a wrong solve costs one life and reveals nothing", async () => {
+    const { engine, id } = await fresh();
+    const r = await engine.solve(id, "happily ever laughter");
+    assert.equal(r.correct, false);
+    assert.equal(r.lives, LIVES - 1);
+    assert.equal(r.finished, null);
+    assert.equal(r.reveal, null);
+    assert.equal(r.hiddenCount, 13);
+    assert.equal(r.solveAttempts, 1);
+  });
+
+  it("a wrong solve on the last life loses the round", async () => {
+    const { engine, id, finishes } = await fresh();
+    for (const ch of "ZXQJ") await engine.guessLetter(id, ch);
+    const r = await engine.solve(id, "nope nope nope");
+    assert.equal(r.lives, 0);
+    assert.equal(r.finished, "lost");
+    assert.equal(r.score, 0);
+    assert.deepEqual(r.reveal, ["HAPPILY", "EVER", "AFTER"]);
+    assert.equal(finishes.length, 1);
+  });
+
+  it("ignores case, punctuation and spacing in the attempt", async () => {
+    const { engine, id } = await fresh();
+    const r = await engine.solve(id, "  Happily,   ever AFTER. ");
+    assert.equal(r.correct, true);
+  });
+
+  it("rejects an empty attempt without spending anything", async () => {
+    const { engine, id } = await fresh();
+    assert.deepEqual(await engine.solve(id, "   "), { error: "empty-solve" });
+    const v = await engine.resumeSession(id);
+    assert.equal(v.lives, LIVES);
+    assert.equal(v.solveAttempts, 0);
+  });
+});
+
+describe("resumeSession", () => {
+  it("returns the board as it stands, phrase still hidden", async () => {
+    const { engine, id } = await fresh();
+    await engine.guessLetter(id, "E");
+    await engine.guessLetter(id, "Z");
+    const v = await engine.resumeSession(id);
+    assert.equal(v.sessionId, id);
+    assert.equal(v.lives, LIVES - 1);
+    assert.deepEqual(v.revealed, ["A", "E", "H"]);
+    assert.deepEqual(v.missed, ["Z"]);
+    assert.equal(v.reveal, null);
+    assert.equal(JSON.stringify(v).includes("HAPPILY"), false);
+  });
+
+  it("carries mode and day for the daily bookkeeping", async () => {
+    const stores = createMockStores();
+    stores.puzzles.add(9, puzzle());
+    const engine = createEngine(stores);
+    const s = await engine.startSession(9, { mode: "daily", day: "2026-09-13", playerKey: "a:1" });
+    assert.equal(s.mode, "daily");
+    assert.equal(s.day, "2026-09-13");
+    assert.equal(stores.sessions.raw(s.sessionId).playerKey, "a:1");
+  });
+
+  it("errors on an unknown session", async () => {
+    const { engine } = await fresh();
+    assert.deepEqual(await engine.resumeSession("nope"), { error: "no-session" });
+  });
+});
+
+describe("onFinish", () => {
+  it("fires once per round and never fails it", async () => {
+    const stores = createMockStores();
+    stores.puzzles.add(9, puzzle());
+    let calls = 0;
+    const engine = createEngine({ ...stores, onFinish: () => { calls++; throw new Error("bookkeeping down"); } });
+    const s = await engine.startSession(9);
+    const r = await engine.solve(s.sessionId, "happily ever after");
     assert.equal(r.finished, "won");
+    assert.equal(calls, 1);
   });
 });

@@ -22,13 +22,16 @@
    so a player starts every round with a foothold in the phrase instead
    of a blank grid and four shared lives. */
 
+import { CATALOGUE } from "./catalogue.js";
+import { suggestAnchors } from "./submission.js";
+
 /**
  * @typedef {{ wi: number, li: number }} Anchor
  * @typedef {{ id: number, category: string, phrase: string, anchors: Anchor[], submittedBy: string }} SeedPuzzle
  */
 
 /** @type {readonly SeedPuzzle[]} */
-export const SEED_PUZZLES = Object.freeze([
+export const HOUSE_PUZZLES = Object.freeze([
   {
     id: 1,
     category: "MOVIE QUOTES",
@@ -120,6 +123,28 @@ export function anchorLetter(puzzle, anchor) {
 
 /** Render the canonical `seed.sql` body from SEED_PUZZLES. Used by
  *  `scripts/gen-seed-sql.mjs` and asserted byte-for-byte by the test. */
+/* The house catalogue (shared/catalogue.js), expanded into seed rows.
+   Ids start at 1000 so they never collide with community submissions,
+   which the puzzles table autoincrements from 1 (production already holds
+   11 and 12). Anchors are derived by the same suggestAnchors() the submit
+   form seeds its picker with; par is left NULL and derived at play time by
+   shared/pure.js parFor(). Adding a puzzle is adding a line to the
+   catalogue. */
+export const CATALOGUE_PUZZLES = Object.freeze(
+  Object.entries(CATALOGUE).flatMap(([category, phrases]) =>
+    phrases.map((phrase) => ({ category, phrase }))
+  ).map((p, i) => ({
+    id: 1000 + i,
+    category: p.category,
+    phrase: p.phrase,
+    anchors: suggestAnchors(p.phrase),
+    submittedBy: "house",
+  })),
+);
+
+/** Everything the seed ships: the ten originals and the catalogue. */
+export const SEED_PUZZLES = Object.freeze([...HOUSE_PUZZLES, ...CATALOGUE_PUZZLES]);
+
 export function seedSql() {
   const rows = SEED_PUZZLES.map(p =>
     `  (${p.id}, '${p.category}', '${p.phrase}', '${JSON.stringify(p.anchors)}', '${p.submittedBy}', 'approved')`

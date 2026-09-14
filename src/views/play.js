@@ -1,13 +1,20 @@
-/* PLAY view — semantic, signal-driven mirror of src/bn/views/play.js (SSR).
+/* PLAY view, v2 — the board, the keyboard, the Solve sheet, the end card.
 
-   Same shape the SSR template produces (<main data-bn-view="play"> with
-   <header data-bn-region="play-summary">, <section data-bn-region="grid">,
-   <section data-bn-region="bank">, <section data-bn-region="keyboard">)
-   plus the end-of-round <dialog data-bn-region="end-overlay">, which is
-   client-only. The bind helpers in lib/bind.js
-   wire signals into the existing nodes — no class-soup div builders, no
-   imperative children-replace except for the phrase grid and letter bank
-   where the cell count is inherently dynamic. */
+   Semantic mirror of src/bn/views/play.js (SSR): <main data-bn-view="play">
+   with <header data-bn-region="play-summary">, <section
+   data-bn-region="grid">, <p data-bn-region="status">, <section
+   data-bn-region="keyboard">, plus two client-only <dialog>s — the Solve
+   sheet and the end-of-round card.
+
+   There is no client game state. `session` is the server's last view of
+   the round (lib/session-state.js) and every tap is a round-trip that
+   replaces it. The board is a pure function of that view, rebuilt in one
+   effect with replaceChildren — the same pattern the v1 grid used, kept
+   because a per-tile subscription leaks the moment the word count changes.
+
+   Two rules the tests hold this file to: it binds no touch handler of its
+   own (@basenative/keyboard owns touch, and doing it twice typed two
+   letters per tap), and it never synthesizes a click on a key. */
 
 import { signal, computed, effect } from "@basenative/runtime";
 import { Keyboard } from "@basenative/keyboard";
@@ -15,21 +22,15 @@ import { renderCard, renderDialog } from "@basenative/components";
 import { bnButton, fromHTML, h } from "../lib/dom.js";
 import { bindAttr, bindHidden, bindText } from "../lib/bind.js";
 import { api } from "../lib/api.js";
-import { openSlots, fullCount, computeKeyStatus, knowledgeSummary, KEY_STATE_INFO } from "../lib/game.js";
+import { keyStateFor, KEY_STATE_INFO } from "../lib/game.js";
 import { confetti } from "../lib/confetti.js";
+
+const LIVES_MAX = 5;
 
 export function createPlay({
   session,
-  locked,
-  presentGlobal,
-  absentByWord,
-  wordSolved,
-  posFeedback,
-  score,
-  lives,
-  tokens,
   phase,
-  reveal,
+  apply,
   toaster,
   onResultRecorded,
   onDailyUpdate,
@@ -37,790 +38,325 @@ export function createPlay({
   goLobby,
   retry,
 }) {
-  /* ── per-round UI signals ──────────────────────────────────────────── */
-  const active     = signal(null);
-  const s0         = session.peek() || { words: [] };
-  const typed      = signal(s0.words.map(() => []));
-  const wagers     = signal(s0.words.map(() => []));
-  const allInMode  = signal(false);
-  const casc       = signal(false);
-  const feedback   = signal({});       // wi -> [{idx, letter, status}]
-  const shaking    = signal(null);
-  const cascDrop   = signal(null);
-  const shareLbl   = signal(null);
+  const busy         = signal(false);
+  const justHit      = signal(null);     // letter that just turned over, for the flip
+  const shakeMiss    = signal(false);
+  const shareLbl     = signal(null);
   const announcement = signal("");
-  /* The server's post-round daily snapshot (streak, day). Present only
-     on the response that ENDED a daily round; free play never sets it. */
-  const dailyAfter = signal(null);
+  const dailyAfter   = signal(null);
   let resultRecorded = false;
 
-  /* ── derived ───────────────────────────────────────────────────────── */
-  const keyStatus = computed(() => computeKeyStatus({
-    session: session(),
-    active: active(),
-    locked: locked(),
-    presentGlobal: presentGlobal(),
-    absentByWord: absentByWord(),
-  }));
+  const playing = computed(() => phase() === "playing");
+  const over    = computed(() => phase() === "won" || phase() === "lost");
 
-  const hintText = computed(() => {
-    if (casc()) return "Cascade active. Tap any unrevealed tile in any unsolved word to reveal it.";
-    if (phase() !== "playing") return "";
-    if (active() === null) return "";
+  /* ── moves ─────────────────────────────────────────────────────────── */
+
+  async function guess(letter) {
     const s = session();
-    if (!s?.words) return "";
-    const slots = openSlots(s.words[active()], locked()[active()] || {});
-    const room = slots.length - (typed()[active()]?.length || 0);
-    if (room === 0) {
-      /* The rule that actually decides the round, said at the moment
-         the player is about to trigger it. */
-      return `Enter to submit — anything but a perfect word costs 1 of your ${lives()} lives.`;
+    if (!s || !playing() || busy()) return;
+    const ch = String(letter).toUpperCase();
+    if (s.revealed.includes(ch) || s.missed.includes(ch)) return;
+    busy.set(true);
+    try {
+      const r = await api.letter(s.sessionId, ch);
+      settle(r);
+      if (r.repeat) return;
+      if (r.hit) {
+        justHit.set(ch);
+        setTimeout(() => justHit.set(null), 500);
+        announcement.set(`${ch}: ${r.positions.length} tile${r.positions.length === 1 ? "" : "s"}. ${r.hiddenCount} still hidden — solve now for ${r.scoreIfSolved}.`);
+      } else {
+        shakeMiss.set(true);
+        setTimeout(() => shakeMiss.set(false), 400);
+        announcement.set(`${ch} is not in the phrase. ${r.lives} of ${LIVES_MAX} lives left.`);
+        if (navigator.vibrate) navigator.vibrate(60);
+      }
+    } catch (e) {
+      toaster(friendly(e), "bad");
+    } finally {
+      busy.set(false);
     }
-    return `Type ${room} more letter${room === 1 ? "" : "s"} for word ${active() + 1}.`;
-  });
+  }
 
-  const cbarText = computed(() => {
-    if (casc()) return "⚡ Earned reveal — pick any tile in any unsolved word";
-    if (allInMode()) return `ALL IN — type the rest of the phrase · SHOVE to commit · +${allInBonus()} pts if right · 0 lives if wrong`;
-    return "";
-  });
-
-  const allInBonus = computed(() => {
+  async function solve(text) {
     const s = session();
-    if (!s?.words) return 0;
-    return fullCount(s.words, locked()) * 8;
-  });
-
-  const wagerCount = computed(() => allInMode()
-    ? wagers().reduce((acc, w) => acc + (w?.length || 0), 0)
-    : (active() !== null ? (wagers()[active()]?.length || 0) : 0));
-
-  /* The stake carries a life now (see shared/engine.js), so the label
-     names the downside instead of only the upside — "2× STAKED" read as
-     free money, which is exactly what it used to be. */
-  const stakeText = computed(() => {
-    const n = wagerCount();
-    if (n > 0) return `${n} STAKED · 2× OR −1 LIFE`;
-    if (allInMode()) return "TYPE THE REST";
-    return "";
-  });
-
-  /* ── effects: word focus + result recording ───────────────────────── */
-  effect(() => {
-    if (phase() !== "playing" || casc()) return;
-    const ws = wordSolved();
-    const a = active();
-    if (a === null || ws[a]) {
-      const next = ws.findIndex(s => !s);
-      if (next !== -1) active.set(next);
+    if (!s || !playing() || busy()) return;
+    const attempt = String(text || "").trim();
+    if (!attempt) { toaster("TYPE THE PHRASE FIRST", "bad"); return; }
+    busy.set(true);
+    try {
+      const r = await api.solve(s.sessionId, attempt);
+      settle(r);
+      if (r.correct) {
+        announcement.set(`Solved with ${r.hiddenAtSolve} of ${r.totalLetters} letters still hidden. ${r.score} points, par ${r.par}.`);
+      } else if (r.finished === "lost") {
+        announcement.set("Not it, and that was the last life. Round over.");
+      } else {
+        toaster(`NOT IT · ${r.lives} ${r.lives === 1 ? "LIFE" : "LIVES"} LEFT`, "bad");
+        announcement.set(`Not it. One life. ${r.lives} of ${LIVES_MAX} left, nothing revealed.`);
+        if (navigator.vibrate) navigator.vibrate([60, 40, 60]);
+      }
+    } catch (e) {
+      toaster(friendly(e), "bad");
+    } finally {
+      busy.set(false);
     }
-  });
+  }
 
+  /** Every server response is the whole round; make it current. */
+  function settle(r) {
+    apply(r);
+    if (r.daily) { dailyAfter.set(r.daily); onDailyUpdate?.(r.daily); }
+  }
+
+  function friendly(e) {
+    const code = e?.data?.error || e?.message || "";
+    if (code === "no-session" || code === "puzzle-gone") return "THAT ROUND IS GONE — PICK ANOTHER";
+    if (code === "finished") return "THIS ROUND IS OVER";
+    return "COULDN'T REACH THE SERVER — TRY AGAIN";
+  }
+
+  /* ── result recording (once) ───────────────────────────────────────── */
   effect(() => {
     const p = phase();
-    if (resultRecorded) return;
-    if (p === "won" || p === "lost") {
-      onResultRecorded(p === "won", score(), session()?.category, session()?.mode || "free");
-      resultRecorded = true;
-      if (p === "won") {
-        confetti();
-        announcement.set(`You won! Final score ${score()} points.`);
-      } else {
-        announcement.set(`Game over. Final score ${score()} points.`);
-      }
-      if (navigator.vibrate) navigator.vibrate(p === "won" ? [40, 40, 80] : 200);
-    }
+    if (resultRecorded || (p !== "won" && p !== "lost")) return;
+    resultRecorded = true;
+    const s = session();
+    onResultRecorded(p === "won", s?.score ?? 0, s?.category, s?.mode || "free");
+    if (p === "won") { confetti(); if (navigator.vibrate) navigator.vibrate([40, 40, 80]); }
+    else if (navigator.vibrate) navigator.vibrate(200);
   });
 
-  /* ── typing primitives ─────────────────────────────────────────────── */
-  const findGlobalNextSlot = () => {
-    const s = session();
-    if (!s?.words) return null;
-    for (let wi = 0; wi < s.words.length; wi++) {
-      if (wordSolved()[wi]) continue;
-      const slots = openSlots(s.words[wi], locked()[wi] || {});
-      if ((typed()[wi]?.length || 0) < slots.length) return { wi, slotIdx: typed()[wi]?.length || 0 };
-    }
-    return null;
-  };
-
-  const typeLetter = (letter) => {
-    if (phase() !== "playing" || casc()) return;
-    if (allInMode()) {
-      const next = findGlobalNextSlot();
-      if (!next) return;
-      typed.set(prev => prev.map((t, i) => i !== next.wi ? t : [...t, letter]));
-      return;
-    }
-    const a = active();
-    if (a === null) return;
-    if (wordSolved()[a]) return;
-    const s = session();
-    if (!s?.words) return;
-    const slots = openSlots(s.words[a], locked()[a] || {});
-    if ((typed()[a]?.length || 0) >= slots.length) return;
-    typed.set(prev => prev.map((t, i) => i !== a ? t : [...t, letter]));
-  };
-
-  const backspace = () => {
-    if (phase() !== "playing" || casc()) return;
-    if (allInMode()) {
-      const t = typed();
-      const s = session();
-      if (!s?.words) return;
-      for (let wi = s.words.length - 1; wi >= 0; wi--) {
-        if ((t[wi]?.length || 0) > 0) {
-          typed.set(prev => prev.map((row, i) => i !== wi ? row : row.slice(0, -1)));
-          wagers.set(prev => prev.map((w, i) => i !== wi ? w : w.filter(s => s < (t[wi].length - 1))));
-          return;
-        }
-      }
-      return;
-    }
-    const a = active();
-    if (a === null) return;
-    if (wordSolved()[a]) return;
-    typed.set(prev => prev.map((row, i) => i !== a ? row : row.slice(0, -1)));
-    wagers.set(prev => prev.map((w, i) => i !== a ? w : w.filter(s => s < (typed()[a].length - 1))));
-  };
-
-  const enter = () => {
-    if (allInMode()) { submitAllIn(); return; }
-    const a = active();
-    if (a === null) return;
-    submit(a);
-  };
-
-  const toggleWager = (wi, slotIdx) => {
-    if (phase() !== "playing" || casc() || wi !== active()) return;
-    if (slotIdx >= typed()[wi].length) return;
-    wagers.set(prev => prev.map((w, i) => {
-      if (i !== wi) return w;
-      return w.includes(slotIdx) ? w.filter(s => s !== slotIdx) : [...w, slotIdx];
-    }));
-  };
-
-  /* ── submit one word ──────────────────────────────────────────────── */
-  async function submit(wi) {
-    if (phase() !== "playing" || casc() || wordSolved()[wi]) return;
-    const s = session();
-    if (!s?.words) return;
-    const wordLen = s.words[wi];
-    const lm = locked()[wi] || {};
-    const slots = openSlots(wordLen, lm);
-    if (typed()[wi].length < slots.length) {
-      shaking.set(wi); setTimeout(() => shaking.set(null), 480);
-      return;
-    }
-    try {
-      const result = await api.guess(s.sessionId, wi, typed()[wi], wagers()[wi]);
-      const fullGuess = [];
-      for (let i = 0; i < wordLen; i++) {
-        if (lm[i] !== undefined) fullGuess.push(lm[i]);
-        else fullGuess.push(typed()[wi][slots.indexOf(i)]);
-      }
-      const fb = result.feedback.map((status, idx) => ({ idx, letter: fullGuess[idx], status }));
-      feedback.set(prev => ({ ...prev, [wi]: fb }));
-      locked.set(prev => prev.map((m, i) => i !== wi ? m : { ...result.locked }));
-      presentGlobal.set(result.presentGlobal);
-      absentByWord.set(prev => prev.map((row, i) => i !== wi ? row : result.absentByWord));
-      posFeedback.set(prev => {
-        const RANK = { green: 3, yellow: 2, absent: 1 };
-        const next = prev.map(row => row.slice());
-        result.feedback.forEach((status, idx) => {
-          const cur = next[wi]?.[idx];
-          if ((RANK[status] || 0) > (RANK[cur] || 0)) next[wi][idx] = status;
-        });
-        return next;
-      });
-      score.set(result.score);
-      lives.set(result.lives);
-      tokens.set(result.tokens);
-      typed.set(prev => prev.map((t, i) => i !== wi ? t : []));
-      wagers.set(prev => prev.map((w, i) => i !== wi ? w : []));
-
-      const won = result.feedback.every(st => st === "green");
-      if (won) {
-        wordSolved.set(prev => prev.map((v, i) => i !== wi ? v : true));
-        active.set(null);
-        announcement.set(`Correct! Word ${wi + 1} solved. ${result.lives} lives remaining.`);
-        toaster(`+${result.scoreDelta}pts`, "great");
-        if (result.cascadeEarned) {
-          setTimeout(() => {
-            casc.set(true);
-            announcement.set("Cascade earned! Tap any unrevealed tile to reveal it.");
-          }, 600);
-        }
-      } else {
-        shaking.set(wi); setTimeout(() => shaking.set(null), 480);
-        const cost = Math.abs(result.livesDelta || 0);
-        announcement.set(result.stakeBusted
-          ? `Incorrect, and a staked letter missed — ${cost} lives lost. ${result.lives} remaining.`
-          : `Incorrect. ${result.lives} lives remaining.`);
-        // A wrong guess can still earn points for the letters it got
-        // right, so scoreDelta is often positive here — bare "9pts" in
-        // a red/bad-tone toast read as a penalty. Sign it explicitly
-        // and lead with "Not quite" so a positive number in a red
-        // pill doesn't look like a deduction.
-        toaster(
-          result.stakeBusted
-            ? `STAKE BUSTED · −${cost} lives · ${result.scoreDelta >= 0 ? "+" : ""}${result.scoreDelta}pts`
-            : `Not quite · ${result.scoreDelta >= 0 ? "+" : ""}${result.scoreDelta}pts`,
-          "bad",
-        );
-      }
-      if (result.daily) { dailyAfter.set(result.daily); onDailyUpdate?.(result.daily); }
-      setTimeout(() => {
-        feedback.set(prev => { const n = { ...prev }; delete n[wi]; return n; });
-        if (result.finished) {
-          phase.set(result.finished);
-          reveal.set(result.reveal);
-        }
-      }, 1100);
-    } catch (e) {
-      toaster(`error: ${String(e.message || e)}`, "bad");
-    }
-  }
-
-  async function pickCascade(wi, li) {
-    if (!casc() || tokens() <= 0 || wordSolved()[wi]) return;
-    if ((locked()[wi] || {})[li] !== undefined) return;
-    const s = session();
-    if (!s) return;
-    try {
-      const result = await api.cascade(s.sessionId, wi, li);
-      locked.set(prev => prev.map((m, i) => i !== wi ? m : { ...result.locked }));
-      tokens.set(result.tokens);
-      presentGlobal.set(result.presentGlobal);
-      cascDrop.set(`${wi}-${li}`);
-      setTimeout(() => cascDrop.set(null), 600);
-      casc.set(false);
-      active.set(wi);
-      announcement.set(`Free letter revealed in word ${wi + 1}. ${result.tokens} tokens remaining.`);
-      toaster("⚡ FREE LETTER", "cascade");
-    } catch (e) {
-      toaster(`error: ${String(e.message || e)}`, "bad");
-    }
-  }
-
-  function openAllIn() {
-    if (allInMode()) {
-      allInMode.set(false);
-      announcement.set("Fold. Returned to normal play.");
-      return;
-    }
-    const s = session();
-    if (!s?.words) return;
-    typed.set(s.words.map(() => []));
-    wagers.set(s.words.map(() => []));
-    active.set(null);
-    allInMode.set(true);
-    announcement.set("All-in mode. Type the rest of the phrase to shove.");
-  }
-
-  async function submitAllIn() {
-    const s = session();
-    if (!s?.words || !allInMode()) return;
-    const guesses = s.words.map((len, wi) => {
-      const lm = locked()[wi] || {};
-      const slots = openSlots(len, lm);
-      let str = "";
-      for (let i = 0; i < len; i++) {
-        if (lm[i] !== undefined) str += lm[i];
-        else {
-          const idx = slots.indexOf(i);
-          str += typed()[wi][idx] || "";
-        }
-      }
-      return str;
-    });
-    if (guesses.some((g, i) => g.length !== s.words[i])) {
-      toaster("FINISH TYPING THE PHRASE", "bad");
-      announcement.set("Please finish typing the entire phrase before submitting.");
-      return;
-    }
-    try {
-      const result = await api.allIn(s.sessionId, guesses);
-      allInMode.set(false);
-      score.set(result.score);
-      lives.set(result.lives);
-      if (result.correct) {
-        wordSolved.set(s.words.map(() => true));
-        locked.set(s.words.map((len, wi) => {
-          const m = {};
-          for (let i = 0; i < len; i++) m[i] = result.reveal[wi][i];
-          return m;
-        }));
-        posFeedback.set(s.words.map(len => Array(len).fill("green")));
-        announcement.set(`All-in correct! Phrase solved. Score increased by ${result.scoreDelta} points.`);
-        toaster(`ALL-IN CORRECT  +${result.scoreDelta}pts`, "great");
-      } else {
-        announcement.set("All-in busted. Game over.");
-        toaster("ALL-IN BUSTED — GAME OVER", "bad");
-      }
-      if (result.daily) { dailyAfter.set(result.daily); onDailyUpdate?.(result.daily); }
-      setTimeout(() => {
-        if (result.finished) {
-          phase.set(result.finished);
-          reveal.set(result.reveal);
-        }
-      }, 900);
-    } catch (e) {
-      toaster(`error: ${String(e.message || e)}`, "bad");
-    }
-  }
-
-  /* ── physical keyboard ────────────────────────────────────────────── */
+  /* ── physical keyboard: letters guess, Enter opens Solve ───────────── */
   effect(() => {
-    if (phase() !== "playing" || casc() || (active() === null && !allInMode())) return;
+    if (!playing()) return;
     const onKey = (e) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const tag = document.activeElement?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
-      if (e.key === "Enter") { e.preventDefault(); enter(); }
-      else if (e.key === "Backspace") { e.preventDefault(); backspace(); }
-      else if (/^[a-zA-Z]$/.test(e.key)) { e.preventDefault(); typeLetter(e.key.toUpperCase()); }
+      if (solveSheet.open || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (/^[a-zA-Z]$/.test(e.key)) { e.preventDefault(); guess(e.key); }
+      else if (e.key === "Enter") { e.preventDefault(); openSolve(); }
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   });
 
-  /* ── DOM build ────────────────────────────────────────────────────── */
-
+  /* ── DOM: header ───────────────────────────────────────────────────── */
   const announceEl = h("output", {
-    class: "sr-only",
-    "aria-live": "polite",
-    "aria-atomic": "true",
+    class: "sr-only", "aria-live": "polite", "aria-atomic": "true",
     "data-bn-region": "play-announce",
   });
   bindText(announceEl, announcement);
 
-  /* Header / summary — mirrors SSR <header data-bn-region="play-summary">. */
   const titleEl = h("h1", { id: "play-title", class: "sr-only" });
-  bindText(titleEl, () => {
-    const s = session();
-    return s ? `${s.category} — round #${s.id}` : "Loading…";
-  });
-
-  const numEl = h("small", { "data-bn-bind": "num" });
-  bindText(numEl, () => {
-    const s = session();
-    return s ? `#${s.id} · ${s.category.toLowerCase()}` : "";
-  });
+  bindText(titleEl, () => session() ? `${session().category} — round #${session().id}` : "Loading…");
 
   const stickyEl = h("p", { "data-bn-region": "play-sticky" });
   bindText(stickyEl, () => session()?.category || "");
 
-  const subBy = h("strong");
-  bindText(subBy, () => session()?.submittedBy || "?");
-  const subEl = h("p", { "data-bn-bind": "sub" });
-  effect(() => {
+  const metaEl = h("p", { "data-bn-region": "play-meta" });
+  bindText(metaEl, () => {
     const s = session();
-    if (!s?.words) { subEl.replaceChildren(); return; }
-    subEl.replaceChildren(
-      document.createTextNode(`${s.words.length} words · ${s.totalLetters} letters · by `),
-      subBy,
-    );
+    if (!s?.words) return "";
+    return `${s.words.length} words · ${s.totalLetters} letters · par ${s.par} · by ${s.submittedBy || "?"}`;
   });
 
-  const hintEl = h("p", {
-    role: "status",
-    "aria-live": "polite",
-    "data-bn-region": "play-hint",
-  });
-  bindText(hintEl, hintText);
-  bindAttr(hintEl, "data-active", () => active() !== null ? "" : null);
+  const summary = h("header", { "data-bn-region": "play-summary" }, titleEl, stickyEl, metaEl);
 
-  const cbarEl = h("p", {
-    role: "status",
-    "aria-live": "polite",
-    "data-bn-region": "play-cbar",
-  });
-  bindText(cbarEl, cbarText);
-  bindAttr(cbarEl, "data-allin", () => (allInMode() && !casc()) ? "" : null);
-  bindHidden(cbarEl, () => !casc() && !allInMode());
-
-  const summary = h("header", { "data-bn-region": "play-summary" },
-    titleEl,
-    h("p", { "data-bn-region": "play-meta" }, numEl),
-    stickyEl,
-    subEl,
-    hintEl,
-    cbarEl,
-  );
-
-  /* Phrase grid — single effect rebuilds on every relevant signal change.
-     One effect (rather than per-tile effects) is the same pattern PB's
-     bindList uses: when state changes, replaceChildren atomically.
-     Avoids the leaked-effects bug that per-tile subscriptions would
-     introduce when the session swaps to a different word count. */
-  const grid = h("section", {
-    "aria-label": "Phrase grid",
-    "data-bn-region": "grid",
-  });
+  /* ── DOM: board ────────────────────────────────────────────────────── */
+  const grid = h("section", { "aria-label": "Phrase", "data-bn-region": "grid" });
+  bindAttr(grid, "data-shake", () => shakeMiss() ? "" : null);
 
   effect(() => {
     const s = session();
-    const lockedAll = locked();
-    if (!s?.words || lockedAll.length !== s.words.length) return;
-
-    let allInNext = null;
-    if (allInMode()) {
-      for (let w = 0; w < s.words.length; w++) {
-        if (wordSolved()[w]) continue;
-        const ss = openSlots(s.words[w], lockedAll[w] || {});
-        if ((typed()[w]?.length || 0) < ss.length) {
-          allInNext = { wi: w, slotIdx: typed()[w]?.length || 0 };
-          break;
-        }
-      }
-    }
-
-    const wordEls = s.words.map((wordLen, wi) => {
-      const lm = lockedAll[wi] || {};
-      const slots = openSlots(wordLen, lm);
-      const isAct = !allInMode() && active() === wi && !wordSolved()[wi] && !casc();
-      const wagerSet = new Set(wagers()[wi] || []);
-      const fbW = feedback()[wi];
-
-      const wordProps = {
-        role: "group",
-        "data-bn-region": "word",
-        "aria-label": `Word ${wi + 1}`,
-        "data-word-index": wi,
-        onClick: () => {
-          if (casc() || allInMode()) return;
-          if (!wordSolved()[wi]) active.set(wi);
-        },
-      };
-      if (isAct) wordProps["data-active"] = "";
-      if (allInMode() && !wordSolved()[wi]) wordProps["data-allin"] = "";
-      if (wordSolved()[wi]) wordProps["data-solved"] = "";
-      if (shaking() === wi) wordProps["data-shake"] = "";
-      if (casc() && !wordSolved()[wi]) wordProps["data-casc-on"] = "";
-
-      const word = h("div", wordProps);
-
-      for (let li = 0; li < wordLen; li++) {
-        const lockedLetter = lm[li];
-        const slotIdx = slots.indexOf(li);
-        const typedLetter = slotIdx >= 0 ? (typed()[wi]?.[slotIdx] ?? null) : null;
-        const fbForTile = fbW?.find(f => f.idx === li);
-        const isCascDrop = cascDrop() === `${wi}-${li}`;
-        const isCascPick = casc() && lockedLetter === undefined && !wordSolved()[wi];
-        const isWagered = slotIdx >= 0 && wagerSet.has(slotIdx) && typedLetter;
-        const isCursor = allInMode()
-          ? (allInNext?.wi === wi && allInNext?.slotIdx === slotIdx)
-          : (isAct && slotIdx === (typed()[wi]?.length || 0));
-
-        const tileProps = {
-          role: "img",
-          "data-bn-region": "tile",
-          "data-word-index": wi,
-          "data-cell-index": li,
-          onClick: (e) => {
-            e.stopPropagation();
-            if (isCascPick) { pickCascade(wi, li); return; }
-            if ((isAct || allInMode()) && typedLetter) { toggleWager(wi, slotIdx); return; }
-            if (!wordSolved()[wi] && !casc() && !allInMode()) active.set(wi);
-          },
-        };
-        let display = "";
-        if (wordSolved()[wi]) { tileProps["data-solved"] = ""; display = lockedLetter || ""; }
-        else if (lockedLetter !== undefined) { tileProps["data-locked"] = ""; display = lockedLetter; }
-        else if (typedLetter) {
-          tileProps["data-typed"] = "";
-          if (allInMode()) tileProps["data-allin-typed"] = "";
-          display = typedLetter;
-        } else if (isCursor) tileProps["data-cursor"] = "";
-
-        if (fbForTile) {
-          tileProps["data-feedback"] = fbForTile.status;
-          tileProps["data-fb-flip"] = "";
-          display = fbForTile.letter;
-        }
-        if (isWagered) tileProps["data-wagered"] = "";
-        if (isCascPick) tileProps["data-casc-pick"] = "";
-        if (isCascDrop) tileProps["data-casc-drop"] = "";
-
-        const pos = `position ${li + 1} of word ${wi + 1}`;
-        let label;
-        if (wordSolved()[wi]) label = `${lockedLetter} at ${pos}, word solved`;
-        else if (lockedLetter !== undefined) label = `${lockedLetter} at ${pos}, locked`;
-        else if (typedLetter) {
-          let state = "typed";
-          if (isWagered) state += ", staked 2 times";
-          if (isCursor) state += ", cursor here";
-          label = `${typedLetter} at ${pos}, ${state}`;
-        } else {
-          label = `Empty at ${pos}`;
-          if (isCursor) label += ", cursor here";
-          if (isCascPick) label += ", cascade reveal available";
-        }
-        if (fbForTile) label = `${fbForTile.letter} at ${pos}, ${fbForTile.status}`;
-        tileProps["aria-label"] = label;
-
-        word.append(h("span", tileProps, display));
-      }
+    if (!s?.board) return;
+    const anchors = new Set((s.anchors || []).map(a => `${a.wi}:${a.li}`));
+    const hit = justHit();
+    grid.replaceChildren(...s.board.map((row, wi) => {
+      const word = h("div", { role: "group", "data-bn-region": "word", "aria-label": `Word ${wi + 1}, ${row.length} letters` });
+      row.forEach((ch, li) => {
+        const on = ch !== null;
+        const props = { role: "img", "data-bn-region": "tile" };
+        if (on) props["data-on"] = "";
+        if (anchors.has(`${wi}:${li}`)) props["data-anchor"] = "";
+        if (on && hit && ch === hit) props["data-just"] = "";
+        if (over() && !s.revealed.includes(ch)) props["data-unearned"] = "";
+        props["aria-label"] = on
+          ? `${ch}, position ${li + 1} of word ${wi + 1}${over() && !s.revealed.includes(ch) ? ", never revealed" : ""}`
+          : `hidden, position ${li + 1} of word ${wi + 1}`;
+        word.append(h("span", props, on ? ch : ""));
+      });
       return word;
-    });
-
-    grid.replaceChildren(...wordEls);
+    }));
   });
 
-  /* ── Knowledge read-out ──────────────────────────────────────────
-     Everything the player has deduced, at PHRASE level. The grid and
-     the keyboard only ever describe one word; before this, coming back
-     to a round mid-phrase meant recounting solved words and locked
-     tiles by eye. It also puts the lives rule where it actually bites:
-     one pool, whole phrase, stated next to the number.
-
-     Four <li> stats plus one summary line. Each stat carries its own
-     aria-label because "1/4 WORDS" read aloud as "one slash four
-     words" is not a sentence. */
-  const know = computed(() => knowledgeSummary({
-    words: session()?.words,
-    locked: locked(),
-    wordSolved: wordSolved(),
-    presentGlobal: presentGlobal(),
-    lives: lives(),
-    tokens: tokens(),
-  }));
-
-  function knowStat(valueFn, label, ariaFn, tone) {
-    const strong = h("strong");
-    bindText(strong, valueFn);
-    const li = h("li", { "data-bn-region": "know-stat" }, strong, h("small", null, label));
-    if (tone) li.setAttribute("data-tone", tone);
-    bindAttr(li, "aria-label", ariaFn);
-    return li;
-  }
-
-  const knowList = h("ul", { role: "list" },
-    knowStat(
-      () => `${know().solvedWords}/${know().totalWords}`,
-      "WORDS",
-      () => `${know().solvedWords} of ${know().totalWords} words solved`,
-    ),
-    knowStat(
-      () => `${know().knownLetters}/${know().totalLetters}`,
-      "LETTERS",
-      () => `${know().knownLetters} of ${know().totalLetters} letters locked in`,
-    ),
-    knowStat(
-      () => "♥".repeat(Math.max(0, know().lives)) || "—",
-      "LIVES · ONE POOL",
-      () => `${know().lives} of ${know().livesAllowed} lives left. One pool for the whole phrase — every word draws from it.`,
-      "lives",
-    ),
-    knowStat(
-      () => `⚡${know().tokens}`,
-      "REVEALS",
-      () => `${know().tokens} cascade reveal${know().tokens === 1 ? "" : "s"} banked`,
-    ),
-  );
-
-  const knowHint = h("p", { "data-bn-region": "know-hint" });
-  bindText(knowHint, () => {
-    const k = know();
-    const bits = [];
-    if (k.floating > 0) {
-      bits.push(`${k.floating} letter${k.floating === 1 ? "" : "s"} known to be in the phrase, not yet placed`);
-    }
-    if (k.bestTarget && k.bestTarget.known > 0) {
-      bits.push(`easiest next: word ${k.bestTarget.wi + 1} (${k.bestTarget.known}/${k.bestTarget.len} known)`);
-    }
-    if (bits.length === 0) return "Nothing deduced yet — solve a word to start filling this in.";
-    return bits.join(" · ");
-  });
-
-  const knowledge = h("section", {
-    "aria-label": "What you know so far",
-    "data-bn-region": "knowledge",
-  }, knowList, knowHint);
-  bindHidden(knowledge, () => phase() !== "playing");
-
-  /* Letter bank — present / absent chips. */
-  const presentRow = h("p", { "data-bn-region": "bank-present" });
+  /* ── DOM: status line — lives, the number under the button, par ────── */
+  const livesEl = h("span", { "data-bn-region": "lives" });
   effect(() => {
-    const pg = presentGlobal();
-    if (pg.length === 0) {
-      presentRow.replaceChildren(
-        h("span", { "data-bn-role": "label" }, "in phrase:"),
-        h("span", { "data-bn-role": "label" }, "—"),
-      );
-      return;
-    }
-    presentRow.replaceChildren(
-      h("span", { "data-bn-role": "label" }, "in phrase:"),
-      ...pg.map(L => h("span", { "data-bn-chip": "yellow" }, L)),
-    );
+    const n = session()?.lives ?? 0;
+    livesEl.replaceChildren(...Array.from({ length: LIVES_MAX }, (_, i) =>
+      h("i", { "aria-hidden": "true", "data-lost": i >= n ? "" : null }, "●")));
+    livesEl.setAttribute("aria-label", `${n} of ${LIVES_MAX} lives`);
   });
 
-  const absentRow = h("p", { "data-bn-region": "bank-absent" });
-  effect(() => {
-    const a = active();
-    if (a === null) { absentRow.replaceChildren(); return; }
-    const abs = absentByWord()[a] || [];
-    if (abs.length === 0) { absentRow.replaceChildren(); return; }
-    absentRow.replaceChildren(
-      h("span", { "data-bn-role": "label" }, `not in word ${a + 1}:`),
-      ...abs.map(L => h("span", { "data-bn-chip": "absent" }, L)),
-    );
+  const nowEl = h("span", { "data-bn-region": "now" });
+  bindText(nowEl, () => {
+    const s = session();
+    if (!s) return "";
+    if (over()) return `${s.score} pts · par ${s.par}`;
+    return `Solve now for ${s.scoreIfSolved} · par ${s.par}`;
   });
 
-  const bank = h("section", {
-    "aria-label": "Letter bank",
-    "data-bn-region": "bank",
-  }, presentRow, absentRow);
+  const solveBtn = bnButton("Solve", {
+    variant: "primary",
+    attrs: 'data-bn-action="solve"',
+    onClick: openSolve,
+  });
+  effect(() => { solveBtn.disabled = !playing() || busy(); });
 
-  /* Keyboard region — @basenative/keyboard mounts here. */
+  const status = h("p", { "data-bn-region": "status", role: "status", "aria-live": "polite" },
+    livesEl, nowEl, solveBtn);
+
+  /* ── DOM: keyboard ─────────────────────────────────────────────────── */
+  const keyStatus = computed(() => keyStateFor(session()));
   const kb = Keyboard({
     layout: "qwerty",
     primary: "ENTER",
-    label: "On-screen keyboard",
+    label: "Letters",
     state: keyStatus,
     runtime: { effect },
-    onKey: typeLetter,
-    onAction: (a) => {
-      if (a === "ENTER") enter();
-      else if (a === "BACKSPACE") backspace();
-    },
+    onKey: guess,
+    onAction: (a) => { if (a === "ENTER") openSolve(); },
     haptic: true,
     bindHardware: false,
   });
-
-  const allInBtn = h("button", {
-    type: "button",
-    "data-bn-action": "all-in",
-    onClick: openAllIn,
-  });
-  bindText(allInBtn, () => allInMode() ? "FOLD" : "ALL IN");
-  bindAttr(allInBtn, "aria-label", () => allInMode()
-    ? "Fold and resume normal play mode"
-    : "Enter all-in mode: type all remaining letters and submit for bonus points or lose all lives");
-  bindAttr(allInBtn, "data-on", () => allInMode() ? "" : null);
-  effect(() => {
-    allInBtn.disabled = casc() && !allInMode();
-  });
-
-  const stakeLbl = h("output", {
-    "aria-live": "polite",
-    "data-bn-region": "stake-label",
-  });
-  bindText(stakeLbl, stakeText);
-  bindAttr(stakeLbl, "aria-label", () => {
-    const n = wagerCount();
-    if (n > 0) return `${n} position${n === 1 ? "" : "s"} staked: double points if every staked letter is right, one extra life lost if any is wrong`;
-    if (allInMode()) return "Type the remaining letters of the phrase";
-    return null;
-  });
-
-  const kbActions = h("footer", { "data-bn-region": "kb-actions" }, allInBtn, stakeLbl);
   const kbHost = h("div", { html: kb.html });
-
-  /* No aria-label here: @basenative/keyboard's own root
-     ([data-bn="keyboard"], mounted into kbHost below) already exposes
-     itself as a `role="region" aria-label="On-screen keyboard"`
-     landmark. Labelling this wrapper section the same way nested a
-     second landmark with an identical name inside the first (axe
-     landmark-unique). This element stays a plain, unlabelled
-     grouping <section> — not a landmark — around the keyboard's
-     action row and the keyboard itself. */
-  const keyboard = h("section", {
-    "data-bn-region": "keyboard",
-  }, kbActions, kbHost);
-  bindAttr(keyboard, "data-allin", () => allInMode() ? "" : null);
-  bindHidden(keyboard, () => phase() !== "playing");
+  const keyboard = h("section", { "data-bn-region": "keyboard" }, kbHost);
+  bindHidden(keyboard, () => !playing());
 
   queueMicrotask(() => {
     const root = kbHost.querySelector('[data-bn="keyboard"]');
     if (!root) return;
     kb.hydrate(root);
-    /* @basenative/keyboard >= 1.0.5 handles touchend itself (dispatches the
-       key, then preventDefault()s to stop the synthetic click double-firing).
-       The local workaround that used to synthesize btn.click() here is gone:
-       running both produced two letters per tap on touch devices. */
-
-    /* @basenative/keyboard@1.0.5's hydrateKeyboard() only toggles the
-       bn-kb-key--{green,yellow,absent} classes when `state` changes —
-       it sets each key's aria-label once at render time and never
-       updates it. That leaves screen-reader users with zero signal
-       for a state sighted players see as a colour (plus the ::after
-       glyph in styles.css). Layer a second, independent effect over
-       the same keyStatus() signal that keeps aria-label current — a
-       sighted-only colour+glyph pairing wouldn't satisfy "state must
-       not be conveyed by colour alone" for AT users. */
+    /* The package only toggles classes when `state` changes; the
+       accessible name has to say the same thing the colour does. */
     const charKeys = root.querySelectorAll('[data-bn-kb-key][data-kb-type="char"]');
     effect(() => {
       const map = keyStatus();
       charKeys.forEach((btn) => {
         const letter = btn.dataset.kbKey;
         const info = KEY_STATE_INFO[map[letter]];
-        btn.setAttribute("aria-label", info ? `${letter} key, ${info.ariaSuffix}` : `${letter} key`);
+        btn.setAttribute("aria-label", info ? `${letter}, ${info.ariaSuffix}` : `${letter}`);
+        btn.disabled = !!info;
       });
     });
+    const enter = root.querySelector('[data-bn-kb-key="ENTER"]');
+    if (enter) { enter.textContent = "SOLVE"; enter.setAttribute("aria-label", "Solve the phrase"); }
   });
 
-  /* End-of-round dialog — a real native <dialog> from
-     @basenative/components' renderDialog(), wrapping a renderCard()
-     <article>. Both are pure string renderers, so the card's children
-     are appended into [data-bn="card-body"] afterwards and keep their
-     signal bindings.
+  /* ── DOM: the Solve sheet ──────────────────────────────────────────── */
+  const solveInput = h("input", {
+    type: "text",
+    name: "phrase",
+    autocomplete: "off",
+    autocapitalize: "characters",
+    autocorrect: "off",
+    spellcheck: "false",
+    enterkeyhint: "go",
+    "aria-label": "The whole phrase",
+    "data-bn-region": "solve-input",
+  });
+  const solveShape = h("p", { "data-bn-region": "solve-shape" });
+  bindText(solveShape, () => {
+    const s = session();
+    if (!s?.board) return "";
+    return s.board.map(row => row.map(ch => ch ?? "_").join("")).join("  ");
+  });
+  const solveCost = h("p", { "data-bn-region": "solve-cost" });
+  bindText(solveCost, () => {
+    const s = session();
+    if (!s) return "";
+    return `Right: ${s.scoreIfSolved} points. Wrong: one life, nothing revealed.`;
+  });
+  const solveForm = h("form", { "data-bn-region": "solve-form", novalidate: "" },
+    solveShape, solveInput, solveCost,
+    h("div", { "data-bn-region": "solve-actions" },
+      bnButton("Keep guessing", { variant: "secondary", type: "button", attrs: 'data-bn-action="keep"', onClick: closeSolve }),
+      bnButton("Solve it", { variant: "primary", type: "submit", attrs: 'data-bn-action="solve-go"' }),
+    ),
+  );
+  solveForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = solveInput.value;
+    closeSolve();
+    await solve(text);
+  });
 
-     This replaces a hand-built <div role="dialog" aria-modal="true">
-     whose visibility was toggled by bindHidden(). That shape had to
-     reimplement everything a modal <dialog> gives for free: focus had
-     to be moved in, Tab had to be fenced, and focus had to be restored
-     on close — all of it lib/focus-trap.js's trapFocus(), which this
-     was the last caller of and which is deleted with this change.
-     showModal() does all three natively, and also makes
-     the page behind it inert (which the hand-rolled version never did:
-     a screen-reader user could still read and activate the keyboard
-     underneath the "dialog").
+  const solveSheet = /** @type {HTMLDialogElement} */ (fromHTML(renderDialog({
+    id: "play-solve",
+    title: "Solve the phrase",
+    modal: true,
+    closable: true,
+    attrs: 'data-bn-region="solve-sheet"',
+  })));
+  solveSheet.querySelector('[data-bn="dialog-body"]').append(solveForm);
 
-     The <h2>'s data-tone still toggles the win/lose accent via
-     [data-bn-region="title"][data-tone="..."]; styling otherwise comes
-     from the package's [data-bn="dialog"] / [data-bn="card"] rules
-     reading theme.css's --bn-* tokens. */
+  function openSolve() {
+    if (!playing() || busy() || solveSheet.open) return;
+    solveInput.value = "";
+    solveSheet.showModal();
+    queueMicrotask(() => solveInput.focus());
+  }
+  function closeSolve() { if (solveSheet.open) solveSheet.close(); }
+
+  /* ── DOM: end of round ─────────────────────────────────────────────── */
   const endTitle  = h("h2", { id: "play-end-title", "data-bn-region": "title" });
   const endSub    = h("p", { "data-bn-region": "subtitle" });
   const endReveal = h("p", { "data-bn-region": "reveal" });
+  const endHow    = h("p", { "data-bn-region": "how" });
+  const endMode   = h("p", { "data-bn-region": "end-mode" });
+  const endScore  = h("output", { "data-bn-region": "end-score" });
+  const endPar    = h("p", { "data-bn-region": "score-label" });
   const endBy     = h("strong");
   const endCredit = h("p", { "data-bn-region": "credit" }, "submitted by ", endBy);
-  /* Say which ledger this round landed in. A free-play round that
-     silently didn't move the streak is exactly the kind of thing that
-     makes a daily feel fake. */
-  const endMode = h("p", { "data-bn-region": "end-mode" });
+  const endShare     = bnButton("Share result", { variant: "primary",   attrs: 'data-bn-action="share"' });
+  const endPrimary   = bnButton("Pick another", { variant: "secondary", attrs: 'data-bn-action="primary"' });
+  const endSecondary = bnButton("Pick another", { variant: "secondary", attrs: 'data-bn-action="secondary"' });
+
+  bindText(endTitle, () => phase() === "won" ? (session()?.hiddenCount === 0 ? "Revealed" : "Solved") : "House wins");
+  bindAttr(endTitle, "data-tone", () => phase() === "won" ? "win" : "lose");
+  bindText(endSub, () => `${session()?.category || ""}${phase() === "lost" ? " · it was" : ""}`);
+  bindText(endReveal, () => (session()?.reveal || []).join(" "));
+  bindText(endHow, () => {
+    const s = session();
+    if (!s || phase() !== "won") return "";
+    const hidden = s.hiddenAtSolve ?? s.hiddenCount ?? 0;
+    if (hidden === 0) return `Every letter turned over — ${s.lives} ${s.lives === 1 ? "life" : "lives"} kept.`;
+    return `Solved with ${hidden} of ${s.totalLetters} letters still hidden · ${s.lives} ${s.lives === 1 ? "life" : "lives"} kept.`;
+  });
   bindText(endMode, () => {
     const d = dailyAfter();
     if (d) {
       const n = d.streak || 0;
       return n > 0 ? `Daily ${d.day} · streak 🔥${n}` : `Daily ${d.day} · streak reset`;
     }
-    if (session()?.mode === "daily") return "Daily";
-    return "Free play · streak untouched";
+    return session()?.mode === "daily" ? "Daily" : "Free play · streak untouched";
   });
-  const endScore  = h("output", { "data-bn-region": "end-score" });
-  const endShare     = bnButton("Share result", { variant: "primary",   attrs: 'data-bn-action="share"' });
-  const endPrimary   = bnButton("Pick another", { variant: "secondary", attrs: 'data-bn-action="primary"' });
-  const endSecondary = bnButton("Pick another", { variant: "secondary", attrs: 'data-bn-action="secondary"' });
-
-  bindText(endScore, () => String(score()));
-  bindAttr(endScore, "aria-label", () => `Final score ${score()} points`);
-  bindText(endShare, () => shareLbl() || "Share result");
+  bindText(endScore, () => String(session()?.score ?? 0));
+  bindAttr(endScore, "aria-label", () => `Final score ${session()?.score ?? 0} points`);
+  bindText(endPar, () => {
+    const s = session();
+    if (!s) return "points";
+    const d = (s.score ?? 0) - (s.par ?? 0);
+    if (phase() !== "won") return `points · par ${s.par}`;
+    if (d > 0) return `points · ${d} over par`;
+    if (d === 0) return "points · par";
+    return `points · ${-d} under par`;
+  });
   bindText(endBy, () => session()?.submittedBy || "?");
-  bindText(endTitle, () => phase() === "won" ? "Solved" : "House Wins");
-  bindAttr(endTitle, "data-tone", () => phase() === "won" ? "win" : "lose");
-  bindText(endSub, () => `${session()?.category || ""}${phase() === "lost" ? " · the answer was" : ""}`);
-  bindText(endReveal, () => (reveal() || []).join(" "));
+  bindText(endShare, () => shareLbl() || "Share result");
   bindText(endPrimary, () => {
     if (phase() === "won") return "Pick another";
-    /* A daily is one attempt — offering "Try again" on the round that
-       just consumed it is a lie the server would refuse anyway. */
     return session()?.mode === "daily" ? "Back to lobby" : "Try again";
   });
-  /* endSecondary's label is baked in by bnButton("Pick another", ...). */
   bindHidden(endSecondary, () => phase() !== "lost" || session()?.mode === "daily");
 
   endShare.addEventListener("click", () => {
@@ -833,13 +369,10 @@ export function createPlay({
   endSecondary.addEventListener("click", goLobby);
 
   const endCard = fromHTML(renderCard());
-  /* role="document" is set here rather than passed to renderCard():
-     components 0.7.0 takes no `attrs` on a card (0.8.0 adds one —
-     BaseNative#186, opened off the back of this work). */
   endCard.setAttribute("role", "document");
   endCard.querySelector('[data-bn="card-body"]').append(
-    endTitle, endSub, endReveal, endCredit, endMode,
-    endScore, h("p", { "data-bn-region": "score-label" }, "points"),
+    endTitle, endSub, endReveal, endHow, endCredit, endMode,
+    endScore, endPar,
     endShare, endSecondary, endPrimary,
   );
 
@@ -849,35 +382,24 @@ export function createPlay({
     closable: false,
     attrs: 'data-bn-region="end-overlay"',
   })));
-
-  /* renderDialog() emits aria-labelledby only for its own `title` slot;
-     this dialog keeps its title inside the card so the layout matches
-     the rest of T4BS's modals, so the label is pointed at that <h2>
-     here — same pattern as help-modal.js / auth-modal.js. */
   endOverlay.setAttribute("aria-labelledby", "play-end-title");
   endOverlay.querySelector('[data-bn="dialog-body"]').append(endCard);
-
-  /* Escape would close the dialog and leave the player stranded: the
-     round is over, every way forward (Share / Try again / Pick another)
-     lives inside this dialog, and nothing would reopen it — `phase` has
-     already settled, so the effect below would not re-fire. Cancelling
-     the `cancel` event keeps the native focus containment while
-     matching the old overlay's behaviour, which had no dismiss path
-     either. */
+  /* The round is over and every way forward is inside this dialog. */
   endOverlay.addEventListener("cancel", (e) => e.preventDefault());
 
-  const endOpen = () => (phase() === "won" || phase() === "lost") && !!reveal();
   effect(() => {
-    const open = endOpen();
-    /* Guard isConnected: the effect runs once at build time, before this
-       tree is mounted, and showModal() on a detached <dialog> throws. */
-    if (open && !endOverlay.open && endOverlay.isConnected) endOverlay.showModal();
-    else if (!open && endOverlay.open) endOverlay.close();
+    const open = over() && !!session()?.reveal;
+    if (open && !endOverlay.open) {
+      closeSolve();
+      /* Let the last tile flip land before the card covers it. */
+      setTimeout(() => { if (!endOverlay.open && endOverlay.isConnected) endOverlay.showModal(); }, 700);
+    } else if (!open && endOverlay.open) {
+      endOverlay.close();
+    }
   });
 
-  /* ── Root <main>: same shape as src/bn/views/play.js SSR template. ── */
-  return h("main", {
-    "aria-labelledby": "play-title",
-    "data-bn-view": "play",
-  }, announceEl, summary, grid, knowledge, bank, keyboard, endOverlay);
+  /* ── Root <main>: same shape as src/bn/views/play.js SSR template ──── */
+  return h("main", { "aria-labelledby": "play-title", "data-bn-view": "play" },
+    announceEl, summary, grid, status, keyboard, solveSheet, endOverlay,
+  );
 }

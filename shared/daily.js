@@ -61,6 +61,30 @@ export function pickDailyPuzzleId(puzzleIds, dayKey) {
 }
 
 /**
+ * The next daily, without repeats.
+ *
+ * `usedIds` is every puzzle the schedule has already handed out this cycle.
+ * The pick is made from the approved puzzles NOT in that set, keyed on the
+ * day so two servers filling the same day agree; when every puzzle has been
+ * today's once, the cycle starts over. The schedule table is what makes
+ * this stick — this function is only ever asked about a day that has no
+ * row yet (docs/PRD.md §4.3).
+ *
+ * @param {ReadonlyArray<number>} puzzleIds  approved puzzle ids
+ * @param {Iterable<number>} usedIds         ids already scheduled
+ * @param {string} dayKey
+ * @returns {number | null}
+ */
+export function nextDailyPuzzleId(puzzleIds, usedIds, dayKey) {
+  const ids = [...(puzzleIds || [])].filter(n => Number.isFinite(n)).sort((a, b) => a - b);
+  if (ids.length === 0) return null;
+  const used = new Set([...(usedIds || [])].map(Number));
+  let pool = ids.filter(id => !used.has(id));
+  if (pool.length === 0) pool = ids;                 // cycle complete: start again
+  return pool[fnv1a(String(dayKey)) % pool.length];
+}
+
+/**
  * Current + best daily streak from a player's recorded results.
  *
  * A streak counts consecutive UTC days whose daily was SOLVED. Today

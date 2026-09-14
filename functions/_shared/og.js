@@ -236,7 +236,7 @@ export function defaultCardScene() {
 
   parts.push(text({ x: 80, y: 64, size: 170, weight: 800, fill: COLORS.accent, letterSpacing: -6 })("T4BS"));
   parts.push(text({ x: 80, y: 300, size: 50, weight: 700, fill: COLORS.fg })("One subject. One phrase."));
-  parts.push(text({ x: 80, y: 360, size: 50, weight: 700, fill: COLORS.fg })("Stake the letters you're sure about."));
+  parts.push(text({ x: 80, y: 360, size: 50, weight: 700, fill: COLORS.fg })("Every letter you didn't need is ten points."));
 
   ["green", "yellow", "empty", "green", "absent", "yellow"].forEach((state, i) => {
     const cx = 80 + i * (56 + 16) + 28;
