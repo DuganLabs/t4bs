@@ -58,8 +58,8 @@ export async function renderSsr({ request, env }) {
 
   const assetsPromise = loadAssets(env, url);
 
-  /** @type {{ lobby: any[] | null, daily: any, play: any, modPending: any[] | null, adminElevated: any[] | null }} */
-  const fetched = { lobby: null, daily: null, play: null, modPending: null, adminElevated: null, adminCatalogue: null };
+  /** @type {{ daily: any, play: any, categories: string[], modPending: any[] | null, modCatalogue: any[] | null, adminElevated: any[] | null, adminCatalogue: any[] | null }} */
+  const fetched = { daily: null, play: null, categories: [], modPending: null, modCatalogue: null, adminElevated: null, adminCatalogue: null };
   let dataError = null;
   /** Set when an anonymous player id had to be minted for the daily. */
   let setCookie = null;
@@ -67,29 +67,38 @@ export async function renderSsr({ request, env }) {
   /** @type {Promise<unknown>} */
   let dataPromise = Promise.resolve();
 
-  if (route === "lobby" || route === "submit") {
+  if (route === "home") {
+    /* The page IS today's puzzle: resolve the day's status for this
+       player, and — while the day is still open for them — the board of
+       the scheduled puzzle, so the first paint is the game and not a
+       card about the game. */
+    dataPromise = (async () => {
+      const who = await playerIdentity(request, env);
+      setCookie = who.setCookie;
+      fetched.daily = await dailyStatus(env, who.key);
+      if (fetched.daily?.puzzleId && !fetched.daily.playedToday) {
+        fetched.play = await resolvePlay(env, fetched.daily.puzzleId);
+      }
+    })();
+  } else if (route === "submit") {
     dataPromise = (async () => {
       const engine = createEngine({
         puzzles: d1Puzzles(env.DB),
         sessions: d1Sessions(env.DB),
       });
-      const listing = engine.listPuzzles();
-      /* The lobby's hero is now the server-picked daily + this player's
-         streak, so it has to be resolved before first paint or the card
-         pops in after hydration. `submit` doesn't need it. */
-      if (route === "lobby") {
-        const who = await playerIdentity(request, env);
-        setCookie = who.setCookie;
-        fetched.daily = await dailyStatus(env, who.key).catch(() => null);
-      }
-      fetched.lobby = await listing;
+      fetched.categories = uniqueCategories(await engine.listPuzzles());
     })();
   } else if (route === "play") {
-    dataPromise = resolvePlay(env, url.searchParams).then(p => { fetched.play = p; });
+    dataPromise = resolvePlay(env, Number(url.searchParams.get("play"))).then(p => { fetched.play = p; });
   } else if (route === "moderate") {
     dataPromise = (async () => {
       const u = await userPromise;
-      if (u && u.isModerator) fetched.modPending = await d1Submissions(env.DB).listPending();
+      if (u && u.isModerator) {
+        [fetched.modPending, fetched.modCatalogue] = await Promise.all([
+          d1Submissions(env.DB).listPending(),
+          d1Puzzles(env.DB).listApprovedWithPhrases(),
+        ]);
+      }
     })();
   } else if (route === "admin") {
     dataPromise = (async () => {
@@ -114,15 +123,15 @@ export async function renderSsr({ request, env }) {
     route,
     pathname: url.pathname,
     user,
-    lobby: fetched.lobby,
     daily: fetched.daily,
     error: dataError ? String(dataError?.message || dataError) : null,
     play: fetched.play,
     submit: {
-      existingCategories: route === "submit" ? uniqueCategories(fetched.lobby) : [],
+      existingCategories: fetched.categories,
     },
     moderate: {
       pending: fetched.modPending,
+      catalogue: fetched.modCatalogue,
       forbidden: route === "moderate" && !(user && user.isModerator),
     },
     admin: {
@@ -137,7 +146,7 @@ export async function renderSsr({ request, env }) {
   const html = renderPage(ctx, assets);
 
   /* `private` keeps shared caches (CDN, ISP) out so per-user content
-     (the header, and now the lobby's streak) stays user-private;
+     (the header, the streak, today's played-or-not) stays user-private;
      `no-cache` forces the browser to revalidate before reuse;
      `must-revalidate` disallows serving stale on revalidation failure.
      Unlike `no-store`, this set still permits the back/forward cache,
@@ -152,30 +161,19 @@ export async function renderSsr({ request, env }) {
   return new Response(html, { status: route === "not-found" ? 404 : 200, headers });
 }
 
-/** @param {Array<{category:string}>} lobby */
-function uniqueCategories(lobby) {
+/** @param {Array<{category:string}>} listing */
+function uniqueCategories(listing) {
   const seen = new Set();
-  for (const p of lobby || []) seen.add(p.category);
+  for (const p of listing || []) seen.add(p.category);
   return [...seen].sort((a, b) => a.localeCompare(b));
 }
 
-/** @param {any} env @param {URLSearchParams} qs */
-async function resolvePlay(env, qs) {
-  const playId = Number(qs.get("play"));
+/** The board of one approved puzzle as first painted — no session is
+ *  started here (sessions are mutating and would create a row per
+ *  crawler hit); the client starts the real round on hydration.
+ *  @param {any} env @param {number} playId */
+async function resolvePlay(env, playId) {
   if (!Number.isFinite(playId) || playId <= 0) return null;
-  const engine = createEngine({
-    puzzles: d1Puzzles(env.DB),
-    sessions: d1Sessions(env.DB),
-  });
-  // Lobby is the canonical source for "is this puzzle playable" — we
-  // don't start a session SSR-side (sessions are mutating and would
-  // create a row per crawler hit). Instead, surface enough metadata
-  // for first paint and let the client kick off the real start.
-  const list = await engine.listPuzzles();
-  const meta = list.find(p => p.id === playId);
-  if (!meta) return null;
-
-  // Pull the full puzzle row so we can SSR word lengths + anchor letters.
   const puzzleRow = await d1Puzzles(env.DB).getApproved(playId);
   if (!puzzleRow) return null;
   /* v2: the first paint shows the anchor letters everywhere they occur

@@ -3,6 +3,12 @@
    keeps it portable across the @basenative/server SSR worker and
    any node:test consumers.
 
+   Two sections: the pending queue, and the catalogue — every approved
+   phrase by category, phrase showing, with a Preview link per row. The
+   catalogue used to be the home page's "free play" list of numbered
+   rounds; it is a moderator's surface, so it lives here (src/lib/game.js
+   renderCatalogueShelf, the same helper the client calls).
+
    The forbidden notice is @basenative/components' renderAlert() — it
    picks role="alert" for the error variant, so the role is no longer
    asserted by hand. */
@@ -10,11 +16,11 @@
 import { renderAlert } from "@basenative/components";
 
 export default `<main aria-labelledby="moderate-title" data-bn-view="moderate">
-  <h1 id="moderate-title">Moderation queue</h1>
+  <h1 id="moderate-title">Moderation</h1>
 
   <template @if="forbidden">
     ${renderAlert(
-      'You need moderator access to view the queue. <a href="/">Back to lobby</a>.',
+      'You need moderator access to view the queue. <a href="/">Play today&#39;s puzzle</a>.',
       { variant: "error" },
     )}
   </template>
@@ -30,15 +36,21 @@ export default `<main aria-labelledby="moderate-title" data-bn-view="moderate">
       <div data-bn-bind="moderate-list">{{ queueListHtml }}</div>
     </section>
 
-    <!-- The way out of the queue, matching src/views/moderate.js (the
-         hydrated client) in both wording and box. An <a> rather than a
-         <button> because this is the pre-hydration surface, where only
-         a real link works — the same split the lobby template uses for
-         its round cards. It is deliberately NOT called "back": it goes
-         to the lobby, which lists the APPROVED puzzles, whatever the
-         moderator's history says. -->
-    <a href="/" data-bn-action="to-lobby" data-bn-variant="leave"
-       aria-label="Leave the moderation queue and go to the puzzle lobby, where approved puzzles are listed">Go to the puzzle lobby →</a>
+    <section aria-labelledby="moderate-catalogue-title" data-bn-region="catalogue-section">
+      <h2 id="moderate-catalogue-title">Catalogue</h2>
+      <p data-bn-region="catalogue-note">Every approved phrase, by category. Preview opens one puzzle without touching the daily or anyone's streak.</p>
+      <div data-bn-bind="moderate-catalogue">
+        <template @if="hasCatalogue">
+          {{ catalogueHtml }}
+        </template>
+        <template @else>
+          <p data-bn-region="status">No approved phrases yet.</p>
+        </template>
+      </div>
+    </section>
+
+    <a href="/" data-bn-action="to-home" data-bn-variant="leave"
+       aria-label="Leave moderation and play today's puzzle">Play today's puzzle →</a>
   </template>
 </main>
 `;

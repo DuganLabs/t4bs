@@ -92,15 +92,24 @@ The end screen shows your score against par, so 80 means something.
 Nothing on the list was removed for being complicated. Each was removed because
 the score system does its job.
 
-### 1.4 Daily and free play
-
-Unchanged in intent, fixed in execution.
+### 1.4 One puzzle a day — and it is the home page
 
 - **Daily:** one puzzle per UTC day, the same for everyone, one attempt,
-  recorded, drives the streak. Now picked from a **schedule** (§4.3), not a
-  hash over the catalogue, so it cannot repeat until the catalogue has cycled
-  and an admin can pin a puzzle to a date.
-- **Free play:** everything else, unlimited, unrecorded.
+  recorded, drives the streak. Picked from a **schedule** (§4.3), not a hash
+  over the catalogue, so it cannot repeat until the catalogue has cycled and
+  an admin can pin a puzzle to a date.
+- **The page at `/` is that puzzle.** No lobby, no list of categories, no
+  numbered "rounds". A visitor lands on the board with its anchors turned over
+  and plays; a visitor who has played today lands on their result and the
+  countdown. Sharing `t4bs.com` therefore always lands people on the right
+  game, and a share link (`/s/{id}`) sends its reader home, not to the sender's
+  puzzle.
+- **There is no player-facing free play.** Categories have phrases, not
+  rounds, and the list of them — phrase showing — is a moderator's surface:
+  `/moderate` carries the catalogue with a *Preview* per phrase
+  (`/play?play=<id>`), which opens that one puzzle without touching the daily
+  or a streak. (Owner, 2026-09-13: "Categories don't have rounds. Stop making
+  this the home page. It should be play 1 game a day.")
 
 ### 1.5 Sharing
 

@@ -19,11 +19,10 @@ const ASSETS = { js: "/assets/bn-hydrate.js", css: ["/assets/app.css"] };
 
 function baseCtx(overrides = {}) {
   return {
-    route: "lobby",
+    route: "home",
     pathname: "/",
     user: null,
     error: null,
-    lobby: null,
     daily: null,
     play: null,
     submit: { existingCategories: [] },
@@ -34,19 +33,21 @@ function baseCtx(overrides = {}) {
 }
 
 const ROUTE_FIXTURES = {
-  lobby: {
+  home: {
     pathname: "/",
-    lobby: [
-      { id: 1, category: "ANIMALS", submittedBy: "alice" },
-      { id: 2, category: "ANIMALS", submittedBy: "bob" },
-      { id: 3, category: "FOODS",   submittedBy: "carol" },
-    ],
-    /* The lobby's hero is the server-picked daily + this player's
-       streak, so the audit fixture has to carry one. */
+    /* The page is today's puzzle: the audit fixture carries the server's
+       daily status and the board it resolved for it. */
     daily: {
       day: "2026-09-11", puzzleId: 3, category: "FOODS", submittedBy: "carol",
       playedToday: false, outcome: null, score: null,
-      streak: 2, bestStreak: 4, daysPlayed: 9,
+      streak: 2, bestStreak: 4, daysPlayed: 9, msUntilNext: 3600000,
+    },
+    play: {
+      id: 3, category: "FOODS", submittedBy: "carol",
+      words: [4, 3], totalLetters: 7, par: 60,
+      anchors: [{ wi: 0, li: 0, letter: "F" }],
+      board: [["F", null, null, null], [null, null, null]],
+      lives: 5, scoreIfSolved: 85,
     },
   },
   play: {
@@ -69,6 +70,7 @@ const ROUTE_FIXTURES = {
     user: { handle: "warren", isModerator: true },
     moderate: {
       pending: [{ id: 4, category: "X", phrase: "TEST PHRASE", submittedBy: "alice" }],
+      catalogue: [{ id: 1, category: "ANIMALS", phrase: "A BIRD IN THE HAND", submittedBy: "house" }],
       forbidden: false,
     },
   },

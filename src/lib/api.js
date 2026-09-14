@@ -46,6 +46,7 @@ export const api = {
   modDecide:    (id, status, reason = "")          => post("/moderate/decide", { id, status, reason }),
 
   modDecided:   ()                                 => get("/moderate/decided"),
+  modCatalogue: ()                                 => get("/moderate/catalogue"),
 
   /* admin — docs/PRD.md §4 */
   modUsers:     (q = "")                           => get(`/moderate/users${q ? `?q=${encodeURIComponent(q)}` : ""}`),

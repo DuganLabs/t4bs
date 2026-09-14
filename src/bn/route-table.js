@@ -1,12 +1,16 @@
 /* Single source of truth for the routes the BaseNative SSR worker
    serves. Mirrors @basenative/router's path syntax so the client-side
-   router uses the exact same table after hydration. */
+   router uses the exact same table after hydration.
 
-/** @typedef {'lobby'|'play'|'submit'|'moderate'|'admin'|'not-found'} RouteName */
+   "/" is today's puzzle — the game has no lobby. "/play" is the preview
+   route (`/play?play=<id>`, from the moderator's catalogue); on its own
+   it has nothing to show. */
+
+/** @typedef {'home'|'play'|'submit'|'moderate'|'admin'|'not-found'} RouteName */
 
 /** @type {ReadonlyArray<{ path: string; name: RouteName }>} */
 export const routes = [
-  { path: "/",         name: "lobby"    },
+  { path: "/",         name: "home"     },
   { path: "/play",     name: "play"     },
   { path: "/submit",   name: "submit"   },
   { path: "/moderate", name: "moderate" },

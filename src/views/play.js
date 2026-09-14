@@ -23,7 +23,10 @@ import { bnButton, fromHTML, h } from "../lib/dom.js";
 import { bindAttr, bindHidden, bindText } from "../lib/bind.js";
 import { api } from "../lib/api.js";
 import { keyStateFor, KEY_STATE_INFO } from "../lib/game.js";
+import { LETTER_LAYOUT } from "../lib/keyboard-layout.js";
 import { confetti } from "../lib/confetti.js";
+
+const FIRST_TIP = "Tap a letter to turn it over — every one you use is ten points off. Know the phrase? Solve it.";
 
 const LIVES_MAX = 5;
 
@@ -42,7 +45,11 @@ export function createPlay({
   const justHit      = signal(null);     // letter that just turned over, for the flip
   const shakeMiss    = signal(false);
   const shareLbl     = signal(null);
-  const announcement = signal("");
+  /* The coach line under the board. It is ALSO the screen-reader
+     announcement: one visible, aria-live sentence that says what just
+     happened and what the next tap costs, so sighted and non-sighted
+     players read the same game. */
+  const announcement = signal(FIRST_TIP);
   const dailyAfter   = signal(null);
   let resultRecorded = false;
 
@@ -64,11 +71,12 @@ export function createPlay({
       if (r.hit) {
         justHit.set(ch);
         setTimeout(() => justHit.set(null), 500);
-        announcement.set(`${ch}: ${r.positions.length} tile${r.positions.length === 1 ? "" : "s"}. ${r.hiddenCount} still hidden — solve now for ${r.scoreIfSolved}.`);
+        if (r.finished) return;                       // the end card says the rest
+        announcement.set(coachAfterHit(ch, r));
       } else {
         shakeMiss.set(true);
         setTimeout(() => shakeMiss.set(false), 400);
-        announcement.set(`${ch} is not in the phrase. ${r.lives} of ${LIVES_MAX} lives left.`);
+        if (!r.finished) announcement.set(coachAfterMiss(ch, r));
         if (navigator.vibrate) navigator.vibrate(60);
       }
     } catch (e) {
@@ -93,7 +101,9 @@ export function createPlay({
         announcement.set("Not it, and that was the last life. Round over.");
       } else {
         toaster(`NOT IT · ${r.lives} ${r.lives === 1 ? "LIFE" : "LIVES"} LEFT`, "bad");
-        announcement.set(`Not it. One life. ${r.lives} of ${LIVES_MAX} left, nothing revealed.`);
+        announcement.set(r.lives === 1
+          ? "Not it — that cost a life, and it was the second-to-last. Nothing revealed."
+          : `Not it — one life spent, nothing revealed. ${r.lives} of ${LIVES_MAX} left; the number under Solve hasn't moved.`);
         if (navigator.vibrate) navigator.vibrate([60, 40, 60]);
       }
     } catch (e) {
@@ -107,6 +117,20 @@ export function createPlay({
   function settle(r) {
     apply(r);
     if (r.daily) { dailyAfter.set(r.daily); onDailyUpdate?.(r.daily); }
+  }
+
+  /* What the coach says. The number under Solve is the whole game, so
+     every line ends by pointing at it. */
+  function coachAfterHit(ch, r) {
+    const n = r.positions.length;
+    const tiles = `${n} tile${n === 1 ? "" : "s"}`;
+    if (r.hiddenCount === 0) return `${ch}: ${tiles}. Every letter is showing — solve it to bank your lives.`;
+    if (r.scoreIfSolved <= r.par) return `${ch}: ${tiles}. ${r.hiddenCount} still hidden. You're under par now — solving beats revealing.`;
+    return `${ch}: ${tiles}. ${r.hiddenCount} still hidden — solve now for ${r.scoreIfSolved}, or turn over another for ten less each.`;
+  }
+  function coachAfterMiss(ch, r) {
+    if (r.lives === 1) return `${ch} isn't in it. Last life — one more miss ends the round.`;
+    return `${ch} isn't in it. ${r.lives} of ${LIVES_MAX} lives left; nothing revealed, score untouched.`;
   }
 
   function friendly(e) {
@@ -140,16 +164,21 @@ export function createPlay({
   });
 
   /* ── DOM: header ───────────────────────────────────────────────────── */
-  const announceEl = h("output", {
-    class: "sr-only", "aria-live": "polite", "aria-atomic": "true",
-    "data-bn-region": "play-announce",
+  const coachEl = h("p", {
+    "aria-live": "polite", "aria-atomic": "true",
+    "data-bn-region": "coach",
   });
-  bindText(announceEl, announcement);
+  bindText(coachEl, announcement);
+  bindHidden(coachEl, () => !playing());
 
   const titleEl = h("h1", { id: "play-title", class: "sr-only" });
-  bindText(titleEl, () => session() ? `${session().category} — round #${session().id}` : "Loading…");
+  bindText(titleEl, () => {
+    const s = session();
+    if (!s) return "Loading…";
+    return s.mode === "daily" ? `Today's puzzle — ${s.category}` : `${s.category} — preview`;
+  });
 
-  const stickyEl = h("p", { "data-bn-region": "play-sticky" });
+  const stickyEl = h("p", { "data-bn-region": "play-sticky", "aria-hidden": "true" });
   bindText(stickyEl, () => session()?.category || "");
 
   const metaEl = h("p", { "data-bn-region": "play-meta" });
@@ -159,7 +188,7 @@ export function createPlay({
     return `${s.words.length} words · ${s.totalLetters} letters · par ${s.par} · by ${s.submittedBy || "?"}`;
   });
 
-  const summary = h("header", { "data-bn-region": "play-summary" }, titleEl, stickyEl, metaEl);
+  const summary = h("header", { "data-bn-region": "play-summary" }, stickyEl, metaEl);
 
   /* ── DOM: board ────────────────────────────────────────────────────── */
   const grid = h("section", { "aria-label": "Phrase", "data-bn-region": "grid" });
@@ -188,22 +217,39 @@ export function createPlay({
     }));
   });
 
-  /* ── DOM: status line — lives, the number under the button, par ────── */
+  /* ── DOM: scoreboard — lives, the number under Solve, par ──────────── */
   const livesEl = h("span", { "data-bn-region": "lives" });
   effect(() => {
     const n = session()?.lives ?? 0;
     livesEl.replaceChildren(...Array.from({ length: LIVES_MAX }, (_, i) =>
-      h("i", { "aria-hidden": "true", "data-lost": i >= n ? "" : null }, "●")));
+      h("i", { "aria-hidden": "true", "data-lost": i >= n ? "" : null }, "♥")));
     livesEl.setAttribute("aria-label", `${n} of ${LIVES_MAX} lives`);
   });
 
-  const nowEl = h("span", { "data-bn-region": "now" });
-  bindText(nowEl, () => {
+  /* "Solve now for N" is the one number the game is about: it starts at
+     the puzzle's maximum and drops ten per tile turned over, and the
+     decision every turn is whether to take it or spend it. Big, tabular,
+     in the middle of the strip. */
+  const nowLabel = h("small");
+  const nowNum   = h("strong");
+  bindText(nowLabel, () => over() ? "Scored" : "Solve now for");
+  bindText(nowNum, () => {
     const s = session();
     if (!s) return "";
-    if (over()) return `${s.score} pts · par ${s.par}`;
-    return `Solve now for ${s.scoreIfSolved} · par ${s.par}`;
+    return String(over() ? s.score : s.scoreIfSolved);
   });
+  const nowEl = h("span", { "data-bn-region": "now" }, nowLabel, nowNum);
+  bindAttr(nowEl, "data-under-par", () => {
+    const s = session();
+    return s && !over() && s.scoreIfSolved <= s.par ? "" : null;
+  });
+
+  const parNum = h("strong");
+  bindText(parNum, () => String(session()?.par ?? ""));
+  const parEl = h("span", { "data-bn-region": "par" }, h("small", null, "Par"), parNum);
+
+  const scoreboard = h("p", { "data-bn-region": "scoreboard", role: "status" },
+    livesEl, nowEl, parEl);
 
   const solveBtn = bnButton("Solve", {
     variant: "primary",
@@ -211,20 +257,18 @@ export function createPlay({
     onClick: openSolve,
   });
   effect(() => { solveBtn.disabled = !playing() || busy(); });
+  const solveWrap = h("div", { "data-bn-region": "solve" }, solveBtn);
+  bindHidden(solveWrap, () => !playing());
 
-  const status = h("p", { "data-bn-region": "status", role: "status", "aria-live": "polite" },
-    livesEl, nowEl, solveBtn);
-
-  /* ── DOM: keyboard ─────────────────────────────────────────────────── */
+  /* ── DOM: keyboard — letters only, see lib/keyboard-layout.js ──────── */
   const keyStatus = computed(() => keyStateFor(session()));
   const kb = Keyboard({
-    layout: "qwerty",
-    primary: "ENTER",
+    id: "play-kb",
+    layout: LETTER_LAYOUT,
     label: "Letters",
     state: keyStatus,
     runtime: { effect },
     onKey: guess,
-    onAction: (a) => { if (a === "ENTER") openSolve(); },
     haptic: true,
     bindHardware: false,
   });
@@ -237,19 +281,19 @@ export function createPlay({
     if (!root) return;
     kb.hydrate(root);
     /* The package only toggles classes when `state` changes; the
-       accessible name has to say the same thing the colour does. */
+       accessible name has to say the same thing the colour does. A tried
+       key is final either way, so it also leaves the tab order. */
     const charKeys = root.querySelectorAll('[data-bn-kb-key][data-kb-type="char"]');
     effect(() => {
       const map = keyStatus();
+      const live = playing();
       charKeys.forEach((btn) => {
         const letter = btn.dataset.kbKey;
         const info = KEY_STATE_INFO[map[letter]];
         btn.setAttribute("aria-label", info ? `${letter}, ${info.ariaSuffix}` : `${letter}`);
-        btn.disabled = !!info;
+        btn.disabled = !live || !!info;
       });
     });
-    const enter = root.querySelector('[data-bn-kb-key="ENTER"]');
-    if (enter) { enter.textContent = "SOLVE"; enter.setAttribute("aria-label", "Solve the phrase"); }
   });
 
   /* ── DOM: the Solve sheet ──────────────────────────────────────────── */
@@ -318,8 +362,8 @@ export function createPlay({
   const endBy     = h("strong");
   const endCredit = h("p", { "data-bn-region": "credit" }, "submitted by ", endBy);
   const endShare     = bnButton("Share result", { variant: "primary",   attrs: 'data-bn-action="share"' });
-  const endPrimary   = bnButton("Pick another", { variant: "secondary", attrs: 'data-bn-action="primary"' });
-  const endSecondary = bnButton("Pick another", { variant: "secondary", attrs: 'data-bn-action="secondary"' });
+  const endPrimary   = bnButton("Done",         { variant: "secondary", attrs: 'data-bn-action="primary"' });
+  const endSecondary = bnButton("Done",         { variant: "secondary", attrs: 'data-bn-action="secondary"' });
 
   bindText(endTitle, () => phase() === "won" ? (session()?.hiddenCount === 0 ? "Revealed" : "Solved") : "House wins");
   bindAttr(endTitle, "data-tone", () => phase() === "won" ? "win" : "lose");
@@ -353,9 +397,11 @@ export function createPlay({
   });
   bindText(endBy, () => session()?.submittedBy || "?");
   bindText(endShare, () => shareLbl() || "Share result");
+  /* The daily is one attempt, so its only way out is "done"; a preview
+     round that was lost can be replayed. */
   bindText(endPrimary, () => {
-    if (phase() === "won") return "Pick another";
-    return session()?.mode === "daily" ? "Back to lobby" : "Try again";
+    if (session()?.mode === "daily") return "Done for today";
+    return phase() === "won" ? "Done" : "Try again";
   });
   bindHidden(endSecondary, () => phase() !== "lost" || session()?.mode === "daily");
 
@@ -399,7 +445,18 @@ export function createPlay({
   });
 
   /* ── Root <main>: same shape as src/bn/views/play.js SSR template ──── */
-  return h("main", { "aria-labelledby": "play-title", "data-bn-view": "play" },
-    announceEl, summary, grid, status, keyboard, solveSheet, endOverlay,
+  /* The daily is played on the home page; a preview round is played on
+     /play. Same tree, different landmark name and skin. */
+  const isDaily = () => session()?.mode === "daily";
+  const previewNote = h("p", { "data-bn-region": "preview-note" }, "Preview · does not count toward a streak");
+  bindHidden(previewNote, isDaily);
+  const dayLabel = h("p", { "data-bn-region": "day-label" });
+  bindText(dayLabel, () => session()?.day ? `Today · ${session().day}` : "Today");
+  bindHidden(dayLabel, () => !isDaily());
+
+  const main = h("main", { "aria-labelledby": "play-title" },
+    titleEl, dayLabel, previewNote, summary, grid, scoreboard, coachEl, solveWrap, keyboard, solveSheet, endOverlay,
   );
+  bindAttr(main, "data-bn-view", () => isDaily() ? "home" : "play");
+  return main;
 }

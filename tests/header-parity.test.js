@@ -251,9 +251,16 @@ describe("the hydrated shell does not restate #app's box", () => {
       + "before, 334x48 at (28,36) after):\n  " + offenders.join("\n  "));
   });
 
-  it("keeps the play view's keyboard gutter on a single rule", () => {
-    assert.match(STYLES, /body\[data-route="play"\] #app\s*\{[^}]*padding-bottom/,
-      "body[data-route=\"play\"] #app must own the play gutter");
+  /* The keyboard used to be a fixed-bottom card, which needed a
+     232px gutter on #app so the board could scroll out from under it —
+     and on a desktop left the keys floating at the bottom of an empty
+     window. It is in flow now, sticky to the bottom edge, so there is
+     no gutter to keep in step and no rule may bring one back. */
+  it("keeps the keyboard in flow — sticky, with no fixed-bottom gutter", () => {
+    assert.doesNotMatch(STYLES, /body\[data-route="play"\] #app/,
+      "no play-route gutter: the keyboard is in flow, not fixed");
+    assert.match(STYLES, /section\[data-bn-region="keyboard"\]\s*\{[^}]*position:\s*sticky/,
+      "the keyboard section must be position: sticky");
     for (const [name, src] of [["hydrate.js", HYDRATE_SRC], ["main.js", MAIN_SRC]]) {
       assert.match(src, /document\.body\.dataset\.route\s*=/,
         `${name} must keep <body data-route> in step with the router, or that single rule only works on the SSR paint`);
@@ -322,12 +329,12 @@ describe("no component renders with an undeclared variant", () => {
   );
 
   const VIEW_SOURCES = [
-    "src/views/lobby.js", "src/views/play.js", "src/views/submit.js",
+    "src/views/home.js", "src/views/play.js", "src/views/submit.js",
     "src/views/moderate.js", "src/views/admin.js",
     "src/components/header.js", "src/components/toast.js",
     "src/components/help-modal.js", "src/components/auth-modal.js",
     "src/bn/client/hydrate.js", "src/main.js",
-    "src/bn/views/lobby.js", "src/bn/views/play.js", "src/bn/views/submit.js",
+    "src/bn/views/home.js", "src/bn/views/play.js", "src/bn/views/play-board.js", "src/bn/views/submit.js",
     "src/bn/views/moderate.js", "src/bn/views/admin.js", "src/bn/views/not_found.js",
   ];
 
@@ -364,8 +371,8 @@ describe("no component renders with an undeclared variant", () => {
 describe("the rendered SSR header", () => {
   const ASSETS = { js: "/assets/bn-hydrate.js", css: ["/assets/app.css"], views: {} };
   const baseCtx = (o = {}) => ({
-    route: "lobby", pathname: "/", user: null, error: null,
-    lobby: null, daily: null, play: null,
+    route: "home", pathname: "/", user: null, error: null,
+    daily: null, play: null,
     submit: { existingCategories: [] },
     moderate: { pending: null, forbidden: false },
     admin: { elevated: null, currentHandle: null, forbidden: false },

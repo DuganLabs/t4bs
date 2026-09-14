@@ -18,13 +18,25 @@ import { decidePlayBoot, withTimeout, isResumable } from "./client/play-boot.js"
 
 const ASSETS = { js: "/assets/bn-hydrate.js", css: ["/assets/app.css"] };
 
+const DAILY_OPEN = {
+        day: "2026-09-11", puzzleId: 9, category: "FAIRY TALES", submittedBy: "house",
+        playedToday: false, outcome: null, score: null,
+        streak: 3, bestStreak: 5, daysPlayed: 12, msUntilNext: 3600000,
+      };
+const PLAY9 = {
+        id: 9, category: "FAIRY TALES", submittedBy: "house",
+        words: [4, 3], totalLetters: 7, par: 60,
+        anchors: [{ wi: 0, li: 0, letter: "O" }],
+        board: [["O", null, null, null], [null, null, null]],
+        lives: 5, scoreIfSolved: 85,
+      };
+
 function baseCtx(overrides = {}) {
   return {
-    route: "lobby",
+    route: "home",
     pathname: "/",
     user: null,
     error: null,
-    lobby: null,
     daily: null,
     play: null,
     submit: { existingCategories: [] },
@@ -36,7 +48,7 @@ function baseCtx(overrides = {}) {
 
 describe("matchRoute", () => {
   it("matches the canonical paths", () => {
-    assert.equal(matchRoute("/"),         "lobby");
+    assert.equal(matchRoute("/"),         "home");
     assert.equal(matchRoute("/play"),     "play");
     assert.equal(matchRoute("/submit"),   "submit");
     assert.equal(matchRoute("/moderate"), "moderate");
@@ -79,9 +91,9 @@ describe("shouldRenderSsr", () => {
 });
 
 describe("renderPage — emits a complete BaseNative-rendered HTML document for every route", () => {
-  for (const route of ["lobby", "play", "submit", "moderate", "admin", "not-found"]) {
+  for (const route of ["home", "play", "submit", "moderate", "admin", "not-found"]) {
     it(`route=${route} produces a doctype + <html> + #app`, () => {
-      const html = renderPage(baseCtx({ route, pathname: route === "lobby" ? "/" : `/${route}` }), ASSETS);
+      const html = renderPage(baseCtx({ route, pathname: route === "home" ? "/" : `/${route}` }), ASSETS);
       assert.ok(html.startsWith("<!DOCTYPE html>"), `expected doctype, got: ${html.slice(0, 40)}`);
       assert.match(html, /<html lang="en"/);
       assert.match(html, /<div id="app"/);
@@ -102,7 +114,7 @@ describe("renderPage — emits a complete BaseNative-rendered HTML document for 
   // category/handle fields before they reach SSR.
   it("escapes </script> in the inlined SSR-state JSON block", () => {
     const ctx = baseCtx({
-      lobby: [{ id: 1, category: "evil-cat", submittedBy: "</script><img/onerror=alert(1)>" }],
+      user: { handle: "</script><img/onerror=alert(1)>", role: "user", isAdmin: false, isModerator: false },
     });
     const html = renderPage(ctx, ASSETS);
     const start = html.indexOf("<script type=\"application/json\" id=\"bn-ssr-state\">");
@@ -113,149 +125,99 @@ describe("renderPage — emits a complete BaseNative-rendered HTML document for 
   });
 
   it("renders semantic <main aria-labelledby> + <h1> for each view", () => {
-    for (const route of ["lobby", "play", "submit", "moderate", "admin", "not-found"]) {
-      const html = renderPage(baseCtx({ route, pathname: route === "lobby" ? "/" : `/${route}` }), ASSETS);
+    for (const route of ["home", "play", "submit", "moderate", "admin", "not-found"]) {
+      const html = renderPage(baseCtx({ route, pathname: route === "home" ? "/" : `/${route}` }), ASSETS);
       assert.match(html, /<main[^>]*aria-labelledby/, `${route}: expected <main aria-labelledby>`);
       assert.match(html, /<h1/, `${route}: expected <h1>`);
     }
   });
 
-  /* The free-play shelf used to print ONE row per category, carrying
-     the whole group's ids in a single data-puzzle-ids="1,2" attribute
-     and starting a deterministic pick. That made every round but one
-     unreachable, and invisible — which is what "I can't see games from
-     other categories" was about.
-
-     Each category is now a collapsible section listing every round it
-     holds, so the contract this test guards is per-ROUND: one control
-     per puzzle, each addressable on its own id. */
-  it("lobby view renders every round in every category, individually addressable", () => {
-    const lobby = [
-      { id: 1, category: "ANIMALS", submittedBy: "wmd" },
-      { id: 2, category: "ANIMALS", submittedBy: "warren" },
-      { id: 3, category: "FOODS",   submittedBy: "wmd" },
-    ];
-    const html = renderPage(baseCtx({ lobby }), ASSETS);
-    assert.match(html, /ANIMALS/);
-    assert.match(html, /FOODS/);
-
-    // Every puzzle gets its own control, not one per category.
-    for (const id of [1, 2, 3]) {
-      assert.match(html, new RegExp(`data-puzzle-id="${id}"`),
-        `puzzle ${id} must be reachable from the lobby on its own`);
-    }
-    // The collapsed group attribute is gone with the row that carried it.
-    assert.doesNotMatch(html, /data-puzzle-ids=/,
-      "a group no longer collapses its rounds into one control");
-
-    // The category summary says how many rounds are inside, so the
-    // reader can tell there is something to open.
-    assert.match(html, /ANIMALS · 2 rounds/);
-    assert.match(html, /FOODS · 1 round/);
-
-    /* Native <details>, from @basenative/components' accordion — the
-       disclosure has to work with JavaScript off, like the links. */
-    assert.match(html, /<details[^>]*data-bn="accordion-item"/);
-  });
-
-  /* issue #24 — the lobby must work with JavaScript disabled. Each
-     puzzle group renders an <a href="/play?play=ID"> the SPA can
-     enhance after hydration, plus a <noscript> hint pitched at the
-     no-JS user. */
-  it("lobby renders anchor links to /play?play=<id> for each group", () => {
-    const lobby = [
-      { id: 7, category: "ANIMALS", submittedBy: "wmd" },
-      { id: 3, category: "ANIMALS", submittedBy: "warren" },
-      { id: 4, category: "FOODS",   submittedBy: "wmd" },
-    ];
-    const html = renderPage(baseCtx({ lobby }), ASSETS);
-    /* Multi-puzzle group: deterministic lowest-id pick (3 not 7). */
-    assert.match(html, /href="\/play\?play=3"/);
-    /* Single-puzzle group: the only id is the link target. */
-    assert.match(html, /href="\/play\?play=4"/);
-    /* No <button> for picking a round in the SSR markup — the
-       degradation contract is anchors only. */
-    const lobbyHtml = html.split("data-bn-view=\"lobby\"")[1] ?? "";
-    assert.ok(
-      !/<button[^>]*data-bn-action="lobby-pick"/.test(lobbyHtml),
-      "lobby SSR must not emit a <button> for picking — anchors only",
-    );
-  });
-
-  /* The daily is server-authoritative now: the lobby has to SSR the
-     puzzle the server picked and this player's streak, not wait for a
-     client-side date hash to guess one after hydration. */
-  it("lobby SSRs today's daily card and the streak when the server resolved one", () => {
-    const html = renderPage(baseCtx({
-      lobby: [{ id: 9, category: "FAIRY TALES", submittedBy: "house" }],
-      daily: {
-        day: "2026-09-11", puzzleId: 9, category: "FAIRY TALES", submittedBy: "house",
-        playedToday: false, outcome: null, score: null,
-        streak: 3, bestStreak: 5, daysPlayed: 12,
-      },
-    }), ASSETS);
-    assert.match(html, /data-bn-action="lobby-daily"/);
-    assert.match(html, /href="\/play\?daily=1"/);
-    assert.match(html, /2026-09-11/);
-    assert.match(html, /counts toward your streak/i);
+  /* ── HOME — the page at "/" IS today's puzzle ────────────────────
+     There is no lobby. A visitor who has not played today sees the
+     board of the scheduled puzzle on first paint; one who has sees the
+     result and when the next one lands. Nothing on the page lists
+     categories or "rounds" — that is the moderator's catalogue. */
+  it("home SSRs today's board — category, anchors, lives, the number under Solve", () => {
+    const html = renderPage(baseCtx({ daily: DAILY_OPEN, play: PLAY9 }), ASSETS);
+    assert.match(html, /data-bn-view="home"/);
+    assert.match(html, /FAIRY TALES/);
+    assert.match(html, /Today · 2026-09-11/);
+    assert.match(html, /data-anchor[\s>]/);
+    assert.match(html, />\s*O\s*</, "the anchor letter is turned over");
+    assert.match(html, /data-bn-region="scoreboard"/);
+    assert.match(html, /Solve now for<\/small><strong>85</);
+    assert.match(html, /Par<\/small><strong>60/);
+    assert.match(html, /data-bn-region="coach"/);
     // Streak strip, rendered from the server's numbers.
-    assert.match(html, /STREAK/);
+    assert.match(html, /Streak/);
     assert.match(html, />5</, "best streak");
     assert.match(html, />12</, "days played");
   });
 
-  it("lobby SSRs the done state instead of a play link once today is recorded", () => {
+  it("home paints the keyboard on the server — letters only, no Enter, no Backspace", () => {
+    const html = renderPage(baseCtx({ daily: DAILY_OPEN, play: PLAY9 }), ASSETS);
+    assert.match(html, /data-bn="keyboard"/);
+    assert.match(html, /data-kb-key="Q"/);
+    assert.match(html, /data-kb-key="M"/);
+    assert.doesNotMatch(html, /data-kb-key="ENTER"/, "Enter has no meaning in a letter-reveal game");
+    assert.doesNotMatch(html, /data-kb-key="BACKSPACE"/, "there is nothing to delete");
+    assert.doesNotMatch(html, />ENT</);
+  });
+
+  it("home lists no categories and no rounds — the catalogue is a moderator surface", () => {
+    const html = renderPage(baseCtx({ daily: DAILY_OPEN, play: PLAY9 }), ASSETS);
+    const main = html.split('data-bn-view="home"')[1] ?? "";
+    assert.doesNotMatch(main, /data-bn-region="free-play"/);
+    assert.doesNotMatch(main, /data-bn="accordion-item"/);
+    assert.doesNotMatch(main, /Round \d/);
+    assert.doesNotMatch(main, /Free play/i);
+    assert.doesNotMatch(main, /Pick a round/i);
+  });
+
+  it("home SSRs the done state instead of a board once today is recorded", () => {
     const html = renderPage(baseCtx({
-      lobby: [{ id: 9, category: "FAIRY TALES", submittedBy: "house" }],
       daily: {
         day: "2026-09-11", puzzleId: 9, category: "FAIRY TALES", submittedBy: "house",
         playedToday: true, outcome: "won", score: 96,
-        streak: 1, bestStreak: 1, daysPlayed: 1,
+        streak: 1, bestStreak: 1, daysPlayed: 1, msUntilNext: 3600000,
       },
+      play: PLAY9,
     }), ASSETS);
-    assert.doesNotMatch(html, /data-bn-action="lobby-daily"/,
-      "a finished daily must not offer a play link — the server would refuse it");
+    assert.doesNotMatch(html, /data-bn-region="grid"/, "a finished daily must not offer a board — the server would refuse a second run");
     assert.match(html, /data-bn-region="daily-done"/);
     assert.match(html, />Solved</);
-    assert.match(html, /96 pts/);
+    assert.match(html, /<strong>96<\/strong> points/);
     assert.match(html, /Next puzzle at 00:00 UTC/);
   });
 
-  it("lobby free-play shelf says plainly that it doesn't count", () => {
-    const html = renderPage(baseCtx({
-      lobby: [{ id: 1, category: "ANIMALS", submittedBy: "wmd" }],
-    }), ASSETS);
-    assert.match(html, /data-bn-region="free-play"/);
-    assert.match(html, /never touch your streak/i);
-    assert.match(html, /Does not count toward your streak/i);
+  it("home says so when nothing is scheduled, rather than a blank", () => {
+    const html = renderPage(baseCtx({ daily: { day: "2026-09-11", puzzleId: null, playedToday: false, streak: 0, bestStreak: 0, daysPlayed: 0 }, play: null }), ASSETS);
+    assert.match(html, /No puzzle today/);
+    assert.doesNotMatch(html, /data-bn-region="grid"/);
   });
 
-  it("lobby states the shared-life rule before a round starts", () => {
-    const html = renderPage(baseCtx({
-      lobby: [{ id: 1, category: "ANIMALS", submittedBy: "wmd" }],
-    }), ASSETS);
-    assert.match(html, /Every letter you didn't need is ten points/i);
-    assert.match(html, /solve when you know it/i);
-  });
-
-  it("lobby renders without a daily at all (D1 hiccup) rather than throwing", () => {
+  it("home renders without a daily at all (D1 hiccup) rather than throwing", () => {
     assert.doesNotThrow(() => renderPage(baseCtx({ daily: null }), ASSETS));
-    const html = renderPage(baseCtx({ daily: null }), ASSETS);
-    assert.doesNotMatch(html, /data-bn-action="lobby-daily"/);
   });
 
-  it("lobby includes a <noscript> hint about JS-optional play", () => {
-    const html = renderPage(baseCtx({
-      lobby: [{ id: 1, category: "ANIMALS", submittedBy: "wmd" }],
-    }), ASSETS);
-    assert.match(html, /<noscript>[\s\S]*JavaScript enhances[\s\S]*<\/noscript>/);
+  it("home keeps the submit link as a plain in-flow anchor — no floating button", () => {
+    const html = renderPage(baseCtx({ daily: DAILY_OPEN, play: PLAY9 }), ASSETS);
+    assert.match(html, /<a[^>]*href="\/submit"[^>]*data-bn-action="home-submit"/);
+    assert.doesNotMatch(html, /data-bn-action="lobby-submit"/);
   });
 
-  it("submit FAB degrades to an anchor for no-JS users", () => {
-    const html = renderPage(baseCtx({
-      lobby: [{ id: 1, category: "ANIMALS", submittedBy: "wmd" }],
-    }), ASSETS);
-    assert.match(html, /<a[^>]*href="\/submit"[^>]*data-bn-action="lobby-submit"/);
+  /* ── PLAY — the preview route ─────────────────────────────────── */
+  it("play view is labelled a preview and shows the board with anchor letters", () => {
+    const html = renderPage(baseCtx({ route: "play", pathname: "/play", play: PLAY9 }), ASSETS);
+    assert.match(html, /data-bn-view="play"/);
+    assert.match(html, /Preview · does not count/);
+    assert.match(html, /data-anchor[\s>]/);
+  });
+
+  it("play without a puzzle points home instead of a loader", () => {
+    const html = renderPage(baseCtx({ route: "play", pathname: "/play", play: null }), ASSETS);
+    assert.match(html, /Nothing to preview/);
+    assert.match(html, /href="\/"/);
   });
 
   it("play view shows word-length skeleton with anchor letters", () => {
@@ -380,92 +342,64 @@ describe("renderPage — emits a complete BaseNative-rendered HTML document for 
 });
 
 describe("decidePlayBoot", () => {
-  it("starts a new round on ?play=<id>", () => {
-    const intent = decidePlayBoot({ search: "?play=42" }, null);
+  const OPEN = { puzzleId: 9, playedToday: false };
+  const DONE = { puzzleId: 9, playedToday: true };
+
+  it("/ starts today's puzzle when it is open for this player", () => {
+    assert.deepEqual(decidePlayBoot({ pathname: "/", search: "" }, null, OPEN), { kind: "daily" });
+  });
+
+  it("/ shows the home frame when today is already played, or nothing is scheduled", () => {
+    assert.equal(decidePlayBoot({ pathname: "/", search: "" }, null, DONE).kind, "home");
+    assert.equal(decidePlayBoot({ pathname: "/", search: "" }, null, { puzzleId: null }).kind, "home");
+    assert.equal(decidePlayBoot({ pathname: "/", search: "" }, null, null).kind, "home");
+  });
+
+  it("/ resumes a saved round before anything else", () => {
+    assert.deepEqual(decidePlayBoot({ pathname: "/", search: "" }, { sessionId: "abc-123" }, OPEN),
+      { kind: "resume", sessionId: "abc-123" });
+  });
+
+  it("/play?play=<id> starts a preview of that puzzle", () => {
+    const intent = decidePlayBoot({ pathname: "/play", search: "?play=42" }, null);
     assert.deepEqual(intent, { kind: "start", puzzleId: 42 });
   });
 
-  it("ignores ?play=<not-a-positive-int>", () => {
-    assert.equal(decidePlayBoot({ search: "?play=0" }, null).kind, "home");
-    assert.equal(decidePlayBoot({ search: "?play=-3" }, null).kind, "home");
-    assert.equal(decidePlayBoot({ search: "?play=abc" }, null).kind, "home");
-    assert.equal(decidePlayBoot({ search: "?play=" }, null).kind, "home");
+  it("/play ignores ?play=<not-a-positive-int>", () => {
+    for (const q of ["?play=0", "?play=-3", "?play=abc", "?play="]) {
+      assert.equal(decidePlayBoot({ pathname: "/play", search: q }, null).kind, "home", q);
+    }
   });
 
-  it("resumes when a saved session id is present", () => {
-    const intent = decidePlayBoot({ search: "" }, { sessionId: "abc-123" });
+  it("/play resumes when a saved session id is present", () => {
+    const intent = decidePlayBoot({ pathname: "/play", search: "" }, { sessionId: "abc-123" });
     assert.deepEqual(intent, { kind: "resume", sessionId: "abc-123" });
   });
 
   it("?play=<id> beats a saved session — explicit user intent wins", () => {
-    const intent = decidePlayBoot({ search: "?play=7" }, { sessionId: "abc-123" });
+    const intent = decidePlayBoot({ pathname: "/play", search: "?play=7" }, { sessionId: "abc-123" });
     assert.deepEqual(intent, { kind: "start", puzzleId: 7 });
   });
 
+  it("the old /play?daily=1 share link goes home, where today's puzzle is", () => {
+    assert.equal(decidePlayBoot({ pathname: "/play", search: "?daily=1" }, null).kind, "home");
+  });
+
   it("treats empty / malformed saved state as no resume", () => {
-    assert.equal(decidePlayBoot({ search: "" }, null).kind, "home");
-    assert.equal(decidePlayBoot({ search: "" }, undefined).kind, "home");
-    assert.equal(decidePlayBoot({ search: "" }, {}).kind, "home");
-    assert.equal(decidePlayBoot({ search: "" }, { sessionId: "" }).kind, "home");
-    assert.equal(decidePlayBoot({ search: "" }, { sessionId: 42 }).kind, "home");
+    for (const saved of [null, undefined, {}, { sessionId: "" }, { sessionId: 42 }]) {
+      assert.equal(decidePlayBoot({ pathname: "/play", search: "" }, saved).kind, "home");
+    }
   });
 
   it("ignores routes other than /play and / — no session hijack on /moderate, /admin, /submit", () => {
     const saved = { sessionId: "abc-123" };
     for (const pathname of ["/moderate", "/admin", "/submit"]) {
       assert.deepEqual(
-        decidePlayBoot({ pathname, search: "" }, saved),
+        decidePlayBoot({ pathname, search: "" }, saved, OPEN),
         { kind: "ignore" },
         `${pathname} should be ignored even with a resumable session saved`,
       );
-      // A ?play= deep-link on one of these routes still shouldn't hijack it.
-      assert.deepEqual(decidePlayBoot({ pathname, search: "?play=42" }, saved), { kind: "ignore" });
     }
-  });
-
-  it("still resolves start/resume/home on /play and / (root)", () => {
-    assert.deepEqual(decidePlayBoot({ pathname: "/play", search: "?play=5" }, null), { kind: "start", puzzleId: 5 });
-    assert.deepEqual(
-      decidePlayBoot({ pathname: "/", search: "" }, { sessionId: "abc" }),
-      { kind: "resume", sessionId: "abc" },
-    );
-    assert.equal(decidePlayBoot({ pathname: "/play", search: "" }, null).kind, "home");
-  });
-
-  it("defaults to /play when pathname is omitted (existing callers)", () => {
-    // Callers that don't pass `pathname` (e.g. older call sites/tests)
-    // must keep resolving start/resume normally, not silently no-op.
-    assert.deepEqual(decidePlayBoot({ search: "?play=9" }, null), { kind: "start", puzzleId: 9 });
-  });
-});
-
-describe("decidePlayBoot — ?daily=1", () => {
-  it("routes a shareable daily link to the server-resolved daily", () => {
-    assert.deepEqual(
-      decidePlayBoot({ pathname: "/play", search: "?daily=1" }, null),
-      { kind: "daily" },
-    );
-  });
-
-  it("beats an explicit ?play= id, which could otherwise replay a finished day", () => {
-    assert.deepEqual(
-      decidePlayBoot({ pathname: "/play", search: "?daily=1&play=3" }, null),
-      { kind: "daily" },
-    );
-  });
-
-  it("beats a saved session id too — the link is the intent", () => {
-    assert.deepEqual(
-      decidePlayBoot({ pathname: "/play", search: "?daily=1" }, { sessionId: "abc" }),
-      { kind: "daily" },
-    );
-  });
-
-  it("still ignores routes boot policy does not own", () => {
-    assert.deepEqual(
-      decidePlayBoot({ pathname: "/moderate", search: "?daily=1" }, null),
-      { kind: "ignore" },
-    );
   });
 });
 

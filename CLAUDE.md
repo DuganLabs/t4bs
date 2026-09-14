@@ -22,14 +22,16 @@ t4bs/
 │   │   ├── server/render.js   # renderPage() — composes layout+header+view templates
 │   │   ├── server/manifest.js # reads dist/asset-manifest.json for hashed JS/CSS
 │   │   ├── client/hydrate.js  # hydrates the SSR shell (default entry point)
-│   │   ├── views/             # lobby/play/submit/moderate/admin HTML templates
+│   │   ├── views/             # home/play/submit/moderate/admin HTML templates
+│   │   │                      #   (play-board.js is the board fragment home + play share)
 │   │   └── route-table.js     # path -> route name, shared with the client router
 │   ├── views/                  # client-side signal-driven view renderers (post-hydration)
 │   ├── components/             # toast, help-modal, auth-modal
 │   ├── lib/
 │   │   ├── api.js              # client API wrapper
 │   │   ├── auth.js             # @basenative/auth-webauthn client glue
-│   │   ├── game.js             # lobby grouping + client-side game helpers
+│   │   ├── game.js             # key states + the moderator catalogue renderers
+│   │   ├── keyboard-layout.js  # the play keyboard: letters only, no Enter/Backspace
 │   │   └── bind.js, dom.js, confetti.js, focus-trap.js
 │   └── main.js                 # `?legacy=1` entry — same boot as hydrate.js minus the SSR seed
 ├── shared/
@@ -100,7 +102,21 @@ and the client share are `src/lib/admin-view.js`, the pure maths is
 `shared/admin-stats.js`.
 
 **Queue review:** `/moderate` route, moderators + admins. Reject asks for a
-reason and records it (`submissions.reason`, migration 0006).
+reason and records it (`submissions.reason`, migration 0006). The same page
+carries the **catalogue** — every approved phrase by category, phrase
+showing, with a Preview link (`/play?play=<id>`) — served by
+`GET /api/moderate/catalogue`. This is deliberately NOT on the home page.
+
+## The home page is the game
+
+`/` is today's puzzle (docs/PRD.md §1.4): the SSR paints the scheduled
+puzzle's board for a visitor who has not played, or the result card for one
+who has; the client starts (or resumes) the round in place. `/play` exists
+only as the preview route (`?play=<id>`); a bare `/play` and the old
+`/play?daily=1` both go home. There is no lobby view, no "free play" list and
+no floating submit button — the owner's words, 2026-09-13: "Categories don't
+have rounds. Stop making this the home page. It should be play 1 game a
+day."
 
 ## OG / share cards
 
@@ -128,4 +144,4 @@ See `docs/PRD.md` §8 for evidence + the [GitHub issues](https://github.com/Duga
 
 ---
 
-_Last verified against the code: 2026-09-11 (commit `d1361ec`)._
+_Last verified against the code: 2026-09-14 (home = today's puzzle; play view rebuilt)._

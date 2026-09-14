@@ -90,13 +90,12 @@ function parseCsp(header) {
   return out;
 }
 
-const SSR_ROUTES = ["lobby", "play", "submit", "moderate", "admin", "not-found"];
+const SSR_ROUTES = ["home", "play", "submit", "moderate", "admin", "not-found"];
 
 const SSR_CONTEXT = {
   pathname: "/",
   user: null,
   error: null,
-  lobby: null,
   daily: null,
   play: null,
   submit: { existingCategories: [] },
@@ -243,7 +242,7 @@ describe("inline-content hashes are current", () => {
     // stripComments first: an HTML comment that merely mentions a <script>
     // tag is not a script, and this scanner used to read one as an unhashed
     // inline block whose body ran to the next real </script>.
-    const html = stripComments(renderPage({ ...SSR_CONTEXT, route: "lobby" }, SSR_ASSETS));
+    const html = stripComments(renderPage({ ...SSR_CONTEXT, route: "home" }, SSR_ASSETS));
     for (const m of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script[^>]*>/gi)) {
       const attrs = m[1];
       const isDataBlock = /type\s*=\s*["']application\/(ld\+)?json["']/.test(attrs);
@@ -257,7 +256,7 @@ describe("inline-content hashes are current", () => {
   });
 
   it("covers every event-handler attribute the SSR shell emits", () => {
-    const html = renderPage({ ...SSR_CONTEXT, route: "lobby" }, SSR_ASSETS);
+    const html = renderPage({ ...SSR_CONTEXT, route: "home" }, SSR_ASSETS);
     const handlers = new Set(
       [...html.matchAll(/\son[a-z]+\s*=\s*"([^"]*)"/gi)].map((m) => m[1]),
     );

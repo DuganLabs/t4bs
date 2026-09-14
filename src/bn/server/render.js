@@ -3,7 +3,7 @@
    Every page is composed from three pure templates piped through
    @basenative/server's `render(html, ctx)`:
 
-     1. The route-specific view (lobby.html, play.html, …)
+     1. The route-specific view (home.html, play.html, …)
      2. The shared header.html
      3. The layout.html shell that wraps the rendered view + a JSON
         dump of the same context for the client hydrator to seed
@@ -18,17 +18,18 @@ import { raw } from "@basenative/runtime/shared/escape";
 import { renderAdminQueueList } from "@basenative/admin/components";
 import layoutHtml from "../views/layout.js";
 import headerHtml from "../views/header.js";
-import lobbyHtml from "../views/lobby.js";
+import homeHtml from "../views/home.js";
 import playHtml from "../views/play.js";
+import { boardContext } from "../views/play-board.js";
 import submitHtml from "../views/submit.js";
 import moderateHtml from "../views/moderate.js";
 import adminHtml from "../views/admin.js";
 import notFoundHtml from "../views/not_found.js";
-import { groupLobby, renderBrowseShelf } from "../../lib/game.js";
+import { groupCatalogue, renderCatalogueShelf } from "../../lib/game.js";
 import { renderCatalogueTable } from "../../lib/admin-view.js";
 
 const VIEW_TEMPLATES = {
-  "lobby":     lobbyHtml,
+  "home":      homeHtml,
   "play":      playHtml,
   "submit":    submitHtml,
   "moderate":  moderateHtml,
@@ -37,8 +38,8 @@ const VIEW_TEMPLATES = {
 };
 
 const TITLES = {
-  "lobby":     "Tabs — quick category puzzles",
-  "play":      "Tabs — playing",
+  "home":      "Tabs — today's puzzle",
+  "play":      "Tabs — preview",
   "submit":    "Tabs — submit a phrase",
   "moderate":  "Tabs — moderation queue",
   "admin":     "Tabs — moderator administration",
@@ -61,23 +62,12 @@ function safeJson(value) {
     .replace(/\u2029/g, "\\u2029");
 }
 
-/* The free-play shelf.
-
-   This used to flatten each category to a single link — lowest puzzle
-   id, credited "by house" or "2 puzzles" — which meant the rounds
-   inside a category were neither reachable nor visible from the lobby.
-   It is now @basenative/components' accordion, one collapsible section
-   per category listing every round, built by the same
-   renderBrowseShelf() helper src/views/lobby.js calls after hydration
-   so the two trees emit the same markup from the same input.
-
-   "a" is not a detail: the SSR surface has to keep working with
-   JavaScript off, so every round is a real <a href="/play?play={id}">.
-   The hydrated client passes "button" instead — see lib/game.js.
-
-   @param {{ id: number, category: string, submittedBy: string }[] | null} lobby */
-function lobbyBrowseHtml(lobby) {
-  return renderBrowseShelf(groupLobby(lobby) || [], "a");
+/* The catalogue — every approved phrase by category — is rendered for
+   /moderate only (src/lib/game.js renderCatalogueShelf), from the same
+   helper the hydrated client calls, so the two trees emit one markup.
+   @param {{ id: number, category: string, phrase: string, submittedBy: string }[] | null} rows */
+function catalogueHtml(rows) {
+  return renderCatalogueShelf(groupCatalogue(rows) || []);
 }
 
 /* Presentation shaping for the server's daily status — the template
@@ -144,20 +134,23 @@ function shapePlay(play) {
 function renderView(ctx) {
   const tpl = VIEW_TEMPLATES[ctx.route] ?? notFoundHtml;
   switch (ctx.route) {
-    case "lobby":
+    case "home": {
+      /* Today's puzzle IS the page. `play` is the board for the day's
+         puzzle (functions/_shared/ssr.js resolves it from the scheduled
+         id) and is only rendered while the day is open for this player. */
+      const open = !!(ctx.daily && ctx.daily.puzzleId && !ctx.daily.playedToday);
       return render(tpl, {
-        /* raw(): renderBrowseShelf() already escapes every field it
-           interpolates, so `{{ browseHtml }}` must not escape it again.
-           Same contract as queueListHtml below. */
-        browseHtml: raw(lobbyBrowseHtml(ctx.lobby)),
-        hasGroups: !!(ctx.lobby && ctx.lobby.length),
+        ...boardContext,
         daily: shapeDaily(ctx.daily),
-        dailyOpen: !!(ctx.daily && ctx.daily.puzzleId && !ctx.daily.playedToday),
+        dailyOpen: open && !!ctx.play,
         dailyDone: !!(ctx.daily && ctx.daily.playedToday),
+        noDaily: !ctx.error && !(ctx.daily && ctx.daily.puzzleId),
+        play: open ? shapePlay(ctx.play) : null,
         error: ctx.error,
       });
+    }
     case "play":
-      return render(tpl, { play: shapePlay(ctx.play) });
+      return render(tpl, { ...boardContext, play: shapePlay(ctx.play) });
     case "submit":
       return render(tpl, {
         existingCategories: ctx.submit.existingCategories,
@@ -178,6 +171,10 @@ function renderView(ctx) {
           items: ctx.moderate.pending ?? [],
           actionHandler: "mod-decide",
         })),
+        /* raw(): renderCatalogueShelf() escapes every field it
+           interpolates, so `{{ catalogueHtml }}` must not escape it again. */
+        catalogueHtml: raw(catalogueHtml(ctx.moderate.catalogue ?? null)),
+        hasCatalogue: !!(ctx.moderate.catalogue && ctx.moderate.catalogue.length),
       });
     case "admin":
       /* The catalogue table is rendered with @basenative/components'
@@ -204,11 +201,10 @@ function renderView(ctx) {
  *   pathname: string,
  *   user: { handle: string, role: string, isAdmin: boolean, isModerator: boolean } | null,
  *   error: string | null,
- *   lobby: any,
  *   daily: any,
  *   play: any,
  *   submit: { existingCategories: string[] },
- *   moderate: { pending: any[] | null, forbidden?: boolean },
+ *   moderate: { pending: any[] | null, catalogue?: any[] | null, forbidden?: boolean },
  *   admin: { elevated: any[] | null, currentHandle: string | null, forbidden?: boolean },
  * }} ctx
  * @param {{ js: string, css: string[] }} assets
@@ -228,7 +224,6 @@ export function renderPage(ctx, assets) {
     pathname: ctx.pathname,
     user: ctx.user,
     error: ctx.error,
-    lobby: ctx.lobby,
     daily: ctx.daily ?? null,
     play: ctx.play,
     submit: ctx.submit,
@@ -246,7 +241,7 @@ export function renderPage(ctx, assets) {
   const viewPreloads = [assets.views?.[ctx.route]].filter(Boolean);
 
   const layoutCtx = {
-    title: TITLES[ctx.route] ?? TITLES["lobby"],
+    title: TITLES[ctx.route] ?? TITLES["home"],
     description: SITE_DESCRIPTION,
     canonicalUrl: `https://t4bs.com${ctx.pathname}`,
     route: ctx.route,

@@ -6,8 +6,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  keyStateFor, KEY_STATE_INFO, groupLobby, browseCategories,
-  renderBrowseRounds, renderBrowseShelf,
+  keyStateFor, KEY_STATE_INFO, groupCatalogue,
+  renderCataloguePhrases, renderCatalogueShelf,
 } from "./game.js";
 
 
@@ -83,192 +83,73 @@ describe("keyboard state contrast (WCAG AA, computed — not eyeballed)", () => 
   });
 });
 
-describe("groupLobby", () => {
-  it("returns null for null input (loading state)", () => {
-    assert.equal(groupLobby(null), null);
+/* ── THE CATALOGUE — a moderator's list of phrases by category ─────
+   The home page used to carry this as "categories" of numbered
+   "rounds". Categories have phrases, not rounds; the list shows the
+   phrase, and it renders the SAME markup for the SSR template and the
+   hydrated client from the same input. */
+describe("groupCatalogue", () => {
+  it("returns null for null input (loading state) and [] for empty", () => {
+    assert.equal(groupCatalogue(null), null);
+    assert.deepEqual(groupCatalogue([]), []);
   });
 
-  it("returns [] for an empty list", () => {
-    assert.deepEqual(groupLobby([]), []);
-  });
-
-  it("groups puzzles by category, preserving submission order within a group", () => {
-    const lobby = [
-      { id: 1, category: "MOVIES",     submittedBy: "a" },
-      { id: 2, category: "FOOD",       submittedBy: "b" },
-      { id: 3, category: "MOVIES",     submittedBy: "c" },
-      { id: 4, category: "FOOD",       submittedBy: "d" },
+  it("groups by category, alphabetical, ids ascending inside a group", () => {
+    const rows = [
+      { id: 1000, category: "MOVIES", phrase: "THE EMPIRE STRIKES BACK", submittedBy: "admin" },
+      { id: 2,    category: "FOOD",   phrase: "FISH AND CHIPS",          submittedBy: "b" },
+      { id: 3,    category: "MOVIES", phrase: "JAWS",                    submittedBy: "house" },
     ];
-    const groups = groupLobby(lobby);
-    assert.equal(groups.length, 2);
-    const food = groups.find(g => g.category === "FOOD");
-    const movies = groups.find(g => g.category === "MOVIES");
-    assert.deepEqual(food.puzzles.map(p => p.id), [2, 4]);
-    assert.deepEqual(movies.puzzles.map(p => p.id), [1, 3]);
-  });
-
-  it("sorts categories alphabetically", () => {
-    const lobby = [
-      { id: 1, category: "ZEBRA",  submittedBy: "z" },
-      { id: 2, category: "APPLE",  submittedBy: "a" },
-      { id: 3, category: "MANGO",  submittedBy: "m" },
-    ];
-    const groups = groupLobby(lobby);
-    assert.deepEqual(groups.map(g => g.category), ["APPLE", "MANGO", "ZEBRA"]);
+    const groups = groupCatalogue(rows);
+    assert.deepEqual(groups.map(g => g.category), ["FOOD", "MOVIES"]);
+    assert.deepEqual(groups[1].puzzles.map(p => p.id), [3, 1000]);
   });
 });
 
-/* The client-side daily pick (dailySeed / dailyPuzzle /
-   dailyFromGroups / todayKey) is GONE — it was seeded off the
-   browser's local date with nothing server-side agreeing with it, so
-   two players in different time zones got different "dailies" and any
-   client could replay the whole catalogue. Selection now lives in
-   shared/daily.js and is resolved server-side; its coverage lives in
-   shared/daily.test.js. */
-
-
-/* ── FREE-PLAY BROWSE SHELF ──────────────────────────────────────────
-   The lobby's free play used to collapse a category to one row and one
-   playable round. These cover the replacement: every round listed, and
-   the SAME markup reaching the SSR template and the hydrated client
-   from the same input — which is the only thing keeping the two view
-   trees honest here. */
-describe("browseCategories", () => {
-  const groups = [
-    {
-      category: "MOTIVATIONAL",
-      puzzles: [
-        { id: 1000, submittedBy: "admin" },
-        { id: 8,    submittedBy: "house" },
-      ],
-    },
-    { category: "FAIRY TALES", puzzles: [{ id: 3, submittedBy: "house" }] },
-  ];
-
-  it("numbers rounds by ascending puzzle id, not array order", () => {
-    const [motivational] = browseCategories(groups);
-    assert.deepEqual(
-      motivational.rounds.map(r => [r.label, r.id]),
-      [["Round 1", 8], ["Round 2", 1000]],
-      "the server and the client must number the same puzzle the same way",
-    );
-  });
-
-  it("says how many rounds are inside, singular and plural", () => {
-    const [motivational, fairyTales] = browseCategories(groups);
-    assert.equal(motivational.title, "MOTIVATIONAL · 2 rounds");
-    assert.equal(fairyTales.title,   "FAIRY TALES · 1 round");
-  });
-
-  it("gives every round its own play target", () => {
-    const [motivational] = browseCategories(groups);
-    assert.deepEqual(
-      motivational.rounds.map(r => r.playHref),
-      ["/play?play=8", "/play?play=1000"],
-      "a category no longer collapses to a single deterministic pick",
-    );
-  });
-
-  it("credits the submitter per round, not per category", () => {
-    const [motivational] = browseCategories(groups);
-    assert.deepEqual(motivational.rounds.map(r => r.credit), ["by house", "by admin"]);
-  });
-
-  it("marks free play as not counting, in the accessible name", () => {
-    const [, fairyTales] = browseCategories(groups);
-    assert.match(fairyTales.rounds[0].ariaLabel, /does not count toward your streak/i);
-  });
-
-  it("survives a lobby that hasn't loaded", () => {
-    assert.equal(browseCategories(null), null);
-    assert.deepEqual(browseCategories([]), []);
-  });
-});
-
-describe("renderBrowseRounds — the SSR/client tag split", () => {
-  const cat = browseCategories([
-    { category: "FAIRY TALES", puzzles: [{ id: 3, submittedBy: "house" }] },
+describe("renderCataloguePhrases", () => {
+  const group = groupCatalogue([
+    { id: 3, category: "FAIRY TALES", phrase: "LITTLE RED RIDING HOOD", submittedBy: "house" },
   ])[0];
 
-  /* issue #24: the lobby has to work with JavaScript disabled, so the
-     SSR surface is anchors — and now one per puzzle rather than one per
-     category, which is strictly more reachable than before. */
-  it("emits a real href per round for the no-JS surface", () => {
-    const html = renderBrowseRounds(cat, "a");
-    assert.match(html, /<a href="\/play\?play=3"/);
-    assert.doesNotMatch(html, /<button/);
+  it("shows the phrase itself, not a round number", () => {
+    const html = renderCataloguePhrases(group);
+    assert.match(html, /LITTLE RED RIDING HOOD/);
+    assert.doesNotMatch(html, /Round \d/);
   });
 
-  /* The hydrated client uses buttons: a client-side navigation to
-     /play?play=… never re-runs the boot resolver that reads the query
-     string, so an anchor would route to an empty play view. */
-  it("emits buttons for the hydrated client", () => {
-    const html = renderBrowseRounds(cat, "button");
-    assert.match(html, /<button type="button"/);
-    assert.doesNotMatch(html, /href=/);
-  });
-
-  it("carries the puzzle id on every control, either way", () => {
-    for (const tag of ["a", "button"]) {
-      assert.match(renderBrowseRounds(cat, tag), /data-puzzle-id="3"/);
-    }
+  it("gives every phrase a preview link that works without JavaScript", () => {
+    const html = renderCataloguePhrases(group);
+    assert.match(html, /<a href="\/play\?play=3"[^>]*data-bn-action="preview"[^>]*data-puzzle-id="3"/);
+    assert.match(html, /Does not count toward a streak/);
   });
 
   it("escapes interpolated fields", () => {
-    const evil = browseCategories([
-      { category: 'X" onload="alert(1)', puzzles: [{ id: 1, submittedBy: "<img/onerror=1>" }] },
+    const evil = groupCatalogue([
+      { id: 1, category: 'X" onload="alert(1)', phrase: "<img/onerror=1>", submittedBy: "<b>" },
     ])[0];
-    const html = renderBrowseRounds(evil, "a");
+    const html = renderCataloguePhrases(evil);
+    assert.doesNotMatch(html, /<img\/onerror=1>/);
+    assert.match(html, /&lt;img\/onerror=1&gt;/);
     assert.doesNotMatch(html, /onload="alert/);
-    assert.doesNotMatch(html, /<img/);
   });
 });
 
-describe("renderBrowseShelf", () => {
-  const groups = [
-    { category: "FAIRY TALES",  puzzles: [{ id: 3, submittedBy: "house" }] },
-    { category: "MOTIVATIONAL", puzzles: [{ id: 8, submittedBy: "house" }] },
-  ];
-
-  it("is @basenative/components' accordion, so the disclosure is native", () => {
-    const html = renderBrowseShelf(groups, "a");
-    assert.match(html, /<div data-bn="accordion"/);
-    assert.match(html, /<details data-bn="accordion-item"/);
-    assert.match(html, /<summary data-bn="accordion-header"/);
+describe("renderCatalogueShelf", () => {
+  it("is one native <details> per category, titled with the phrase count", () => {
+    const html = renderCatalogueShelf(groupCatalogue([
+      { id: 1, category: "ANIMALS", phrase: "A", submittedBy: "x" },
+      { id: 2, category: "ANIMALS", phrase: "B", submittedBy: "x" },
+      { id: 3, category: "FOODS",   phrase: "C", submittedBy: "x" },
+    ]));
+    assert.match(html, /<details[^>]*data-bn="accordion-item"/);
+    assert.match(html, /ANIMALS · 2 phrases/);
+    assert.match(html, /FOODS · 1 phrase/);
   });
 
-  /* The id is pinned rather than left to the package's nextId()
-     counter. If the server and the client picked different ids, the
-     name= grouping that makes the sections mutually exclusive would
-     desynchronise across hydration. */
-  it("pins the same id on both sides of hydration", () => {
-    const server = renderBrowseShelf(groups, "a");
-    const client = renderBrowseShelf(groups, "button");
-    assert.match(server, /id="lobby-browse"/);
-    assert.match(client, /id="lobby-browse"/);
-    assert.equal(
-      (server.match(/name="lobby-browse"/g) || []).length,
-      (client.match(/name="lobby-browse"/g) || []).length,
-    );
-  });
-
-  /* The two trees must differ in exactly one way — the control tag. */
-  it("differs between the trees only in the control element", () => {
-    const server = renderBrowseShelf(groups, "a");
-    const client = renderBrowseShelf(groups, "button");
-    const normalise = (s) => s
-      .replace(/<a href="[^"]*"/g, "<CTRL")
-      .replace(/<button type="button"/g, "<CTRL")
-      .replace(/<\/(a|button)>/g, "</CTRL>");
-    assert.equal(normalise(server), normalise(client));
-  });
-
-  it("renders an empty shelf rather than throwing on no puzzles", () => {
-    assert.match(renderBrowseShelf([], "a"), /data-bn="accordion"/);
-    assert.match(renderBrowseShelf(null, "a"), /data-bn="accordion"/);
+  it("survives a catalogue that hasn't loaded", () => {
+    assert.doesNotThrow(() => renderCatalogueShelf(null));
   });
 });
-
 describe("keyStateFor — the keyboard from the server's view", () => {
   it("returns {} with no round", () => {
     assert.deepEqual(keyStateFor(null), {});

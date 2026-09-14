@@ -34,9 +34,8 @@ stale, fix it in the same PR that discovers it.
 - [`T4-032`](T4-032.md) (small) — A typed-but-uncommitted new category is silently dropped when the picker closes, leaving the field looking filled and SUBMIT disabled with no reason given
 - [`T4-051`](T4-051.md) (small) — The share-link 404 tells the recipient the link expired, which nothing in the system can cause
 - [`T4-052`](T4-052.md) (small) — 'A dead puzzle link shows the player the raw string "error: puzzle-not-found", and /admin sits on "loading…" forever when its first request fails'
-- [`T4-053`](T4-053.md) (small) — The fixed SUBMIT A PHRASE button still covers the right half of whichever free-play category row is at the bottom of the viewport mid-scroll
 - [`T4-054`](T4-054.md) (small) — The legacy shell's own CSS reset makes every primary button transparent with near-black text — which is what `npm run dev` and `?legacy=1` serve
 
 ---
 
-7 open tickets.
+6 open tickets.
