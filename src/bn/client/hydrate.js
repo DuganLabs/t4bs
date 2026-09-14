@@ -419,7 +419,10 @@ async function shareResult({ won, card }) {
         if (navigator.canShare({ files: [file] })) files = [file];
       } catch { /* image share not possible here — fall back to text + link */ }
     }
-    const r = await nativeShare(files ? { text, url: shareUrl, files } : { text, url: shareUrl });
+    /* With an image attached the link rides inside the text: iOS refuses
+       files + url together on some versions, and a link in the text still
+       gets a tappable preview in Messages. */
+    const r = await nativeShare(files ? { text: `${text}\n${shareUrl}`, files } : { text, url: shareUrl });
     if (r?.status === "shared") return "✓ Shared";
     if (r?.status === "copied") return "✓ Link copied";
     return "Couldn't share";
