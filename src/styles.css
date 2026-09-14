@@ -315,24 +315,6 @@ a[data-bn-variant="leave"]:hover { border-color: #E8920A; color: #E8920A; }
    always used. */
 [data-bn="button"][data-variant="secondary"] { background: var(--bn-color-surface-raised); }
 
-/* Three declarations that are a no-op the moment @basenative/components
-   0.8.0 is installed, and are here only so the interim 0.7.0 install
-   doesn't regress:
-     - 0.7.0 hardcodes var(--bn-color-white) as the primary/destructive
-       label colour. On accent orange that measures 2.46:1. 0.8.0 reads
-       --bn-color-on-primary / --bn-color-on-error instead (theme.css
-       sets both), so these restate exactly what the package will then
-       resolve on its own.
-     - 0.7.0's button block re-declares border-radius: var(--bn-radius-md)
-       after the shared control group has already applied
-       var(--bn-radius-control), silently defeating the 8px T4BS sets —
-       buttons rendered at 6px while inputs stayed at 8px.
-   Both are fixed upstream in BaseNative#186, opened off the back of this
-   work. Delete this block with the version bump. */
-[data-bn="button"]                             { border-radius: var(--bn-radius-control); }
-[data-bn="button"][data-variant="primary"]     { color: var(--bn-color-on-primary); }
-[data-bn="button"][data-variant="destructive"] { color: var(--bn-color-on-error); }
-
 /* Disabled buttons, T4BS's reading of "unavailable". The package already
    dims to opacity .5, sets cursor: not-allowed and suppresses the hover
    restyle (every variant's hover is :hover:not(:disabled)), so the only
