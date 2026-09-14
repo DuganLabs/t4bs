@@ -315,3 +315,25 @@ describe("inline-content hashes are current", () => {
     );
   });
 });
+
+describe("Web Analytics beacon (T4-033)", () => {
+  const layout = readFileSync(
+    new URL("../src/bn/views/layout.js", import.meta.url),
+    "utf8",
+  );
+
+  it("ships the beacon as an external script from the origin the CSP allows", () => {
+    assert.match(
+      layout,
+      /<script\s+defer\s+src="https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js"/,
+    );
+    assert.equal(layout.includes("static.cloudflareinsights.com"), true);
+  });
+
+  it("carries a 32-hex public site token, and nothing inline", () => {
+    const m = layout.match(/data-cf-beacon='\{"token":"([0-9a-f]{32})"\}'/);
+    assert.ok(m, "beacon tag must carry the site token");
+    // The tag is `defer src=…` only: no inline body for the CSP to refuse.
+    assert.doesNotMatch(layout, /beacon\.min\.js"[^>]*>\s*[^<\s]/);
+  });
+});

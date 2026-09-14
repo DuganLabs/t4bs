@@ -168,6 +168,23 @@ export default `<!DOCTYPE html>
     </noscript>
     <script type="application/json" id="bn-ssr-state">{{ ssrStateJson }}</script>
     <!--BN_HYDRATE_SCRIPT-->
+    <!-- Cloudflare Web Analytics, added by hand rather than by the zone's
+         automatic injection (T4-033, owner decision: yes, we want page views).
+         Automatic injection emits an INLINE loader (a self-invoking function
+         that builds the <script> element), and an inline script cannot be
+         allowed by a CSP without either 'unsafe-inline' or a hash of text
+         Cloudflare rotates with every beacon release. An external src needs
+         neither: only the host in script-src, which functions/_shared/
+         security.js already lists. The token is public — it ships in the
+         HTML of every page on the zone and identifies the site, not the
+         account. Automatic injection still has to be switched off for the
+         zone in the dashboard, or Cloudflare keeps adding its inline loader
+         beside this one and the CSP keeps logging a refusal. -->
+    <script
+      defer
+      src="https://static.cloudflareinsights.com/beacon.min.js"
+      data-cf-beacon='{"token":"a6eb162865bb4319b158800e0b97b5cb"}'
+    ></script>
   </body>
 </html>
 `;
