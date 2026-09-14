@@ -46,51 +46,48 @@ Twelve puzzles cannot sustain a daily. The picker is `hash(day) % 12`.
 
 ## 1. The game
 
-**Tabs** is a phrase-reveal puzzle. One category. One hidden phrase. You reveal
-letters one at a time, and the moment you know the phrase you solve it — and
-the fewer letters you needed, the higher you score.
+**Tabs** is a word-guessing puzzle. One category. One hidden phrase, one row of
+tiles per word. You type letters into a word's open tiles and submit; every
+tile comes back **green** (right letter, right place — it locks), **yellow**
+(in this word, elsewhere) or **dark** (not in this word). Letters you learn
+carry across words. A few **anchor** tiles are turned over at the start. You
+can **stake** a tile you're sure of for double points, bank a **reveal** by
+solving a word clean, and go **ALL IN** on the whole remaining phrase.
 
-That is the whole loop. One mechanic, one decision per turn, thirty to ninety
-seconds.
+This is the original game restored (commit `95f37cf`), with one economy fixed
+— see `docs/tuning-proposal.md`, decided by the owner 2026-09-14. The
+reveal-a-letter experiment that replaced it for a day (#109) is gone.
 
 ### 1.1 A round
 
-1. The board shows the category and the phrase as blank tiles, word by word,
-   with two or three **anchor** letters already revealed.
-2. Tap a letter. If it is in the phrase, every instance turns over. If not,
-   the key goes dark and you lose a **life**. You have five.
-3. At any moment, tap **SOLVE** and type the phrase. Right: the round ends and
-   you score. Wrong: you lose a life, nothing is revealed, play continues.
-4. Out of lives: the phrase is revealed, the round is over, you score nothing.
+1. The board shows the category and the phrase as rows of tiles, anchors
+   locked. Every word shows how many attempts it has.
+2. Pick a word (the first open one is active), type letters into its open
+   tiles, tap tiles to stake them, press Enter.
+3. The server judges the word. Greens lock. A miss spends one of **that
+   word's** attempts — 3 for a word of 1–3 letters, 4 for 4–6, 5 for 7+.
+4. Every attempt stays on the board: the active word is laid out Wordle-style,
+   past rows above the live row; every other word shows its current row and a
+   strip of its past attempts (tap to expand).
+5. A word out of attempts is **busted**: revealed, worth nothing, and the round
+   continues. The round ends **Solved** when every word is green, or
+   **Finished** once every word is solved or busted with at least one bust.
+   Only Solved counts for the streak.
 
 ### 1.2 Scoring
 
-Score is **letters you did not need**. Every hidden tile still blank when you
-solve is worth 10. A phrase with 20 letters, solved with 8 still hidden, scores
-80. Each life you still hold at the end adds 5.
++5 per new green, −1 per wrong tile, +10 per word solved. A staked tile
+doubles both ways: +10 right, −5 wrong, no attempt spent for the stake. A
+word solved with no misses banks a reveal (⚡): tap any hidden tile in any
+open word for a free letter. ALL IN: type the whole remaining phrase; right
+pays +8 per tile still hidden, wrong busts every open word. **Par** is what a
+clean solve scores (5 per non-anchor tile + 10 per word) unless an admin sets
+one; the end card and share card show the score against it.
 
-That makes the game's one decision real at every turn: reveal another letter
-(safer, and it costs you ten points a tile) or solve now (you might not know it
-yet). It is the same tension v1 sold as "stake what you know, gamble on what
-you don't" — delivered by the score itself instead of a side-bet system.
+### 1.3 What is gone
 
-Every puzzle carries a **par**: the score a strong player gets, set when the
-puzzle is authored (default: solve with half the non-anchor letters hidden).
-The end screen shows your score against par, so 80 means something.
-
-### 1.3 What is gone from v1
-
-- **Per-word guessing and Wordle feedback.** Letters are guessed against the
-  whole phrase; the phrase is solved as one thing.
-- **Stakes.** The score system is the bet.
-- **Cascade tokens.** There is nothing to give back because nothing is taken
-  away for a correct letter.
-- **ALL IN as a mode.** SOLVE is one button, always available, never fatal by
-  itself.
-- **The knowledge panel.** The board is the knowledge.
-
-Nothing on the list was removed for being complicated. Each was removed because
-the score system does its job.
+Four lives for the whole phrase; a stake that cost a life; the letter-reveal
+mechanic. Nothing else was removed.
 
 ### 1.4 One puzzle a day — and it is the home page
 

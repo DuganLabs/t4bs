@@ -89,42 +89,29 @@ function shapeDaily(daily) {
   };
 }
 
-/** @param {import('./ssr-context.js').PlaySessionSsr | null} play */
+/** The board for first paint: words as cells (anchor letter or ""), the
+ *  attempt budget per word. @param {any} play */
 function shapePlay(play) {
   if (!play) return null;
-  /* Defensive: a partial play context (a row with null anchors or null
-     words) used to throw "x is not iterable" here and 500 the whole SSR
-     response. The `|| []` guards keep malformed input from cascading.
-
-     v2: functions/_shared/ssr.js supplies `board` — per word, per tile,
-     the letter if it is revealed at the start (anchors, everywhere their
-     letter occurs) or null. When a caller hands only words + anchors
-     (older contexts, the ssr-audit fixtures) the board is rebuilt from
-     those with the anchor letter only at its own position, which is the
-     most the template can know without the phrase. */
   const anchors = play.anchors || [];
   const wordsIn = play.words || [];
-  const anchorAt = new Set(anchors.map(a => `${a.wi}-${a.li}`));
-  const anchorMap = new Map(anchors.map(a => [`${a.wi}-${a.li}`, a.letter]));
-  const rows = Array.isArray(play.board)
-    ? play.board
-    : wordsIn.map((len, wi) => Array.from({ length: len }, (_, li) => anchorMap.get(`${wi}-${li}`) ?? null));
-  const board = rows.map((row, wi) => (row || []).map((letter, li) => ({
-    letter: letter ?? "",
-    anchor: anchorAt.has(`${wi}-${li}`),
-  })));
-  const wordCount = rows.length || wordsIn.length;
+  const anchorMap = new Map();
+  for (const a of anchors) anchorMap.set(`${a.wi}-${a.li}`, a.letter);
+  const attemptsMax = play.attemptsMax || [];
+  const words = wordsIn.map((wordLen, wi) => ({
+    cells: Array.from({ length: wordLen }, (_, li) => ({ anchor: anchorMap.get(`${wi}-${li}`) ?? "" })),
+    attempts: attemptsMax[wi] ?? "",
+  }));
+  const wordCount = wordsIn.length;
   return {
     id: play.id,
     category: play.category,
     submittedBy: play.submittedBy ?? "",
     totalLetters: play.totalLetters,
     wordsLabel: `${wordCount} word${wordCount === 1 ? "" : "s"}`,
-    board,
-    par: play.par ?? "",
-    scoreIfSolved: play.scoreIfSolved ?? "",
+    words,
     score: 0,
-    lives: play.lives ?? 5,
+    lives: 0,
     tokens: 0,
   };
 }

@@ -11,21 +11,78 @@ import { escapeAttr, escapeText } from "@basenative/runtime/shared/escape";
    and no per-word scoping to get wrong. Untried keys carry no state. The
    package's class vocabulary is green/yellow/absent; v2 uses the two that
    mean what they say. */
-export function keyStateFor(view) {
-  if (!view) return {};
+/* ── THE WORD-GUESSING BOARD — client helpers ──────────────────────────
+   Pure functions the play view derives its state from. openSlots mirrors
+   shared/pure.js (the client needs it without importing the engine). */
+
+/** Indexes of the tiles in a word that are still open (not locked). */
+export function openSlots(wordLen, locked) {
+  const out = [];
+  for (let i = 0; i < wordLen; i++) if ((locked || {})[i] === undefined) out.push(i);
+  return out;
+}
+
+/** How many tiles across the phrase are still hidden. */
+export function fullCount(words, locked) {
+  return words.reduce((acc, n, wi) => acc + (n - Object.keys(locked[wi] || {}).length), 0);
+}
+
+/**
+ * Keyboard colours: green = locked anywhere (anchors + earlier greens),
+ * yellow = known to be in the phrase but not locked yet, absent = ruled out
+ * in the ACTIVE word specifically — no claim about words not yet attempted.
+ */
+export function computeKeyStatus({ session, active, locked, presentGlobal, absentByWord }) {
+  if (!session) return {};
   const status = {};
-  (view.revealed || []).forEach(L => { status[L] = "green"; });
-  (view.missed || []).forEach(L => { status[L] = "absent"; });
+  (locked || []).forEach((lm) => {
+    Object.values(lm || {}).forEach(L => { status[L] = "green"; });
+  });
+  (presentGlobal || []).forEach(L => { if (status[L] !== "green") status[L] = "yellow"; });
+  if (active !== null && active !== undefined) {
+    ((absentByWord || [])[active] || []).forEach(L => { if (!status[L]) status[L] = "absent"; });
+  }
   return status;
 }
 
-/* Non-colour cues for each tried-key state (WCAG 1.4.1): a glyph the CSS
-   renders (see .bn-kb-key--<state>::after in styles.css) and an aria
-   suffix. Values are unique on purpose — game.test.js checks. */
+/* Non-colour cues for the keyboard states — a glyph in the corner of the
+   key and a suffix for the key's accessible name. */
 export const KEY_STATE_INFO = {
-  green:  { glyph: "✓", ariaSuffix: "in the phrase, turned over" },
-  absent: { glyph: "✕", ariaSuffix: "not in the phrase" },
+  green:  { glyph: "✓", ariaSuffix: "confirmed in this word" },
+  yellow: { glyph: "◆", ariaSuffix: "elsewhere in the phrase, not this word" },
+  absent: { glyph: "✕", ariaSuffix: "not in this word" },
 };
+
+/**
+ * Everything the player has deduced, at PHRASE level, for the read-out
+ * under the grid.
+ */
+export function knowledgeSummary({ words, locked, wordSolved, busted, presentGlobal, attempts, attemptsMax, tokens }) {
+  const ws = words || [];
+  const totalWords = ws.length;
+  const solvedWords = (wordSolved || []).filter(Boolean).length;
+  const bustedWords = (busted || []).filter(Boolean).length;
+  const totalLetters = ws.reduce((a, n) => a + n, 0);
+  let knownLetters = 0;
+  ws.forEach((n, wi) => { knownLetters += Object.keys((locked || [])[wi] || {}).length; });
+  const lockedSet = new Set();
+  (locked || []).forEach(lm => Object.values(lm || {}).forEach(L => lockedSet.add(L)));
+  const floating = (presentGlobal || []).filter(L => !lockedSet.has(L)).length;
+  const attemptsLeft = (attempts || []).reduce((a, n) => a + n, 0);
+  const attemptsTotal = (attemptsMax || []).reduce((a, n) => a + n, 0);
+  let bestTarget = null;
+  ws.forEach((n, wi) => {
+    if ((wordSolved || [])[wi] || (busted || [])[wi]) return;
+    const known = Object.keys((locked || [])[wi] || {}).length;
+    if (!bestTarget || known / n > bestTarget.known / bestTarget.len) bestTarget = { wi, known, len: n };
+  });
+  return { totalWords, solvedWords, bustedWords, totalLetters, knownLetters, floating, attemptsLeft, attemptsTotal, tokens: tokens || 0, bestTarget };
+}
+
+/** The guesses made on one word, oldest first. @param {Array<any>} guessLog @param {number} wi */
+export function historyFor(guessLog, wi) {
+  return (guessLog || []).filter(g => g && g.wi === wi && Array.isArray(g.feedback));
+}
 
 /* ── THE CATALOGUE, FOR MODERATORS ───────────────────────────────────
    Every approved phrase, grouped by category, phrase showing. This is

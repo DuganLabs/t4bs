@@ -15,7 +15,7 @@ import { renderPage }   from "../../src/bn/server/render.js";
 import { loadAssets }   from "../../src/bn/server/manifest.js";
 import { createEngine } from "../../shared/engine.js";
 import { catalogueRow } from "../../shared/admin-stats.js";
-import { LIVES, anchorLetters, boardFor, hiddenCount, publicShape, scoreFor, wordsOf } from "../../shared/pure.js";
+import { publicShape } from "../../shared/pure.js";
 import {
   d1Puzzles, d1Sessions, d1Submissions, d1Users,
 } from "./d1.js";
@@ -169,25 +169,15 @@ function uniqueCategories(listing) {
 }
 
 /** The board of one approved puzzle as first painted — no session is
- *  started here (sessions are mutating and would create a row per
- *  crawler hit); the client starts the real round on hydration.
+ *  started here (sessions are mutating and would create a row per crawler
+ *  hit); the client starts the real round on hydration. publicShape is the
+ *  same answer-free shape the engine hands the client, so SSR tiles and
+ *  hydrated tiles are one function of one row.
  *  @param {any} env @param {number} playId */
 async function resolvePlay(env, playId) {
   if (!Number.isFinite(playId) || playId <= 0) return null;
   const puzzleRow = await d1Puzzles(env.DB).getApproved(playId);
   if (!puzzleRow) return null;
-  /* v2: the first paint shows the anchor letters everywhere they occur
-     (shared/pure.js anchorLetters), the par, and the number under Solve —
-     all from the same pure functions the engine uses, so SSR and the
-     hydrated board are one function of one row. The phrase itself stays
-     server-side: `board` carries letters only where they are revealed. */
-  const shape = publicShape(puzzleRow);
-  const revealed = anchorLetters(puzzleRow);
-  const words = wordsOf(puzzleRow.phrase);
-  return {
-    ...shape,
-    board: boardFor(words, revealed),
-    lives: LIVES,
-    scoreIfSolved: scoreFor(hiddenCount(words, revealed), LIVES),
-  };
+  return publicShape(puzzleRow);
 }
+

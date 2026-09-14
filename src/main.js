@@ -79,7 +79,7 @@ const authOpen = signal(false);
 /* The round as the client holds it — one server view, not nine derived
    signals (see lib/session-state.js). */
 const round = createSessionState();
-const { session, phase, score, lives, tokens } = round;
+const { session, score, lives, tokens } = round;
 /* True while the /play boot resolver is running — distinguishes
    "still loading" from "definitively no session". */
 const playLoading   = signal(window.location.pathname === "/play" || window.location.pathname === "/");
@@ -276,7 +276,8 @@ async function start(puzzleId) {
 async function shareResult({ won }) {
   try {
     const s = session();
-    const grid = shareGrid(s);
+    if (!s?.words) return "Couldn't share";
+    const grid = shareGrid({ session: s, locked: round.locked(), busted: round.busted(), guessLog: round.guessLog() });
 
     let shareUrl = "https://t4bs.com";
     try {
@@ -435,7 +436,7 @@ effect(() => {
       return;
     }
     mount(viewSlot, createPlay({
-      session, phase, apply: round.apply,
+      round,
       toaster,
       onResultRecorded: recordResultPersist,
       onDailyUpdate: daily.set,

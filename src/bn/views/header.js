@@ -16,10 +16,10 @@ export default `<header role="banner" data-bn-region="header">
       <span class="sr-only"> — Tabs home</span>
     </a>
 
-    <template @if="route === 'play' &amp;&amp; play">
-      <output data-bn-role="score" aria-label="Score">{{ play.score }}</output>
-      <output data-bn-role="lives" aria-label="Lives">● {{ play.lives }}</output>
-      <output data-bn-role="tokens" aria-label="Tokens">⚡ {{ play.tokens }}</output>
+    <template @if="play">
+      <output data-bn-role="score" aria-label="Score">{{ play.score }} pts</output>
+      <output data-bn-role="lives" aria-label="Lives" hidden>—</output>
+      <output data-bn-role="tokens" aria-label="Tokens" hidden>⚡ {{ play.tokens }}</output>
     </template>
 
     <ul role="list">

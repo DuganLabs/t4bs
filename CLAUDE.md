@@ -35,7 +35,7 @@ t4bs/
 │   │   └── bind.js, dom.js, confetti.js, focus-trap.js
 │   └── main.js                 # `?legacy=1` entry — same boot as hydrate.js minus the SSR seed
 ├── shared/
-│   └── engine.js               # game core, v2: reveal a letter / solve the phrase (docs/PRD.md §6)
+│   └── engine.js               # game core: the word-guessing loop (docs/PRD.md §1, docs/tuning-proposal.md)
 ├── functions/
 │   ├── _middleware.js          # SSR dispatch (default) vs. `?legacy=1`, security headers
 │   ├── _shared/
@@ -139,7 +139,7 @@ See `docs/PRD.md` §8 for evidence + the [GitHub issues](https://github.com/Duga
 
 - Don't introduce new direct dependencies if a `@basenative/*` package covers it.
 - Don't reach for client-side JS for copy that has to render server-side (OG meta on `/s/{id}` etc.).
-- Don't change `shared/engine.js` casually — it's the one large piece that stays bespoke through any rewrite.
+- Don't change `shared/engine.js` casually — it's the one large piece that stays bespoke through any rewrite. And do not replace the MECHANIC: the game is word-guessing with per-tile feedback (owner, 2026-09-14: the reveal-a-letter rewrite was "nothing like the game I asked for, had or wanted"). Tune the economy through docs/tuning-proposal.md, one number at a time.
 - Don't rename "Tabs" or revert any "five-letter battle of bullshit" remnant.
 
 ---

@@ -7,7 +7,8 @@ describe("catalogueRow", () => {
 
   it("derives par when the row has none, and says so", () => {
     const r = catalogueRow({ ...base, plays: 0, wins: 0, avgWinScore: null });
-    assert.equal(r.par, 85);
+    // A clean solve: (16 letters − 2 anchors) × 5 + 3 words × 10.
+    assert.equal(r.par, 100);
     assert.equal(r.parIsDerived, true);
     assert.equal(r.winRate, null);
     assert.equal(r.winRateLabel, "—");

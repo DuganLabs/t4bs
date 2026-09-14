@@ -42,19 +42,13 @@ export function createHeader({
     text: () => `${score()} pts`,
     hidden: () => view() !== "playing",
   });
-  /* The lives counter is the only place the game's harshest rule is
-     visible, so the accessible name says what the hearts actually mean:
-     one pool for the entire phrase, spent by any imperfect word guess. */
+  /* Attempts are per word now and live on the board; the header keeps a
+     lives slot for parity with the SSR shell but never shows it. */
   const livesOut = h("output", {
-    /* Styling hooks off data-bn-role, not aria-label: the label is
-       reactive (it names the current count), so an
-       [aria-label="Lives"] CSS selector silently stopped matching once
-       the SPA hydrated. */
     "data-bn-role": "lives",
-    "aria-label": () => `${lives()} of 4 lives left — one pool for the whole phrase; any word guess that isn't fully correct costs one`,
-    title: "Lives are shared across the whole phrase",
+    "aria-label": () => `${lives()} lives`,
     text: () => "♥".repeat(Math.max(0, lives())) || "—",
-    hidden: () => view() !== "playing",
+    hidden: () => view() !== "playing" || lives() <= 0,
   });
 
   // Off-game user controls — match the SSR <ul role="list"><li>… shape
