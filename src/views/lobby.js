@@ -213,7 +213,7 @@ export function createLobby({
      stating but it is not worth a screenful, so free play now comes
      first and the note closes the page. */
   const rules = h("p", { "data-bn-region": "rules-note" },
-    "Four lives for the whole phrase — any word guess that isn't fully correct costs one.");
+    "Turn over letters, solve when you know it. Every letter you didn't need is ten points.");
 
   return h("main", {
     "aria-labelledby": "lobby-title",

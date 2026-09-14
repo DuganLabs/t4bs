@@ -146,7 +146,7 @@ export default `<!DOCTYPE html>
         "alternateName": "T4BS",
         "url": "https://t4bs.com/",
         "image": "https://t4bs.com/og/default.png",
-        "description": "Pick a category. Solve the hidden phrase. Stake the letters you're sure about.",
+        "description": "Pick a category. Solve the hidden phrase. Every letter you didn't need is ten points.",
         "genre": "Word puzzle",
         "applicationCategory": "GameApplication",
         "operatingSystem": "Any",
