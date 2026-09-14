@@ -12,6 +12,9 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 import { renderPage } from "../src/bn/server/render.js";
 
@@ -253,5 +256,23 @@ describe("renderPage tolerates partial play contexts", () => {
       play: { id: 1, category: "X", submittedBy: "a", words: null, anchors: [], totalLetters: 0 },
     });
     assert.doesNotThrow(() => renderPage(ctx, ASSETS));
+  });
+});
+
+/* The share landing's not-found copy (T4-051). Share cards never expire
+   — no expiry column, no DELETE, no scheduled handler — so a 404 on
+   /s/{id} can only mean an id that was never minted, i.e. a link that
+   was mangled on the way. The page used to say the link had "expired",
+   which told the recipient not to bother asking for it again. */
+describe("share landing copy — functions/s/[id].js", () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(join(here, "../functions/s/[id].js"), "utf8");
+
+  it("never tells the recipient a share link expired", () => {
+    assert.equal(/expired/i.test(src), false, "share links cannot expire — do not say they did");
+  });
+
+  it("still offers the way out", () => {
+    assert.ok(src.includes(`<a href="/">Play today's puzzle</a>`));
   });
 });
