@@ -36,6 +36,7 @@ export function createPlay({
   onResultRecorded,
   onDailyUpdate,
   onShare,
+  onMint,
   goLobby,
   retry,
 }) {
@@ -56,6 +57,10 @@ export function createPlay({
   const cascDrop   = signal(null);
   const expanded   = signal(null);          // a non-active word whose strip is opened
   const shareLbl   = signal(null);
+  /* The minted share card — { url, imageUrl } — requested the moment the
+     round ends so the end dialog can SHOW the card, not just offer to send
+     it. The image is the same PNG a chat app would render for the link. */
+  const card       = signal(null);
   const announcement = signal("");
   const dailyAfter = signal(null);
   let resultRecorded = false;
@@ -121,6 +126,7 @@ export function createPlay({
     if (p === "won") { confetti(); announcement.set(`Solved. ${score()} points.`); }
     else announcement.set(`Finished. ${score()} points.`);
     if (navigator.vibrate) navigator.vibrate(p === "won" ? [40, 40, 80] : 200);
+    onMint?.({ won: p === "won" }).then((c) => { if (c) card.set(c); }).catch(() => {});
   });
 
   /* ── typing ────────────────────────────────────────────────────────── */
@@ -612,6 +618,15 @@ export function createPlay({
   const endMode   = h("p", { "data-bn-region": "end-mode" });
   const endScore  = h("output", { "data-bn-region": "end-score" });
   const endPar    = h("p", { "data-bn-region": "score-label" });
+  const endImage = h("img", {
+    "data-bn-region": "end-card-image",
+    alt: "",
+    width: "1200", height: "630",
+    decoding: "async",
+  });
+  bindAttr(endImage, "src", () => card()?.imageUrl || null);
+  bindAttr(endImage, "alt", () => card() ? `${session()?.category || "Tabs"} — ${score()} points, ${phase() === "won" ? "solved" : "finished"}` : "");
+  bindHidden(endImage, () => !card()?.imageUrl);
   const endShare     = bnButton("Share result", { variant: "primary",   attrs: 'data-bn-action="share"' });
   const endPrimary   = bnButton("Done",         { variant: "secondary", attrs: 'data-bn-action="primary"' });
   const endSecondary = bnButton("Done",         { variant: "secondary", attrs: 'data-bn-action="secondary"' });
@@ -646,7 +661,10 @@ export function createPlay({
   });
   bindHidden(endSecondary, () => phase() !== "lost" || session()?.mode === "daily");
 
-  endShare.addEventListener("click", () => { onShare({ won: phase() === "won" }).then(label => shareLbl.set(label)); });
+  endShare.addEventListener("click", () => {
+    shareLbl.set("Sharing…");
+    onShare({ won: phase() === "won", card: card() }).then(label => shareLbl.set(label));
+  });
   endPrimary.addEventListener("click", () => { if (phase() === "won" || session()?.mode === "daily") goLobby(); else retry(); });
   endSecondary.addEventListener("click", goLobby);
 
@@ -654,6 +672,7 @@ export function createPlay({
   endCard.setAttribute("role", "document");
   endCard.querySelector('[data-bn="card-body"]').append(
     endTitle, endSub, endReveal, endHow, endCredit, endMode, endScore, endPar,
+    endImage,
     endShare, endSecondary, endPrimary,
   );
   const endOverlay = /** @type {HTMLDialogElement} */ (fromHTML(renderDialog({

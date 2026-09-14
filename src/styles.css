@@ -1011,6 +1011,14 @@ main[data-bn-view] [data-bn-region="stake-label"] {
 }
 main[data-bn-view] section[data-bn-region="keyboard"][data-allin] { border-color: rgba(255,77,77,.5); }
 
+/* END CARD — the share card itself, shown in the dialog the moment the
+   round ends: the same PNG a chat app renders for the link, so what you
+   see is what you send. */
+[data-bn-region="end-card-image"] {
+  display: block; width: 100%; height: auto; aspect-ratio: 1200 / 630;
+  border-radius: 10px; border: 1px solid #2C2926; margin: 10px 0 12px;
+  background: #0C0B09;
+}
 /* END CARD — the "how" line under the verdict. */
 [data-bn-region="how"] { font-size: 13px; color: #C9C2B6; margin: 4px 0 8px; }
 

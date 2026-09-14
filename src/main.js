@@ -273,32 +273,56 @@ async function start(puzzleId) {
   }
 }
 
-async function shareResult({ won }) {
+/* The share card is minted ONCE per finished round, the moment the round
+   ends (createPlay's onMint), so the end dialog can show the card itself —
+   the same 1200×630 PNG a chat app renders for the link. */
+const minted = new Map();
+async function mintResult({ won }) {
+  const s = session();
+  if (!s?.words) return null;
+  const key = s.sessionId || s.id;
+  if (minted.has(key)) return minted.get(key);
+  const grid = shareGrid({ session: s, locked: round.locked(), busted: round.busted(), guessLog: round.guessLog() });
+  const m = await mintShareCard({
+    sessionId: s.sessionId || s.id,
+    puzzleId: s.puzzleId ?? s.id ?? null,
+    category: s.category,
+    score: score(),
+    won,
+    grid,
+  }, { endpoint: "/api/share-cards" });
+  const out = m?.id ? { id: m.id, url: m.url, imageUrl: `/og/score/${m.id}.png`, grid } : null;
+  if (out) minted.set(key, out);
+  return out;
+}
+
+/* Share the card AS AN IMAGE where the platform allows it (iOS/Android
+   share sheets, via the Web Share API's `files`), with the text and the
+   link alongside; otherwise text + link; otherwise the clipboard. The
+   image is what people actually see in a chat — a bare link's preview is
+   at the mercy of the receiving app. */
+async function shareResult({ won, card }) {
   try {
     const s = session();
     if (!s?.words) return "Couldn't share";
-    const grid = shareGrid({ session: s, locked: round.locked(), busted: round.busted(), guessLog: round.guessLog() });
-
-    let shareUrl = "https://t4bs.com";
-    try {
-      const minted = await mintShareCard({
-        sessionId: s.sessionId || s.id,
-        puzzleId: s.puzzleId ?? s.id ?? null,
-        category: s.category,
-        score: score(),
-        won,
-        grid,
-      }, { endpoint: "/api/share-cards" });
-      if (minted?.url) shareUrl = minted.url;
-    } catch { /* fall back to home URL */ }
-
+    const c = card || await mintResult({ won }).catch(() => null);
+    const grid = c?.grid || shareGrid({ session: s, locked: round.locked(), busted: round.busted(), guessLog: round.guessLog() });
+    const shareUrl = c?.url || "https://t4bs.com";
     const text = composeShareText(
       "Tabs · ${category} · ${score}pts · ${verdict}\n\n${grid}",
-      { category: s.category, score: score(), verdict: won ? "Solved" : "Busted", grid }
+      { category: s.category, score: score(), verdict: won ? "Solved" : "Busted", grid },
     );
-    const r = await nativeShare({ text, url: shareUrl });
+    let files;
+    if (c?.imageUrl && typeof navigator.canShare === "function") {
+      try {
+        const blob = await (await fetch(c.imageUrl)).blob();
+        const file = new File([blob], `tabs-${c.id}.png`, { type: "image/png" });
+        if (navigator.canShare({ files: [file] })) files = [file];
+      } catch { /* image share not possible here — fall back to text + link */ }
+    }
+    const r = await nativeShare(files ? { text, url: shareUrl, files } : { text, url: shareUrl });
     if (r?.status === "shared") return "✓ Shared";
-    if (r?.status === "copied") return "✓ Copied";
+    if (r?.status === "copied") return "✓ Link copied";
     return "Couldn't share";
   } catch {
     return "Couldn't share";
@@ -441,6 +465,7 @@ effect(() => {
       onResultRecorded: recordResultPersist,
       onDailyUpdate: daily.set,
       onShare: shareResult,
+      onMint: mintResult,
       goLobby: finishRound,
       retry: () => { const id = session()?.id; if (id) start(id); },
     }));
