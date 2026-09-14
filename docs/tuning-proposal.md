@@ -117,7 +117,32 @@ existing anchors where they already satisfy the rule and adds the missing
 ones at the position that reveals the least (never the first letter). The
 admin catalogue shows the count per puzzle.
 
-### 3.5 Scoring, unchanged except where 3.2 says
+### 3.5 Guess history — every attempt stays on the board
+
+In v1 a submitted word showed its greens/yellows/darks for a beat and then
+the open tiles cleared for the next attempt; the only memory of a guess was
+the keyboard colour. Wordle's whole feel is that **your guesses persist and
+you start a new row** — you reason from the rows above. Tabs gets the same:
+
+- The engine records every attempt in full (`{ word, letters, feedback }`;
+  v1's log kept only "which word, was it clean"), so the history is the
+  server's and survives a reload.
+- The **active word** is laid out like Wordle: one row per attempt, past
+  attempts above with their feedback frozen, the next empty row is where you
+  type. The attempt budget from 3.1 is simply the number of rows.
+- Every **other word** shows one row — its current state — with a slim strip
+  of its past attempts underneath (mini tiles, feedback colours only). Tap
+  the word to expand it; that also makes it the active word. Solved words
+  collapse to their green row; a busted word shows its rows and the reveal.
+- A phrase can be nine words, so the board never shows every row of every
+  word at once — only the word being worked on is tall. On a 390px phone a
+  four-word phrase with the active word expanded is four rows plus three
+  strips, about the height today's board already is.
+
+The share grid gains a row per attempt for the active-word layout, the way
+Wordle's does, so the brag reads as attempts used rather than tiles hidden.
+
+### 3.6 Scoring, unchanged except where 3.2 says
 
 +5 per new green, −1 per wrong tile, +10 for completing a word, a cascade
 token for a word solved without a miss (spend it to reveal one tile
@@ -146,7 +171,7 @@ between changes.
 | step | what | size | verifiable by |
 |---|---|---|---|
 | 0 | Restore v1 exactly: `shared/engine.js`, `shared/pure.js`, `/api/guess` + `/api/cascade` + `/api/all-in`, the v1 play view and its tests, on top of today's home page (the round plays in place on `/`), catalogue, daily schedule and admin. Letters keyboard gets ENTER and ⌫ back. | ~1 h | the v1 engine tests pass unchanged; a round on t4bs.com plays as it did at `95f37cf` |
-| 1 | 3.1 attempts per word | ~3 h | engine tests for the table, bust, Solved vs Finished; per-word counters in the play view; share grid marks busted words |
+| 1 | 3.1 attempts per word + 3.5 guess history (they are one layout: rows = attempts) | ~4 h | engine tests for the table, bust, Solved vs Finished and the full attempt log; the play view renders past rows and survives a reload with them; share grid marks busted words and attempts used |
 | 2 | 3.2 stakes | ~30 m | engine tests: 2×/−5, no attempt cost |
 | 3 | 3.3 ALL IN wording + bust semantics | ~30 m | help modal test; engine test |
 | 4 | 3.4 anchor rule + catalogue migration | ~1 h | migration test over the 430 phrases: every ≥4-letter word has exactly one anchor, none at position 0 |
@@ -162,3 +187,5 @@ out the moment you say so; steps 1–4 wait for the decisions below.
    the round on the first bust (harder, closer to v1's feel)?
 3. **Stake downside** (3.2): −5 points (proposed), or keep the life cost
    (now: one attempt on that word)?
+4. **History layout** (3.5): expand only the active word (proposed), or show
+   every word's rows at once, Wordle-style, and accept a tall board?
