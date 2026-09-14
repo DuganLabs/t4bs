@@ -193,11 +193,17 @@ function loadCategories() {
           RESUME_TIMEOUT_MS,
           "resume-timeout",
         );
-        if (isResumable(s)) {
+        /* "/" is today's puzzle and nothing else. A saved round only
+           resumes there if it IS today's daily; a preview, or yesterday's
+           unfinished daily, is dropped so the page shows the day's game
+           rather than whatever was open last. /play resumes anything. */
+        const onHome = window.location.pathname === "/";
+        const isTodaysDaily = s?.mode === "daily" && s?.day === daily()?.day;
+        if (isResumable(s) && (!onHome || isTodaysDaily)) {
           hydrateSession(s);
           const wanted = s.mode === "daily" ? "/" : "/play";
           if (window.location.pathname !== wanted) router.navigate(wanted, { replace: true });
-          toaster("RESUMED — pick up where you left off", "good");
+          if (!onHome || !isTodaysDaily) toaster("RESUMED — pick up where you left off", "good");
           return;
         }
         await clearPersisted(SESSION_KEY).catch(() => {});
