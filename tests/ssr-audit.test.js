@@ -44,10 +44,8 @@ const ROUTE_FIXTURES = {
     },
     play: {
       id: 3, category: "FOODS", submittedBy: "carol",
-      words: [4, 3], totalLetters: 7, par: 60,
+      words: [4, 3], totalLetters: 7, par: 60, attemptsMax: [4, 3],
       anchors: [{ wi: 0, li: 0, letter: "F" }],
-      board: [["F", null, null, null], [null, null, null]],
-      lives: 5, scoreIfSolved: 85,
     },
   },
   play: {
@@ -56,7 +54,7 @@ const ROUTE_FIXTURES = {
       id: 7,
       category: "CAPITALS",
       submittedBy: "dave",
-      words: [3, 4],
+      words: [3, 4], attemptsMax: [3, 4],
       anchors: [{ wi: 0, li: 0, letter: "P" }],
       totalLetters: 7,
     },

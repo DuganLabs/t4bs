@@ -860,123 +860,156 @@ main[data-bn-view] [data-bn-region="play-cbar"][data-allin] {
   background: rgba(255,77,77,.08); border-color: rgba(255,77,77,.5); color: #FF6E6E;
 }
 
-/* PHRASE BOARD — v2. One row per word, one tile per letter. A tile is
-   either turned over ([data-on]) or hidden; an anchor carries an orange
-   underline so "free" reads at a glance; a tile that turns over on a hit
-   lifts for a beat ([data-just]); at the end, a tile the player never
-   revealed ([data-unearned]) is drawn in the paper tone so the brag —
-   how much was solved blind — is visible on the board itself. */
+/* THE BOARD — one row of tiles per word. States are boolean attributes on
+   the tile: [data-locked] anchor or earned green, [data-typed] the letter
+   being entered, [data-cursor] where the next letter lands, [data-wagered]
+   a stake, [data-solved] / [data-busted] the word's end, [data-feedback]
+   on a frozen past row. Past attempts sit ABOVE the live row for the word
+   in play (data-bn-region="history"), and as a strip of mini rows for the
+   others (data-bn-region="history-strip") — every guess stays on the board. */
 main[data-bn-view] [data-bn-region="grid"] {
   width: 100%; max-width: 540px;
-  display: flex; flex-wrap: wrap; justify-content: center;
-  gap: 14px 22px; margin-bottom: 8px; padding: 16px 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 14px 8px 12px;
   background: #161412; border: 1.5px solid #222; border-radius: 12px;
-  position: relative;
 }
-main[data-bn-view] [data-bn-region="grid"][data-shake] { animation: t4-shake .35s; }
-@keyframes t4-shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 main[data-bn-view] [data-bn-region="grid"] > [role="group"] {
-  display: flex; gap: 4px; position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  position: relative; padding: 4px 10px; border-radius: 10px; cursor: pointer;
+  transition: background .15s;
 }
-main[data-bn-view] [data-bn-region="grid"] [role="img"] {
-  width: clamp(36px, 9vw, 44px); height: clamp(42px, 11vw, 50px);
+main[data-bn-view] [data-bn-region="grid"] > [role="group"][data-active] {
+  background: #1E1A15; box-shadow: inset 0 0 0 1.5px rgba(232,146,10,.55);
+}
+main[data-bn-view] [data-bn-region="grid"] > [role="group"][data-allin] {
+  box-shadow: inset 0 0 0 1.5px rgba(255,77,77,.55);
+}
+main[data-bn-view] [data-bn-region="grid"] > [role="group"][data-solved] { opacity: .92; cursor: default; }
+main[data-bn-view] [data-bn-region="grid"] > [role="group"][data-busted] { opacity: .85; }
+main[data-bn-view] [data-bn-region="grid"] > [role="group"][data-shake] { animation: t4-shake .35s; }
+@keyframes t4-shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+
+main[data-bn-view] [data-bn-region="row"],
+main[data-bn-view] [data-bn-region="past"] { display: flex; gap: 4px; }
+main[data-bn-view] [data-bn-region="history"] { display: flex; flex-direction: column; gap: 4px; }
+main[data-bn-view] [data-bn-region="history-strip"] { display: flex; flex-direction: column; gap: 2px; }
+main[data-bn-view] [data-bn-region="past-mini"] { display: flex; gap: 2px; }
+main[data-bn-view] [data-bn-region="past-mini"] [data-bn-region="tile"] {
+  width: 10px; height: 6px; border-radius: 2px; font-size: 0; border: none;
+}
+
+main[data-bn-view] [data-bn-region="tile"] {
+  width: clamp(34px, 8.6vw, 42px); height: clamp(40px, 10.5vw, 48px);
   border-radius: 5px; display: flex; align-items: center; justify-content: center;
-  font-family: 'Bebas Neue', sans-serif; font-size: clamp(22px, 5.5vw, 28px);
-  user-select: none; flex-shrink: 0;
-  transition: background .25s, color .25s, transform .25s; position: relative;
-  background: #1E1B17; border: 1.5px solid #2A2724; color: transparent;
+  font-family: 'Bebas Neue', sans-serif; font-size: clamp(21px, 5.2vw, 27px);
+  user-select: none; flex-shrink: 0; position: relative;
+  background: #1E1B17; border: 1.5px solid #2A2724; color: #F0EDE4;
+  transition: background .2s, color .2s, border-color .2s, transform .2s;
 }
-main[data-bn-view] [data-bn-region="grid"] [role="img"][data-on] {
+main[data-bn-view] [data-bn-region="tile"][data-locked],
+main[data-bn-view] [data-bn-region="tile"][data-solved] {
   background: #FFF3E0; color: #5C2A00; border-color: #FFF3E0;
   box-shadow: 0 2px 5px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.5);
 }
-main[data-bn-view] [data-bn-region="grid"] [role="img"][data-anchor] {
-  box-shadow: inset 0 -3px 0 #E8920A, 0 2px 5px rgba(0,0,0,.4);
+main[data-bn-view] [data-bn-region="tile"][data-solved] { background: #3F9D5B; color: #06170C; border-color: #3F9D5B; }
+main[data-bn-view] [data-bn-region="tile"][data-busted] { background: #2C2925; color: #988570; border-color: #2C2925; }
+main[data-bn-view] [data-bn-region="tile"][data-typed] { border-color: #E8920A; color: #F0EDE4; background: #241F18; }
+main[data-bn-view] [data-bn-region="tile"][data-allin-typed] { border-color: #FF6E6E; }
+main[data-bn-view] [data-bn-region="tile"][data-cursor] { border-color: #E8920A; border-style: dashed; }
+main[data-bn-view] [data-bn-region="tile"][data-wagered] { box-shadow: inset 0 -3px 0 #E8920A; }
+main[data-bn-view] [data-bn-region="tile"][data-wagered]::before {
+  content: "2×"; position: absolute; top: -7px; right: -5px;
+  font-family: 'DM Sans', sans-serif; font-size: 9px; font-weight: 700;
+  color: #1A0A00; background: #E8920A; border-radius: 6px; padding: 0 4px; line-height: 12px;
 }
-main[data-bn-view] [data-bn-region="grid"] [role="img"][data-just] { transform: translateY(-4px); }
-main[data-bn-view] [data-bn-region="grid"] [role="img"][data-unearned] {
-  background: #2C2925; color: #988570; border-color: #2C2925; box-shadow: none;
+main[data-bn-view] [data-bn-region="tile"][data-casc-pick] { border-color: #4EAF7C; border-style: dashed; cursor: pointer; }
+main[data-bn-view] [data-bn-region="tile"][data-casc-drop] { transform: translateY(-4px); }
+/* Frozen feedback on a past row. */
+main[data-bn-view] [data-bn-region="tile"][data-feedback="green"]  { background: #3F9D5B; color: #06170C; border-color: #3F9D5B; }
+main[data-bn-view] [data-bn-region="tile"][data-feedback="yellow"] { background: #E8B73B; color: #2B1D00; border-color: #E8B73B; }
+main[data-bn-view] [data-bn-region="tile"][data-feedback="absent"] { background: #3A332B; color: #9A9590; border-color: #3A332B; }
+main[data-bn-view] [data-bn-region="past"] [data-bn-region="tile"][data-staked]::before {
+  content: "2×"; position: absolute; top: -7px; right: -5px;
+  font-family: 'DM Sans', sans-serif; font-size: 9px; font-weight: 700;
+  color: #1A0A00; background: #E8920A; border-radius: 6px; padding: 0 4px; line-height: 12px;
 }
+main[data-bn-view] [data-bn-region="past"][data-fb-flip] [data-bn-region="tile"] { animation: t4-flip .6s; }
+@keyframes t4-flip { 0% { transform: rotateX(90deg); } 100% { transform: rotateX(0); } }
+main[data-bn-view] [data-bn-region="attempts"] {
+  font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; color: #988570;
+}
+main[data-bn-view] [data-bn-region="attempts"][data-tone="bust"] { color: #C97A2A; }
 @media (prefers-reduced-motion: reduce) {
-  main[data-bn-view] [data-bn-region="grid"] [role="img"] { transition: none; }
-  main[data-bn-view] [data-bn-region="grid"] [role="img"][data-just] { transform: none; }
-  main[data-bn-view] [data-bn-region="grid"][data-shake] { animation: none; }
+  main[data-bn-view] [data-bn-region="tile"] { transition: none; }
+  main[data-bn-view] [data-bn-region="grid"] > [role="group"][data-shake] { animation: none; }
+  main[data-bn-view] [data-bn-region="past"][data-fb-flip] [data-bn-region="tile"] { animation: none; }
 }
 
-/* SCOREBOARD — the game's one decision made visible. Lives on the left,
-   "Solve now for N" in the middle and big (it is the whole game: every
-   tile turned over takes ten off it), par on the right for scale. */
-main[data-bn-view] [data-bn-region="scoreboard"] {
-  width: 100%; max-width: 540px; margin: 0;
-  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px;
-  padding: 4px 10px;
+/* HINT — the one line under the category that says what to do next. */
+main[data-bn-view] [data-bn-region="play-hint"] {
+  width: 100%; max-width: 480px; text-align: center;
+  font-size: 12px; line-height: 1.45; color: #988570; min-height: 1.4em; transition: color .3s;
 }
-main[data-bn-view] [data-bn-region="lives"] {
-  font-size: 16px; letter-spacing: 3px; color: #E8920A; white-space: nowrap; justify-self: start;
-}
-main[data-bn-view] [data-bn-region="lives"] i { font-style: normal; transition: opacity .25s; }
-main[data-bn-view] [data-bn-region="lives"] i[data-lost] { opacity: .18; }
-main[data-bn-view] [data-bn-region="now"],
-main[data-bn-view] [data-bn-region="par"] {
-  display: flex; flex-direction: column; align-items: center; gap: 0;
-  font-variant-numeric: tabular-nums; line-height: 1;
-}
-main[data-bn-view] [data-bn-region="par"] { justify-self: end; }
-main[data-bn-view] [data-bn-region="now"] > small,
-main[data-bn-view] [data-bn-region="par"] > small {
-  font-size: 9px; letter-spacing: 1.6px; text-transform: uppercase; color: #988570;
-}
-main[data-bn-view] [data-bn-region="now"] > strong {
-  font-family: 'Bebas Neue', sans-serif; font-size: 40px; letter-spacing: 2px;
-  color: #F0EDE4; font-weight: 400; transition: color .25s;
-}
-main[data-bn-view] [data-bn-region="now"][data-under-par] > strong { color: #E8920A; }
-main[data-bn-view] [data-bn-region="par"] > strong {
-  font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 2px;
-  color: #C0BBB5; font-weight: 400;
-}
-
-/* COACH — one sentence under the board: what just happened and what the
-   next tap costs. It is the aria-live region too. */
-main[data-bn-view] [data-bn-region="coach"] {
-  width: 100%; max-width: 480px; min-height: 2.6em;
-  font-size: 13px; line-height: 1.45; color: #C0BBB5; text-align: center;
-  padding: 0 8px;
-}
-
-/* SOLVE — full width, the one primary action on the screen. */
-main[data-bn-view] [data-bn-region="solve"] { width: 100%; max-width: 540px; padding: 0 10px; }
-main[data-bn-view] [data-bn-region="solve"] [data-bn="button"] {
-  width: 100%; min-height: 52px;
-  font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 3px;
-}
-
+main[data-bn-view] [data-bn-region="play-hint"][data-active] { color: #C97A2A; }
+main[data-bn-view] [data-bn-region="play-hint"][data-allin] { color: #FF6E6E; }
 main[data-bn-view] [data-bn-region="play-meta"] {
   font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: #988570;
-  margin-bottom: 10px; text-align: center;
+  margin-bottom: 4px; text-align: center;
 }
 
-/* SOLVE SHEET — a native <dialog> with a text input, so the phone's own
-   keyboard comes up for the whole phrase. */
-[data-bn-region="solve-sheet"] [data-bn-region="solve-shape"] {
-  font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 3px;
-  color: #988570; text-align: center; margin: 0 0 10px; word-break: break-all;
+/* KNOWLEDGE READ-OUT — four stats and a sentence, under the grid. */
+main[data-bn-view] section[data-bn-region="knowledge"] {
+  width: 100%; max-width: 540px; display: flex; flex-direction: column; gap: 6px;
+  padding: 0 4px;
 }
-[data-bn-region="solve-sheet"] [data-bn-region="solve-input"] {
-  width: 100%; box-sizing: border-box;
-  font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 2px;
-  text-transform: uppercase; color: #F0EDE4; background: #0C0B09;
-  border: 1.5px solid #3A332B; border-radius: 6px; padding: 10px 12px; min-height: 48px;
+main[data-bn-view] [data-bn-region="knowledge"] > ul {
+  display: flex; gap: 6px; list-style: none; margin: 0; padding: 0;
 }
-[data-bn-region="solve-sheet"] [data-bn-region="solve-input"]:focus-visible {
-  outline: 2px solid #E8920A; outline-offset: 2px;
+main[data-bn-view] [data-bn-region="know-stat"] {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 6px 4px; background: #100F0D; border: 1px solid #1F1C18; border-radius: 8px;
 }
-[data-bn-region="solve-sheet"] [data-bn-region="solve-cost"] {
-  font-size: 12px; letter-spacing: .5px; color: #988570; text-align: center; margin: 10px 0 14px;
+main[data-bn-view] [data-bn-region="know-stat"] > strong {
+  font-family: 'Bebas Neue', sans-serif; font-size: 17px; letter-spacing: 1.5px; color: #F0EDE4; font-weight: 400;
 }
-[data-bn-region="solve-sheet"] [data-bn-region="solve-actions"] {
-  display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;
+main[data-bn-view] [data-bn-region="know-stat"] > small {
+  font-size: 8px; letter-spacing: 1.1px; color: #9A9590; text-transform: uppercase; text-align: center;
 }
+main[data-bn-view] [data-bn-region="know-stat"][data-tone="attempts"] > strong { color: #E8920A; }
+main[data-bn-view] [data-bn-region="know-hint"] { font-size: 11px; color: #9A9590; text-align: center; line-height: 1.4; }
+
+/* LETTER BANK — what is known to be in the phrase / not in this word. */
+main[data-bn-view] section[data-bn-region="bank"] {
+  width: 100%; max-width: 540px; display: flex; flex-direction: column; gap: 4px; padding: 0 6px;
+}
+main[data-bn-view] [data-bn-region="bank-present"],
+main[data-bn-view] [data-bn-region="bank-absent"] { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+main[data-bn-view] section[data-bn-region="bank"] [data-bn-role="label"] {
+  font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; color: #988570; margin-right: 2px;
+}
+main[data-bn-view] section[data-bn-region="bank"] [data-bn-chip] {
+  font-family: 'Bebas Neue', sans-serif; font-size: 13px; letter-spacing: 1px;
+  padding: 1px 6px; border-radius: 4px;
+}
+main[data-bn-view] section[data-bn-region="bank"] [data-bn-chip="yellow"] { background: #E8B73B; color: #2B1D00; }
+main[data-bn-view] section[data-bn-region="bank"] [data-bn-chip="absent"] { background: #3A332B; color: #9A9590; }
+
+/* KEYBOARD ACTIONS — ALL IN and the stake read-out, on the keyboard card. */
+main[data-bn-view] [data-bn-region="kb-actions"] {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px;
+}
+main[data-bn-view] button[data-bn-action="all-in"] {
+  font-family: 'Bebas Neue', sans-serif; font-size: 13px; letter-spacing: 2px;
+  color: #FF6E6E; background: transparent; border: 1.5px solid rgba(255,77,77,.5); border-radius: 100px;
+  padding: 6px 14px; min-height: 34px; cursor: pointer; transition: background .15s, transform .1s;
+}
+main[data-bn-view] button[data-bn-action="all-in"]:hover { background: rgba(255,77,77,.1); }
+main[data-bn-view] button[data-bn-action="all-in"][data-on] { background: #FF4D4D; color: #1A0000; border-color: #FF4D4D; }
+main[data-bn-view] button[data-bn-action="all-in"]:disabled { opacity: .4; cursor: default; }
+main[data-bn-view] [data-bn-region="stake-label"] {
+  font-family: 'Bebas Neue', sans-serif; font-size: 12px; letter-spacing: 1.5px; color: #E8920A;
+}
+main[data-bn-view] section[data-bn-region="keyboard"][data-allin] { border-color: rgba(255,77,77,.5); }
 
 /* END CARD — the "how" line under the verdict. */
 [data-bn-region="how"] { font-size: 13px; color: #C9C2B6; margin: 4px 0 8px; }
@@ -988,12 +1021,12 @@ main[data-bn-view] [data-bn-region="play-meta"] {
   color: #E8920A; margin-bottom: 10px;
 }
 
-/* KEYBOARD — in flow, directly under Solve, and sticky to the bottom
+/* KEYBOARD — in flow, directly under the bank, and sticky to the bottom
    edge. On a phone, where the page overflows, that pins it within thumb
    reach exactly as the old fixed card did; on a desktop, where it
    doesn't, it sits right under the board instead of floating at the
-   bottom of a tall empty window (which is what the owner saw). Letters
-   only — see src/lib/keyboard-layout.js. */
+   bottom of a tall empty window (which is what the owner saw). QWERTY
+   with ENTER and ⌫ — see src/lib/keyboard-layout.js. */
 main[data-bn-view] section[data-bn-region="keyboard"] {
   position: sticky; bottom: 0; z-index: 30;
   width: 100%; max-width: 568px;

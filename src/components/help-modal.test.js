@@ -77,20 +77,29 @@ describe("helpDialogHtml", () => {
     assert.doesNotMatch(html, /data-bn="dialog-title"/);
   });
 
-  it("explains the two key states without relying on colour", () => {
+  it("explains the three key states without relying on colour", () => {
     const html = helpDialogHtml();
-    assert.match(html, /in the phrase, turned over/);
-    assert.match(html, /not in the phrase/);
+    assert.match(html, /confirmed here/i);
+    assert.match(html, /known to be in the phrase/i);
+    assert.match(html, /ruled out of this word/i);
     assert.match(html, /&check;|✓/);
+    assert.match(html, /&#9670;|◆/);
     assert.match(html, /&#10005;|✕/);
   });
 
-  it("states the v2 rules: five lives, a wrong solve costs one, ten a hidden letter, par", () => {
+  it("states the rules: attempts per word, a bust reveals and the round goes on, stakes, reveals, ALL IN, par", () => {
     const html = helpDialogHtml();
-    assert.match(html, /one of five lives/i);
-    assert.match(html, /wrong costs one life and reveals nothing/i);
-    assert.match(html, /still hidden when you solve is worth/i);
+    assert.match(html, /attempts are per word/i);
+    assert.match(html, /three for a short word, four for a middling one, five for a long one/i);
+    assert.match(html, /busted/i);
+    assert.match(html, /the round carries on/i);
+    assert.match(html, /right pays double \(\+10\)\. wrong costs 5/i);
+    assert.match(html, /no attempt is spent for the stake/i);
+    assert.match(html, /clean solves earn/i);
+    assert.match(html, /ALL IN/);
+    assert.match(html, /\+8 for every tile still hidden/i);
     assert.match(html, /par/i);
-    assert.doesNotMatch(html, /stake|cascade|ALL IN|four lives/i);
+    assert.doesNotMatch(html, /four lives|one of five lives|SHOVE/i);
   });
+
 });

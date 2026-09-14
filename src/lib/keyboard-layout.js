@@ -1,31 +1,22 @@
-/* The play keyboard's layout — letters only.
+/* The play keyboard: QWERTY with ENTER and ⌫, because this is a game you
+   type words into — a letter goes into the active word's next open tile,
+   backspace takes it out, ENTER submits the word. (A letters-only layout
+   shipped briefly with the reveal-a-letter experiment and was rejected
+   with it.) */
 
-   @basenative/keyboard's stock qwerty carries ENT and ⌫, which are
-   Wordle's keys: you type a word, edit it, submit it. Tabs has no word
-   to edit. A tap on a letter IS the move (it turns that letter over,
-   everywhere, at once — or costs a life), and solving happens in its own
-   sheet with the phone's real keyboard. Two dead keys on the most-used
-   surface of the game read as "something here isn't wired", which is
-   exactly what the owner reported. So: three rows of letters, nothing
-   else. The physical Enter key still opens Solve (src/views/play.js). */
+import { renderKeyboard } from "@basenative/keyboard";
 
-import { defineLayout, renderKeyboard } from "@basenative/keyboard";
+export const PLAY_LAYOUT = "qwerty";
 
-export const LETTER_LAYOUT = defineLayout([
-  ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
-  ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
-  ["Z", "X", "C", "V", "B", "N", "M"],
-], { name: "letters" });
-
-/* SSR-safe markup for the same keyboard the client hydrates, so the
-   first paint already shows the letters instead of an empty box under
-   the board. The id is pinned so the server and client emit one
-   document, not two ids for one region. */
+/* SSR-safe markup for the same keyboard the client hydrates, so the first
+   paint already shows the keys. The id is pinned so server and client emit
+   one document. Disabled until hydration wires it. */
 export function renderPlayKeyboard() {
   return renderKeyboard({
     id: "play-kb",
-    layout: LETTER_LAYOUT,
-    label: "Letters",
+    layout: PLAY_LAYOUT,
+    primary: "ENTER",
+    label: "On-screen keyboard",
     disabled: true,
   });
 }

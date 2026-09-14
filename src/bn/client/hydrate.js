@@ -118,7 +118,7 @@ const authOpen = signal(false);
 /* The round as the client holds it — one server view, not nine derived
    signals (see lib/session-state.js). */
 const round = createSessionState();
-const { session, phase, score, lives, tokens } = round;
+const { session, score, lives, tokens } = round;
 /* Server's answer to "what is today's puzzle, and where does this
    player stand?" — see GET /api/daily. The client no longer picks a
    daily; it renders this. */
@@ -376,7 +376,7 @@ async function shareResult({ won }) {
   try {
     const s = session();
     if (!s?.words) return "Couldn't share";
-    const grid = shareGrid(s);
+    const grid = shareGrid({ session: s, locked: round.locked(), busted: round.busted(), guessLog: round.guessLog() });
 
     let shareUrl = "https://t4bs.com";
     try {
@@ -640,7 +640,7 @@ effect(() => {
       return;
     }
     mount(viewSlot, createPlay({
-      session, phase, apply: round.apply,
+      round,
       toaster,
       onResultRecorded: recordResultPersist,
       onDailyUpdate: daily.set,

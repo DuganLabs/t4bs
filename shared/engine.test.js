@@ -1,10 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createEngine } from "./engine.js";
-import { parFor, scoreFor, normalizePhrase, LIVES } from "./pure.js";
+import { attemptsFor, evalWord, parFor, scoreGuess } from "./pure.js";
 
-/* In-memory stores with the exact interface functions/_shared/d1.js
-   implements. State is copied on the way in and out, as D1 JSON would be. */
+/* In-memory stores. */
 const createMockStores = () => {
   const puzzles = new Map();
   const sessions = new Map();
@@ -15,262 +14,271 @@ const createMockStores = () => {
       add(id, puzzle) { puzzles.set(id, puzzle); },
     },
     sessions: {
-      async create(id, state) { sessions.set(id, JSON.parse(JSON.stringify(state))); },
-      async get(id) { const s = sessions.get(id); return s ? JSON.parse(JSON.stringify(s)) : null; },
-      async save(id, state) { sessions.set(id, JSON.parse(JSON.stringify(state))); },
-      raw(id) { return sessions.get(id); },
+      async create(id, state) { sessions.set(id, structuredClone(state)); },
+      async get(id) { const s = sessions.get(id); return s ? structuredClone(s) : null; },
+      async save(id, state) { sessions.set(id, structuredClone(state)); },
     },
   };
 };
 
-/* HAPPILY EVER AFTER — 16 letters. Anchors H (0:0) and A (2:0); A appears
-   twice, so the anchors reveal 3 tiles and leave 13 hidden. */
 function puzzle(overrides = {}) {
   return {
-    id: 9,
-    category: "FAIRY TALES",
-    phrase: "HAPPILY EVER AFTER",
-    submittedBy: "house",
-    approved: true,
-    anchors: [{ wi: 0, li: 0 }, { wi: 2, li: 0 }],   // H, A
+    id: "p1", phrase: "HELLO WORLD", category: "Test", submittedBy: "house", approved: true,
+    anchors: [{ wi: 0, li: 0 }, { wi: 1, li: 0 }],   // H…, W…
     ...overrides,
   };
 }
 
-async function fresh(overrides) {
+async function fresh(overrides = {}, engineOpts = {}) {
   const stores = createMockStores();
-  const finishes = [];
-  stores.puzzles.add(9, puzzle(overrides));
-  const engine = createEngine({ ...stores, onFinish: info => { finishes.push(info); } });
-  const start = await engine.startSession(9, { mode: "free" });
-  return { stores, engine, start, finishes, id: start.sessionId };
+  stores.puzzles.add("p1", puzzle(overrides));
+  const engine = createEngine({ ...stores, ...engineOpts });
+  const s = await engine.startSession("p1");
+  return { stores, engine, s };
 }
 
-describe("pure", () => {
-  it("normalises a solve attempt the way a phone types it", () => {
-    assert.equal(normalizePhrase("  happily,  ever-after! "), "HAPPILY EVER AFTER");
+/* Letters for the OPEN tiles of a word, given the full word guess. */
+function open(fullGuess, lockedMap) {
+  return fullGuess.split("").filter((_, i) => lockedMap[i] === undefined);
+}
+
+describe("pure rules", () => {
+  it("attempts per word: 3 for 1–3 letters, 4 for 4–6, 5 for 7+", () => {
+    assert.deepEqual([1, 3, 4, 6, 7, 12].map(attemptsFor), [3, 3, 4, 4, 5, 5]);
   });
-  it("scores hidden tiles and kept lives", () => {
-    assert.equal(scoreFor(8, 3), 8 * 10 + 3 * 5);
-    assert.equal(scoreFor(0, 5), 25);
-    assert.equal(scoreFor(-1, -1), 0);
+
+  it("evalWord: green, yellow with duplicates handled, absent", () => {
+    assert.deepEqual(evalWord("HELLO".split(""), "HELLO"), ["green", "green", "green", "green", "green"]);
+    assert.deepEqual(evalWord("OLLEH".split(""), "HELLO"), ["yellow", "yellow", "green", "yellow", "yellow"]);
+    // Two Ls in the target: one is the green at index 2, the other backs ONE yellow.
+    assert.deepEqual(evalWord("LLLXX".split(""), "HELLO"), ["yellow", "absent", "green", "absent", "absent"]);
   });
-  it("derives par from the non-anchor tiles when a puzzle carries none", () => {
-    // Anchors H and A reveal 3 of 16 tiles → 13 hidden → round(6.5)=7 → 70 + 15.
-    assert.equal(parFor(puzzle()), 85);
+
+  it("scoreGuess: +5 green, −1 wrong, a stake doubles to +10 / −5, locked tiles never score", () => {
+    assert.equal(scoreGuess(["green", "absent", "yellow"], [], {}), 5 - 1 - 1);
+    assert.equal(scoreGuess(["green", "absent"], [0], {}), 10 - 1);
+    assert.equal(scoreGuess(["green", "absent"], [1], {}), 5 - 5);
+    assert.equal(scoreGuess(["green", "green"], [], { 0: "H" }), 5);
   });
-  it("prefers a puzzle's own par", () => {
-    assert.equal(parFor(puzzle({ par: 120 })), 120);
+
+  it("par is a clean solve: 5 per non-anchor tile + 10 per word, unless the puzzle sets its own", () => {
+    assert.equal(parFor(puzzle()), (10 - 2) * 5 + 2 * 10);
+    assert.equal(parFor(puzzle({ par: 77 })), 77);
   });
 });
 
-describe("startSession", () => {
-  it("never sends the phrase, and describes the board by shape", async () => {
-    const { start } = await fresh();
-    assert.equal(start.error, undefined);
-    assert.equal(JSON.stringify(start).includes("HAPPILY"), false);
-    assert.deepEqual(start.words, [7, 4, 5]);
-    assert.equal(start.totalLetters, 16);
-    assert.equal(start.lives, LIVES);
-    assert.equal(start.finished, null);
-    assert.equal(start.reveal, null);
-    assert.equal(start.par, parFor(puzzle()));
+describe("startSession / resumeSession", () => {
+  it("opens with anchors locked, per-word attempts, nothing busted, and no answer", async () => {
+    const { s } = await fresh();
+    assert.deepEqual(s.words, [5, 5]);
+    assert.deepEqual(s.attempts, [4, 4]);
+    assert.deepEqual(s.attemptsMax, [4, 4]);
+    assert.deepEqual(s.busted, [false, false]);
+    assert.deepEqual(s.locked, [{ 0: "H" }, { 0: "W" }]);
+    assert.deepEqual(s.anchors, [{ wi: 0, li: 0, letter: "H" }, { wi: 1, li: 0, letter: "W" }]);
+    assert.equal(s.reveal, null);
+    assert.equal(s.finished, null);
+    assert.equal(s.mode, "free");
+    assert.ok(!("phrase" in s));
   });
 
-  it("reveals an anchor's letter in every tile it occurs, not just the anchored one", async () => {
-    const { start } = await fresh();
-    assert.deepEqual(start.revealed, ["A", "H"]);
-    // HAPPILY: H A _ _ _ _ _ ; EVER: _ _ _ _ ; AFTER: A _ _ _ _
-    assert.deepEqual(start.board[0], ["H", "A", null, null, null, null, null]);
-    assert.deepEqual(start.board[1], [null, null, null, null]);
-    assert.deepEqual(start.board[2], ["A", null, null, null, null]);
-    assert.equal(start.hiddenCount, 13);
-    assert.equal(start.scoreIfSolved, scoreFor(13, LIVES));
+  it("resume returns the same view, including the full guess history", async () => {
+    const { engine, s } = await fresh();
+    await engine.submitGuess(s.sessionId, 0, open("HELLO", s.locked[0]));
+    const r = await engine.resumeSession(s.sessionId);
+    assert.equal(r.wordSolved[0], true);
+    assert.equal(r.guessLog.length, 1);
+    assert.deepEqual(r.guessLog[0].letters, ["H", "E", "L", "L", "O"]);
+    assert.deepEqual(r.guessLog[0].feedback, ["green", "green", "green", "green", "green"]);
   });
 
-  it("errors on an unknown puzzle", async () => {
-    const stores = createMockStores();
-    const engine = createEngine(stores);
-    assert.deepEqual(await engine.startSession(404), { error: "puzzle-not-found" });
-  });
-
-  it("issues distinct ids", async () => {
-    const a = await fresh(); const b = await fresh();
-    assert.notEqual(a.id, b.id);
-  });
-});
-
-describe("guessLetter", () => {
-  it("turns over every instance of a hit and costs nothing", async () => {
-    const { engine, id } = await fresh();
-    const r = await engine.guessLetter(id, "e");
-    assert.equal(r.hit, true);
-    assert.equal(r.repeat, false);
-    assert.deepEqual(r.positions, [{ wi: 1, li: 0 }, { wi: 1, li: 2 }, { wi: 2, li: 3 }]);
-    assert.equal(r.lives, LIVES);
-    assert.deepEqual(r.board[1], ["E", null, "E", null]);
-    assert.equal(r.hiddenCount, 10);
-  });
-
-  it("a miss costs one life and reveals nothing", async () => {
-    const { engine, id } = await fresh();
-    const r = await engine.guessLetter(id, "Z");
-    assert.equal(r.hit, false);
-    assert.equal(r.lives, LIVES - 1);
-    assert.deepEqual(r.missed, ["Z"]);
-    assert.equal(r.hiddenCount, 13);
-    assert.equal(r.finished, null);
-  });
-
-  it("a repeated letter is a no-op — no life, no change", async () => {
-    const { engine, id } = await fresh();
-    await engine.guessLetter(id, "Z");
-    const again = await engine.guessLetter(id, "Z");
-    assert.equal(again.repeat, true);
-    assert.equal(again.lives, LIVES - 1);
-    const anchor = await engine.guessLetter(id, "H");
-    assert.equal(anchor.repeat, true);
-    assert.equal(anchor.hit, true);
-    assert.equal(anchor.lives, LIVES - 1);
-  });
-
-  it("rejects anything that is not one letter", async () => {
-    const { engine, id } = await fresh();
-    for (const bad of ["", "AB", "1", " ", null, undefined]) {
-      assert.deepEqual(await engine.guessLetter(id, bad), { error: "bad-letter" });
-    }
-  });
-
-  it("five misses lose the round, reveal the phrase, and score nothing", async () => {
-    const { engine, id, finishes } = await fresh();
-    let r;
-    for (const ch of "ZXQJK") r = await engine.guessLetter(id, ch);
-    assert.equal(r.lives, 0);
-    assert.equal(r.finished, "lost");
-    assert.equal(r.score, 0);
-    assert.deepEqual(r.reveal, ["HAPPILY", "EVER", "AFTER"]);
-    assert.deepEqual(r.board[1], ["E", "V", "E", "R"]);
-    assert.equal(finishes.length, 1);
-    assert.equal(finishes[0].outcome, "lost");
-  });
-
-  it("revealing every letter wins — for the lives alone", async () => {
-    const { engine, id, finishes } = await fresh();
-    let r;
-    for (const ch of "EPILYVFTR") r = await engine.guessLetter(id, ch);
-    assert.equal(r.finished, "won");
-    assert.equal(r.hiddenCount, 0);
-    assert.equal(r.score, scoreFor(0, LIVES));
-    assert.equal(finishes.length, 1);
-  });
-
-  it("refuses moves on a finished round", async () => {
-    const { engine, id } = await fresh();
-    for (const ch of "ZXQJK") await engine.guessLetter(id, ch);
-    assert.deepEqual(await engine.guessLetter(id, "E"), { error: "finished" });
-    assert.deepEqual(await engine.solve(id, "happily ever after"), { error: "finished" });
-  });
-});
-
-describe("solve", () => {
-  it("a correct solve scores the hidden tiles and the kept lives", async () => {
-    const { engine, id, finishes } = await fresh();
-    await engine.guessLetter(id, "E");         // 10 hidden now
-    const r = await engine.solve(id, "happily ever after");
-    assert.equal(r.correct, true);
-    assert.equal(r.finished, "won");
-    assert.equal(r.hiddenAtSolve, 10);
-    assert.equal(r.score, scoreFor(10, LIVES));
-    assert.deepEqual(r.reveal, ["HAPPILY", "EVER", "AFTER"]);
-    assert.equal(r.par, parFor(puzzle()));
-    assert.equal(finishes.length, 1);
-    assert.equal(finishes[0].outcome, "won");
-    assert.equal(finishes[0].state.score, r.score);
-  });
-
-  it("solving from the anchors alone is the maximum", async () => {
-    const { engine, id, start } = await fresh();
-    const r = await engine.solve(id, "HAPPILY EVER AFTER");
-    assert.equal(r.score, start.scoreIfSolved);
-    assert.equal(r.score, scoreFor(13, LIVES));
-  });
-
-  it("a wrong solve costs one life and reveals nothing", async () => {
-    const { engine, id } = await fresh();
-    const r = await engine.solve(id, "happily ever laughter");
-    assert.equal(r.correct, false);
-    assert.equal(r.lives, LIVES - 1);
-    assert.equal(r.finished, null);
-    assert.equal(r.reveal, null);
-    assert.equal(r.hiddenCount, 13);
-    assert.equal(r.solveAttempts, 1);
-  });
-
-  it("a wrong solve on the last life loses the round", async () => {
-    const { engine, id, finishes } = await fresh();
-    for (const ch of "ZXQJ") await engine.guessLetter(id, ch);
-    const r = await engine.solve(id, "nope nope nope");
-    assert.equal(r.lives, 0);
-    assert.equal(r.finished, "lost");
-    assert.equal(r.score, 0);
-    assert.deepEqual(r.reveal, ["HAPPILY", "EVER", "AFTER"]);
-    assert.equal(finishes.length, 1);
-  });
-
-  it("ignores case, punctuation and spacing in the attempt", async () => {
-    const { engine, id } = await fresh();
-    const r = await engine.solve(id, "  Happily,   ever AFTER. ");
-    assert.equal(r.correct, true);
-  });
-
-  it("rejects an empty attempt without spending anything", async () => {
-    const { engine, id } = await fresh();
-    assert.deepEqual(await engine.solve(id, "   "), { error: "empty-solve" });
-    const v = await engine.resumeSession(id);
-    assert.equal(v.lives, LIVES);
-    assert.equal(v.solveAttempts, 0);
-  });
-});
-
-describe("resumeSession", () => {
-  it("returns the board as it stands, phrase still hidden", async () => {
-    const { engine, id } = await fresh();
-    await engine.guessLetter(id, "E");
-    await engine.guessLetter(id, "Z");
-    const v = await engine.resumeSession(id);
-    assert.equal(v.sessionId, id);
-    assert.equal(v.lives, LIVES - 1);
-    assert.deepEqual(v.revealed, ["A", "E", "H"]);
-    assert.deepEqual(v.missed, ["Z"]);
-    assert.equal(v.reveal, null);
-    assert.equal(JSON.stringify(v).includes("HAPPILY"), false);
-  });
-
-  it("carries mode and day for the daily bookkeeping", async () => {
-    const stores = createMockStores();
-    stores.puzzles.add(9, puzzle());
-    const engine = createEngine(stores);
-    const s = await engine.startSession(9, { mode: "daily", day: "2026-09-13", playerKey: "a:1" });
-    assert.equal(s.mode, "daily");
-    assert.equal(s.day, "2026-09-13");
-    assert.equal(stores.sessions.raw(s.sessionId).playerKey, "a:1");
-  });
-
-  it("errors on an unknown session", async () => {
+  it("refuses an unknown puzzle and an unknown session", async () => {
     const { engine } = await fresh();
-    assert.deepEqual(await engine.resumeSession("nope"), { error: "no-session" });
+    assert.equal((await engine.startSession("nope")).error, "puzzle-not-found");
+    assert.equal((await engine.resumeSession("nope")).error, "no-session");
   });
 });
 
-describe("onFinish", () => {
-  it("fires once per round and never fails it", async () => {
-    const stores = createMockStores();
-    stores.puzzles.add(9, puzzle());
-    let calls = 0;
-    const engine = createEngine({ ...stores, onFinish: () => { calls++; throw new Error("bookkeeping down"); } });
-    const s = await engine.startSession(9);
-    const r = await engine.solve(s.sessionId, "happily ever after");
+describe("submitGuess — the word-guessing loop", () => {
+  it("a correct word locks, scores 5 per new green + 10, earns a cascade token when clean", async () => {
+    const { engine, s } = await fresh();
+    const r = await engine.submitGuess(s.sessionId, 0, open("HELLO", s.locked[0]));
+    assert.deepEqual(r.feedback, ["green", "green", "green", "green", "green"]);
+    assert.equal(r.scoreDelta, 4 * 5 + 10);
+    assert.equal(r.wordSolved[0], true);
+    assert.equal(r.cascadeEarned, true);
+    assert.equal(r.tokens, 1);
+    assert.equal(r.attempts[0], 4, "a hit spends nothing");
+  });
+
+  it("a miss spends one attempt on THAT word only, locks its greens, records absent letters", async () => {
+    const { engine, s } = await fresh();
+    const r = await engine.submitGuess(s.sessionId, 0, open("HEXXY", s.locked[0]));
+    assert.deepEqual(r.feedback, ["green", "green", "absent", "absent", "absent"]);
+    assert.deepEqual(r.attempts, [3, 4]);
+    assert.deepEqual(r.locked[0], { 0: "H", 1: "E" });
+    assert.deepEqual(r.absentByWord[0].sort(), ["X", "Y"]);
+    assert.ok(r.presentGlobal.includes("E"));
+    assert.equal(r.finished, null);
+  });
+
+  it("a yellow letter joins presentGlobal for every word", async () => {
+    const { engine, s } = await fresh();
+    const r = await engine.submitGuess(s.sessionId, 0, open("HOXXX", s.locked[0]));
+    assert.equal(r.feedback[1], "yellow");
+    assert.ok(r.presentGlobal.includes("O"));
+  });
+
+  it("the next guess only fills the OPEN tiles — greens stay locked", async () => {
+    const { engine, s } = await fresh();
+    const a = await engine.submitGuess(s.sessionId, 0, open("HEXXY", s.locked[0]));
+    const b = await engine.submitGuess(s.sessionId, 0, ["L", "L", "O"]);
+    assert.equal(b.wordSolved[0], true);
+    assert.equal(b.cascadeEarned, false, "not clean — there was a miss before");
+    assert.equal(a.attempts[0], 3);
+  });
+
+  it("running a word out of attempts busts it: revealed, round continues", async () => {
+    const { engine, s } = await fresh();
+    let r;
+    for (let i = 0; i < 4; i++) r = await engine.submitGuess(s.sessionId, 0, ["X", "X", "X", "X"]);
+    assert.equal(r.bustedNow, true);
+    assert.equal(r.busted[0], true);
+    assert.equal(r.attempts[0], 0);
+    assert.deepEqual(r.locked[0], { 0: "H", 1: "E", 2: "L", 3: "L", 4: "O" }, "the busted word is revealed");
+    assert.equal(r.finished, null, "the other word is still open");
+    assert.equal((await engine.submitGuess(s.sessionId, 0, [])).error, "word-busted");
+  });
+
+  it("ends Solved when every word is green", async () => {
+    const { engine, s } = await fresh();
+    await engine.submitGuess(s.sessionId, 0, open("HELLO", s.locked[0]));
+    const r = await engine.submitGuess(s.sessionId, 1, open("WORLD", s.locked[1]));
     assert.equal(r.finished, "won");
-    assert.equal(calls, 1);
+    assert.deepEqual(r.reveal, ["HELLO", "WORLD"]);
+  });
+
+  it("ends lost only once every word is resolved and at least one was busted", async () => {
+    const { engine, s } = await fresh();
+    for (let i = 0; i < 4; i++) await engine.submitGuess(s.sessionId, 0, ["X", "X", "X", "X"]);
+    const r = await engine.submitGuess(s.sessionId, 1, open("WORLD", s.locked[1]));
+    assert.equal(r.wordSolved[1], true);
+    assert.equal(r.finished, "lost");
+    assert.deepEqual(r.reveal, ["HELLO", "WORLD"]);
+  });
+
+  it("rejects a finished round, a solved word, a wrong-sized guess and a bad index", async () => {
+    const { engine, s } = await fresh();
+    assert.equal((await engine.submitGuess(s.sessionId, 0, ["A"])).error, "incomplete-guess");
+    assert.equal((await engine.submitGuess(s.sessionId, 5, ["A"])).error, "bad-word-index");
+    await engine.submitGuess(s.sessionId, 0, open("HELLO", s.locked[0]));
+    assert.equal((await engine.submitGuess(s.sessionId, 0, ["A", "B", "C", "D"])).error, "word-already-solved");
+    await engine.submitGuess(s.sessionId, 1, open("WORLD", s.locked[1]));
+    assert.equal((await engine.submitGuess(s.sessionId, 1, ["A", "B", "C", "D"])).error, "finished");
+  });
+
+  it("score never drops below zero", async () => {
+    const { engine, s } = await fresh();
+    const r = await engine.submitGuess(s.sessionId, 0, ["X", "X", "X", "X"], [0, 1, 2, 3]);
+    assert.equal(r.score, 0);
+    assert.equal(r.scoreDelta, -20);
+  });
+
+  it("records every attempt in full, in order", async () => {
+    const { engine, s } = await fresh();
+    await engine.submitGuess(s.sessionId, 0, open("HEXXY", s.locked[0]));
+    const r = await engine.submitGuess(s.sessionId, 0, ["L", "L", "O"]);
+    assert.equal(r.guessLog.length, 2);
+    assert.deepEqual(r.guessLog[0], { wi: 0, letters: ["H", "E", "X", "X", "Y"], feedback: ["green", "green", "absent", "absent", "absent"], allGreen: false, staked: [] });
+    assert.equal(r.guessLog[1].allGreen, true);
+  });
+});
+
+describe("stakes — a score bet, not a life (proposal §3.2)", () => {
+  it("a right staked tile pays double", async () => {
+    const { engine, s } = await fresh();
+    const r = await engine.submitGuess(s.sessionId, 0, open("HELLO", s.locked[0]), [0]);
+    assert.equal(r.scoreDelta, 10 + 5 + 5 + 5 + 10);
+    assert.equal(r.stakeBusted, false);
+  });
+
+  it("a wrong staked tile costs 5 and no attempt beyond the miss itself", async () => {
+    const { engine, s } = await fresh();
+    const r = await engine.submitGuess(s.sessionId, 0, open("HEXLO", s.locked[0]), [1]);   // stake on X
+    assert.equal(r.stakeBusted, true);
+    assert.equal(r.scoreDelta, 5 + (-5) + 5 + 5);
+    assert.equal(r.attempts[0], 3, "one attempt for the miss, none for the stake");
+  });
+});
+
+describe("cascade", () => {
+  it("spends a token to reveal one tile, and can complete a word", async () => {
+    const { engine, s } = await fresh();
+    await engine.submitGuess(s.sessionId, 0, open("HELLO", s.locked[0]));   // clean → token
+    await engine.submitGuess(s.sessionId, 1, open("WORLX", s.locked[1]));   // O R L green
+    const r = await engine.spendCascade(s.sessionId, 1, 4);
+    assert.equal(r.tokens, 0);
+    assert.equal(r.locked[1][4], "D");
+    assert.equal(r.wordSolved[1], true, "the reveal completed the word");
+    assert.equal(r.finished, "won");
+  });
+
+  it("refuses without a token, on a locked tile, on a solved or busted word", async () => {
+    const { engine, s } = await fresh();
+    assert.equal((await engine.spendCascade(s.sessionId, 1, 1)).error, "no-tokens");
+    await engine.submitGuess(s.sessionId, 0, open("HELLO", s.locked[0]));
+    assert.equal((await engine.spendCascade(s.sessionId, 1, 0)).error, "already-locked");
+    assert.equal((await engine.spendCascade(s.sessionId, 0, 1)).error, "word-already-solved");
+  });
+});
+
+describe("ALL IN", () => {
+  it("right: +8 per hidden tile, Solved", async () => {
+    const { engine, s } = await fresh();
+    const r = await engine.allIn(s.sessionId, ["hello", "world"]);
+    assert.equal(r.correct, true);
+    assert.equal(r.scoreDelta, 8 * 8);
+    assert.equal(r.finished, "won");
+  });
+
+  it("wrong: every unsolved word is busted and the round is Finished", async () => {
+    const { engine, s } = await fresh();
+    await engine.submitGuess(s.sessionId, 0, open("HELLO", s.locked[0]));
+    const r = await engine.allIn(s.sessionId, ["HELLO", "WORLX"]);
+    assert.equal(r.correct, false);
+    assert.deepEqual(r.busted, [false, true]);
+    assert.equal(r.finished, "lost");
+    assert.deepEqual(r.reveal, ["HELLO", "WORLD"]);
+  });
+
+  it("rejects a shape mismatch", async () => {
+    const { engine, s } = await fresh();
+    assert.equal((await engine.allIn(s.sessionId, ["HELLO"])).error, "shape-mismatch");
+    assert.equal((await engine.allIn(s.sessionId, ["HELLO", "WORL"])).error, "shape-mismatch");
+  });
+});
+
+describe("mode + the finish hook", () => {
+  it("tags a daily session and fires onFinish exactly once, after the save", async () => {
+    const calls = [];
+    const stores = createMockStores();
+    stores.puzzles.add("p1", puzzle());
+    const engine = createEngine({ ...stores, onFinish: async (info) => { calls.push(info); } });
+    const s = await engine.startSession("p1", { mode: "daily", day: "2026-09-14", playerKey: "pk" });
+    assert.equal(s.mode, "daily");
+    assert.equal(s.day, "2026-09-14");
+    await engine.submitGuess(s.sessionId, 0, open("HELLO", s.locked[0]));
+    assert.equal(calls.length, 0);
+    await engine.submitGuess(s.sessionId, 1, open("WORLD", s.locked[1]));
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].outcome, "won");
+    assert.equal(calls[0].state.playerKey, "pk");
+    assert.equal((await stores.sessions.get(s.sessionId)).finished, "won");
+  });
+
+  it("a recorder failure never fails the round", async () => {
+    const { engine, s } = await fresh({}, { onFinish: async () => { throw new Error("boom"); } });
+    const r = await engine.allIn(s.sessionId, ["HELLO", "WORLD"]);
+    assert.equal(r.finished, "won");
   });
 });

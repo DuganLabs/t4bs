@@ -28,8 +28,10 @@ export const api = {
   /* v2: two moves. One letter against the whole phrase, or the whole
      phrase. The server decides everything and never returns the answer
      until the round is finished. */
-  letter:       (sessionId, letter)                => post("/letter",  { sessionId, letter }),
-  solve:        (sessionId, phrase)                => post("/solve",   { sessionId, phrase }),
+  guess:        (sessionId, wordIndex, letters, wagers = []) =>
+                                                      post("/guess",   { sessionId, wordIndex, letters, wagers }),
+  cascade:      (sessionId, wordIndex, letterIndex)=> post("/cascade", { sessionId, wordIndex, letterIndex }),
+  allIn:        (sessionId, wordsGuess)            => post("/allin",   { sessionId, wordsGuess }),
 
   /* auth */
   me:           ()                                 => get("/auth/me"),

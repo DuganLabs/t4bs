@@ -1,33 +1,64 @@
-/* Game engine, v2. Store-agnostic — takes `puzzles` and `sessions`
-   interfaces. Used by the local Vite mock (in-memory stores) and the
-   Cloudflare Functions (D1 stores via functions/_shared/game.js).
+/* Game engine. Store-agnostic — takes `puzzles` and `sessions` interfaces.
+   Used by the Cloudflare Functions (D1 stores) and the tests (in-memory).
 
-   Three moves: start, guess a letter, solve. See docs/PRD.md §6. The v1
-   engine — per-word Wordle feedback, stakes, cascade tokens, ALL IN — is in
-   git history at d1361ec; §0 of the PRD is why it is not here. */
+   The word-guessing game: submitGuess judges one word, spendCascade reveals
+   one tile with an earned token, allIn judges the whole remaining phrase.
+   Rules in shared/pure.js; the economy changes from the original are
+   docs/tuning-proposal.md §3.1–3.3, decided by the owner 2026-09-14. */
 
 import {
-  boardFor, hiddenCount, initialState, normalizePhrase, parFor, publicShape,
-  scoreFor, wordsOf,
+  evalWord, scoreGuess, openSlots, publicShape, initialState, wordsOf,
+  WORD_BONUS, ALL_IN_PER_TILE,
 } from "./pure.js";
 
 /* Session IDs are an authentication token in everything but name — anyone
-   holding one can progress that round — so they come from a CSPRNG.
-   crypto.randomUUID exists in every runtime t4bs targets. */
+   holding one can progress that round. crypto.randomUUID is available in
+   every runtime t4bs targets. */
 function newId() {
   return crypto.randomUUID();
 }
 
-const LETTER = /^[A-Z]$/;
+/** The whole round as the client sees it, minus the answer. */
+function view(sessionId, p, sess) {
+  const phraseWords = wordsOf(p.phrase);
+  return {
+    sessionId,
+    ...publicShape(p),
+    mode: sess.mode || "free",
+    day: sess.day || null,
+    attempts: sess.attempts.slice(),
+    busted: sess.busted.slice(),
+    score: sess.score,
+    tokens: sess.tokens,
+    locked: sess.locked.map(m => ({ ...m })),
+    presentGlobal: sess.presentGlobal.slice(),
+    absentByWord: sess.absentByWord.map(a => a.slice()),
+    wordSolved: sess.wordSolved.slice(),
+    guessLog: sess.guessLog.map(g => ({ ...g })),
+    finished: sess.finished,
+    reveal: sess.finished ? phraseWords : null,
+  };
+}
+
+/** A word is done with when it is solved or busted. */
+function resolved(sess) {
+  return sess.wordSolved.every((s, i) => s || sess.busted[i]);
+}
+
+/** Bust a word: reveal every tile, it scores nothing more. */
+function bust(sess, phraseWords, wi) {
+  sess.busted[wi] = true;
+  const w = phraseWords[wi];
+  for (let li = 0; li < w.length; li++) sess.locked[wi][li] = w[li];
+}
 
 /**
  * @param {object} deps
- * @param {any} deps.puzzles      `listApproved()`, `getApproved(id)`
- * @param {any} deps.sessions     `create(id, state)`, `get(id)`, `save(id, state)`
+ * @param {any} deps.puzzles
+ * @param {any} deps.sessions
  * @param {(info: { sessionId: string, state: any, outcome: string }) => Promise<void> | void} [deps.onFinish]
  *   Called exactly once, after the session is persisted, when a round
- *   reaches a terminal state. The daily bookkeeping hangs off this so the
- *   engine stays store-agnostic.
+ *   reaches a terminal state. The daily bookkeeping hangs off this.
  */
 export function createEngine({ puzzles, sessions, onFinish }) {
   async function finished(sessionId, sess) {
@@ -37,37 +68,11 @@ export function createEngine({ puzzles, sessions, onFinish }) {
     } catch { /* recording a result must never fail the round */ }
   }
 
-  /** Everything the client needs to draw the round as it stands. */
-  function view(sessionId, p, sess) {
-    const words = wordsOf(p.phrase);
-    const revealed = new Set(sess.revealed);
-    const over = !!sess.finished;
-    const hidden = hiddenCount(words, revealed);
-    return {
-      sessionId,
-      ...publicShape(p),
-      mode: sess.mode || "free",
-      day: sess.day || null,
-      lives: sess.lives,
-      revealed: [...revealed].sort(),
-      missed: [...sess.missed].sort(),
-      board: boardFor(words, revealed, over),
-      hiddenCount: hidden,
-      /* The number under the Solve button. */
-      scoreIfSolved: over ? sess.score : scoreFor(hidden, sess.lives),
-      solveAttempts: sess.solveAttempts,
-      score: sess.score,
-      finished: sess.finished,
-      reveal: over ? words : null,
-    };
-  }
-
-  async function load(sessionId) {
-    const sess = await sessions.get(sessionId);
-    if (!sess) return { error: "no-session" };
-    const p = await puzzles.getApproved(sess.puzzleId);
-    if (!p) return { error: "puzzle-gone" };
-    return { sess, p };
+  /** Solved if every word is green; lost the moment every word is resolved
+   *  and at least one was busted. Nothing ends a round early. */
+  function settle(sess) {
+    if (sess.wordSolved.every(Boolean)) sess.finished = "won";
+    else if (resolved(sess)) sess.finished = "lost";
   }
 
   return {
@@ -79,8 +84,6 @@ export function createEngine({ puzzles, sessions, onFinish }) {
     /**
      * @param {number|string} puzzleId
      * @param {{ mode?: "daily"|"free", day?: string|null, playerKey?: string|null }} [opts]
-     *   `mode: "daily"` tags the session as the day's authoritative run —
-     *   the only kind that records a result and moves a streak.
      */
     async startSession(puzzleId, opts = {}) {
       const p = await puzzles.getApproved(puzzleId);
@@ -95,103 +98,172 @@ export function createEngine({ puzzles, sessions, onFinish }) {
     },
 
     async resumeSession(sessionId) {
-      const r = await load(sessionId);
-      if (r.error) return r;
-      return view(sessionId, r.p, r.sess);
+      const sess = await sessions.get(sessionId);
+      if (!sess) return { error: "no-session" };
+      const p = await puzzles.getApproved(sess.puzzleId);
+      if (!p) return { error: "puzzle-gone" };
+      return view(sessionId, p, sess);
     },
 
     /**
-     * One letter. In the phrase: every instance turns over. Not: a life.
-     * Already tried: a no-op that costs nothing — the keyboard should have
-     * disabled it, and a double-tap must not be a double penalty.
+     * Judge one word. `letters` fills the word's OPEN tiles in order;
+     * `wagers` are indexes into those open tiles the player staked.
      */
-    async guessLetter(sessionId, rawLetter) {
-      const letter = String(rawLetter || "").toUpperCase();
-      if (!LETTER.test(letter)) return { error: "bad-letter" };
-
-      const r = await load(sessionId);
-      if (r.error) return r;
-      const { sess, p } = r;
+    async submitGuess(sessionId, wordIndex, letters, wagers = []) {
+      const sess = await sessions.get(sessionId);
+      if (!sess) return { error: "no-session" };
       if (sess.finished) return { error: "finished" };
 
-      const words = wordsOf(p.phrase);
-      const revealed = new Set(sess.revealed);
-      const missed = new Set(sess.missed);
+      const p = await puzzles.getApproved(sess.puzzleId);
+      if (!p) return { error: "puzzle-gone" };
 
-      if (revealed.has(letter) || missed.has(letter)) {
-        return { repeat: true, hit: revealed.has(letter), letter, ...view(sessionId, p, sess) };
-      }
+      const phraseWords = wordsOf(p.phrase);
+      const word = phraseWords[wordIndex];
+      if (!word) return { error: "bad-word-index" };
+      if (sess.wordSolved[wordIndex]) return { error: "word-already-solved" };
+      if (sess.busted[wordIndex]) return { error: "word-busted" };
 
-      const positions = [];
-      words.forEach((w, wi) => {
-        for (let li = 0; li < w.length; li++) if (w[li] === letter) positions.push({ wi, li });
+      const lockedMap = sess.locked[wordIndex];
+      const slots = openSlots(word.length, lockedMap);
+      if (!Array.isArray(letters) || letters.length !== slots.length) return { error: "incomplete-guess" };
+
+      const fullGuess = word.split("").map((_, i) =>
+        lockedMap[i] !== undefined ? lockedMap[i] : String(letters[slots.indexOf(i)] || "").toUpperCase()
+      );
+
+      const fb = evalWord(fullGuess, word);
+      const lockedBefore = { ...lockedMap };
+      const absoluteWagers = wagers.map(s => slots[s]).filter(x => x !== undefined);
+
+      const presentSet = new Set(sess.presentGlobal);
+      const absentSet  = new Set(sess.absentByWord[wordIndex]);
+      fb.forEach((status, idx) => {
+        const ch = fullGuess[idx];
+        if (status === "green") {
+          if (lockedMap[idx] === undefined) lockedMap[idx] = ch;
+          presentSet.add(ch);
+        } else if (status === "yellow") {
+          presentSet.add(ch);
+        } else if (!word.includes(ch)) {
+          absentSet.add(ch);
+        }
       });
-      const hit = positions.length > 0;
+      sess.presentGlobal = [...presentSet];
+      sess.absentByWord[wordIndex] = [...absentSet];
 
-      if (hit) {
-        revealed.add(letter);
-        sess.revealed = [...revealed].sort();
-        /* Revealed the whole thing without solving: the round is won, and
-           the score says exactly what that was worth — nothing hidden,
-           only the lives kept. */
-        if (hiddenCount(words, revealed) === 0) {
-          sess.finished = "won";
-          sess.score = scoreFor(0, sess.lives);
-        }
+      const allGreen = fb.every(s => s === "green");
+      const stakeBusted = absoluteWagers.some(i => fb[i] !== "green");
+      let scoreDelta = scoreGuess(fb, absoluteWagers, lockedBefore);
+      let cascadeEarned = false;
+      let bustedNow = false;
+
+      if (allGreen) {
+        sess.wordSolved[wordIndex] = true;
+        scoreDelta += WORD_BONUS;
+        const priorWrongs = sess.guessLog.filter(g => g.wi === wordIndex && !g.allGreen).length;
+        if (priorWrongs === 0) { sess.tokens += 1; cascadeEarned = true; }
       } else {
-        missed.add(letter);
-        sess.missed = [...missed].sort();
-        sess.lives = Math.max(0, sess.lives - 1);
-        if (sess.lives === 0) {
-          sess.finished = "lost";
-          sess.score = 0;
-        }
+        /* A miss spends one of THIS word's attempts. Out of attempts: the
+           word is busted and revealed; the round carries on. */
+        sess.attempts[wordIndex] = Math.max(0, sess.attempts[wordIndex] - 1);
+        if (sess.attempts[wordIndex] === 0) { bust(sess, phraseWords, wordIndex); bustedNow = true; }
       }
 
+      sess.score = Math.max(0, sess.score + scoreDelta);
+      sess.guessLog.push({ wi: wordIndex, letters: fullGuess, feedback: fb, allGreen, staked: absoluteWagers });
+
+      settle(sess);
       await sessions.save(sessionId, sess);
       await finished(sessionId, sess);
-      return { repeat: false, hit, letter, positions, ...view(sessionId, p, sess) };
-    },
 
-    /**
-     * The whole phrase. Right: the round ends and scores. Wrong: a life,
-     * nothing revealed, play continues — a wrong solve is an attempt, not a
-     * suicide. Out of lives on a wrong solve is the same loss as any other.
-     */
-    async solve(sessionId, rawPhrase) {
-      const attempt = normalizePhrase(rawPhrase);
-      if (!attempt) return { error: "empty-solve" };
-
-      const r = await load(sessionId);
-      if (r.error) return r;
-      const { sess, p } = r;
-      if (sess.finished) return { error: "finished" };
-
-      const words = wordsOf(p.phrase);
-      const correct = attempt === words.join(" ");
-      sess.solveAttempts += 1;
-
-      if (correct) {
-        const hidden = hiddenCount(words, new Set(sess.revealed));
-        sess.score = scoreFor(hidden, sess.lives);
-        sess.finished = "won";
-        sess.hiddenAtSolve = hidden;
-      } else {
-        sess.lives = Math.max(0, sess.lives - 1);
-        if (sess.lives === 0) {
-          sess.finished = "lost";
-          sess.score = 0;
-        }
-      }
-
-      await sessions.save(sessionId, sess);
-      await finished(sessionId, sess);
       return {
-        correct,
-        hiddenAtSolve: correct ? sess.hiddenAtSolve : null,
-        par: parFor(p),
+        feedback: fb,
+        letters: fullGuess,
+        scoreDelta,
+        stakeBusted,
+        cascadeEarned,
+        bustedNow,
+        wordIndex,
         ...view(sessionId, p, sess),
       };
+    },
+
+    async spendCascade(sessionId, wordIndex, letterIndex) {
+      const sess = await sessions.get(sessionId);
+      if (!sess) return { error: "no-session" };
+      if (sess.finished) return { error: "finished" };
+      if (sess.tokens <= 0) return { error: "no-tokens" };
+
+      const p = await puzzles.getApproved(sess.puzzleId);
+      if (!p) return { error: "puzzle-gone" };
+      const phraseWords = wordsOf(p.phrase);
+      const word = phraseWords[wordIndex];
+      if (!word) return { error: "bad-word-index" };
+      if (sess.wordSolved[wordIndex] || sess.busted[wordIndex]) return { error: "word-already-solved" };
+
+      const lm = sess.locked[wordIndex];
+      if (lm[letterIndex] !== undefined) return { error: "already-locked" };
+      if (word[letterIndex] === undefined) return { error: "bad-letter-index" };
+
+      lm[letterIndex] = word[letterIndex];
+      sess.tokens -= 1;
+      const presentSet = new Set(sess.presentGlobal);
+      presentSet.add(word[letterIndex]);
+      sess.presentGlobal = [...presentSet];
+
+      /* A reveal can complete a word. */
+      if (openSlots(word.length, lm).length === 0) {
+        sess.wordSolved[wordIndex] = true;
+        sess.score += WORD_BONUS;
+        settle(sess);
+      }
+
+      await sessions.save(sessionId, sess);
+      await finished(sessionId, sess);
+      return { wordIndex, letterIndex, ...view(sessionId, p, sess) };
+    },
+
+    /** The whole remaining phrase in one shove. Right: +8 per hidden tile,
+     *  Solved. Wrong: every unsolved word is busted, Finished. */
+    async allIn(sessionId, wordsGuess) {
+      const sess = await sessions.get(sessionId);
+      if (!sess) return { error: "no-session" };
+      if (sess.finished) return { error: "finished" };
+
+      const p = await puzzles.getApproved(sess.puzzleId);
+      if (!p) return { error: "puzzle-gone" };
+      const words = wordsOf(p.phrase);
+
+      if (!Array.isArray(wordsGuess) || wordsGuess.length !== words.length) return { error: "shape-mismatch" };
+      for (let i = 0; i < words.length; i++) {
+        if (typeof wordsGuess[i] !== "string" || wordsGuess[i].length !== words[i].length) return { error: "shape-mismatch" };
+      }
+
+      const correct = wordsGuess.every((w, i) => w.toUpperCase() === words[i]);
+      let scoreDelta = 0;
+
+      if (correct) {
+        let remaining = 0;
+        words.forEach((w, wi) => {
+          for (let li = 0; li < w.length; li++) if (sess.locked[wi][li] === undefined) remaining++;
+        });
+        scoreDelta = remaining * ALL_IN_PER_TILE;
+        sess.score += scoreDelta;
+        words.forEach((w, wi) => {
+          sess.wordSolved[wi] = true;
+          for (let li = 0; li < w.length; li++) sess.locked[wi][li] = w[li];
+        });
+      } else {
+        words.forEach((w, wi) => {
+          if (!sess.wordSolved[wi] && !sess.busted[wi]) { sess.attempts[wi] = 0; bust(sess, words, wi); }
+        });
+      }
+      sess.guessLog.push({ wi: -1, allIn: true, letters: wordsGuess.map(w => w.toUpperCase()), correct, allGreen: correct });
+      settle(sess);
+
+      await sessions.save(sessionId, sess);
+      await finished(sessionId, sess);
+      return { correct, scoreDelta, ...view(sessionId, p, sess) };
     },
   };
 }

@@ -27,8 +27,7 @@ const PLAY9 = {
         id: 9, category: "FAIRY TALES", submittedBy: "house",
         words: [4, 3], totalLetters: 7, par: 60,
         anchors: [{ wi: 0, li: 0, letter: "O" }],
-        board: [["O", null, null, null], [null, null, null]],
-        lives: 5, scoreIfSolved: 85,
+        attemptsMax: [4, 3],
       };
 
 function baseCtx(overrides = {}) {
@@ -137,31 +136,30 @@ describe("renderPage — emits a complete BaseNative-rendered HTML document for 
      board of the scheduled puzzle on first paint; one who has sees the
      result and when the next one lands. Nothing on the page lists
      categories or "rounds" — that is the moderator's catalogue. */
-  it("home SSRs today's board — category, anchors, lives, the number under Solve", () => {
+  it("home SSRs today's board — category, anchors locked, attempts per word", () => {
     const html = renderPage(baseCtx({ daily: DAILY_OPEN, play: PLAY9 }), ASSETS);
     assert.match(html, /data-bn-view="home"/);
     assert.match(html, /FAIRY TALES/);
     assert.match(html, /Today · 2026-09-11/);
-    assert.match(html, /data-anchor[\s>]/);
-    assert.match(html, />\s*O\s*</, "the anchor letter is turned over");
-    assert.match(html, /data-bn-region="scoreboard"/);
-    assert.match(html, /Solve now for<\/small><strong>85</);
-    assert.match(html, /Par<\/small><strong>60/);
-    assert.match(html, /data-bn-region="coach"/);
+    assert.match(html, /data-locked[\s>]/, "the anchor tile is locked");
+    assert.match(html, />O</, "the anchor letter is shown");
+    assert.match(html, /4 attempts/);
+    assert.match(html, /3 attempts/);
+    assert.match(html, /data-bn-region="knowledge"/);
+    assert.match(html, /data-bn-region="bank"/);
+    assert.doesNotMatch(html, /data-bn-region="scoreboard"/, "the reveal-a-letter scoreboard is gone");
     // Streak strip, rendered from the server's numbers.
     assert.match(html, /Streak/);
     assert.match(html, />5</, "best streak");
     assert.match(html, />12</, "days played");
   });
 
-  it("home paints the keyboard on the server — letters only, no Enter, no Backspace", () => {
+  it("home paints the keyboard on the server — QWERTY with ENTER and backspace, disabled until hydration", () => {
     const html = renderPage(baseCtx({ daily: DAILY_OPEN, play: PLAY9 }), ASSETS);
     assert.match(html, /data-bn="keyboard"/);
     assert.match(html, /data-kb-key="Q"/);
-    assert.match(html, /data-kb-key="M"/);
-    assert.doesNotMatch(html, /data-kb-key="ENTER"/, "Enter has no meaning in a letter-reveal game");
-    assert.doesNotMatch(html, /data-kb-key="BACKSPACE"/, "there is nothing to delete");
-    assert.doesNotMatch(html, />ENT</);
+    assert.match(html, /data-kb-key="ENTER"/, "you type a word and submit it");
+    assert.match(html, /data-kb-key="BACKSPACE"/, "and you can take a letter back");
   });
 
   it("home lists no categories and no rounds — the catalogue is a moderator surface", () => {
@@ -211,7 +209,7 @@ describe("renderPage — emits a complete BaseNative-rendered HTML document for 
     const html = renderPage(baseCtx({ route: "play", pathname: "/play", play: PLAY9 }), ASSETS);
     assert.match(html, /data-bn-view="play"/);
     assert.match(html, /Preview · does not count/);
-    assert.match(html, /data-anchor[\s>]/);
+    assert.match(html, /data-locked[\s>]/);
   });
 
   it("play without a puzzle points home instead of a loader", () => {
@@ -222,19 +220,17 @@ describe("renderPage — emits a complete BaseNative-rendered HTML document for 
 
   it("play view shows word-length skeleton with anchor letters", () => {
     const play = {
-      id: 42,
-      category: "GREETINGS",
-      submittedBy: "wmd",
-      words: [5, 5],
-      totalLetters: 10,
+      id: 42, category: "GREETINGS", submittedBy: "wmd",
+      words: [5, 5], totalLetters: 10, attemptsMax: [4, 4],
       anchors: [{ wi: 0, li: 0, letter: "H" }, { wi: 1, li: 4, letter: "D" }],
     };
     const html = renderPage(baseCtx({ route: "play", pathname: "/play", play }), ASSETS);
     assert.match(html, /GREETINGS/);
-    assert.match(html, /data-anchor[\s>]/);
-    assert.match(html, /data-on[\s>]/);
-    assert.match(html, />\s*H\s*</);
-    assert.match(html, />\s*D\s*</);
+    assert.match(html, /data-locked[\s>]/);
+    assert.match(html, />H</);
+    assert.match(html, />D</);
+    // Ten tiles across two words, each individually labelled.
+    assert.equal((html.match(/data-bn-region="tile"/g) || []).length, 10);
   });
 
   it("admin view honors forbidden flag", () => {
