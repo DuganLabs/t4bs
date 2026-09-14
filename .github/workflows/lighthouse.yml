@@ -20,7 +20,7 @@ on:
 
 jobs:
   audit:
-    uses: DuganLabs/.github/.github/workflows/lighthouse.yml@v2
+    uses: DuganLabs/.github/.github/workflows/lighthouse.yml@v3
     with:
       url: https://t4bs.com
       perf-min: 80
