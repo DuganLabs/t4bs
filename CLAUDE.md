@@ -33,7 +33,7 @@ t4bs/
 │   │   └── bind.js, dom.js, confetti.js, focus-trap.js
 │   └── main.js                 # `?legacy=1` entry — same boot as hydrate.js minus the SSR seed
 ├── shared/
-│   └── engine.js               # game core (lives, score, anchors, cascade tokens, ALL IN)
+│   └── engine.js               # game core, v2: reveal a letter / solve the phrase (docs/PRD.md §6)
 ├── functions/
 │   ├── _middleware.js          # SSR dispatch (default) vs. `?legacy=1`, security headers
 │   ├── _shared/

@@ -9,8 +9,9 @@ export function d1Puzzles(DB) {
       return r.results || [];
     },
     async getApproved(id) {
+      // `par` may be NULL — shared/pure.js parFor() derives a default then.
       const row = await DB.prepare(
-        "SELECT id, category, phrase, anchors, submitted_by AS submittedBy FROM puzzles WHERE id=?1 AND status='approved'"
+        "SELECT id, category, phrase, anchors, par, submitted_by AS submittedBy FROM puzzles WHERE id=?1 AND status='approved'"
       ).bind(Number(id)).first();
       if (!row) return null;
       return { ...row, anchors: JSON.parse(row.anchors) };

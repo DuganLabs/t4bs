@@ -121,7 +121,7 @@ export default `<main aria-labelledby="lobby-title" data-bn-view="lobby">
   </section>
 
   <p data-bn-region="rules-note">
-    Four lives for the whole phrase — any word guess that isn't fully correct costs one.
+    Turn over letters, solve when you know it. Every letter you didn't need is ten points.
   </p>
 
   <a href="/submit" data-bn-action="lobby-submit" aria-label="Submit a phrase">

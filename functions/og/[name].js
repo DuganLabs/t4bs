@@ -9,7 +9,7 @@ import { renderPng, defaultCardScene, pngHeaders } from "../_shared/og.js";
 // default and per-score cards.
 // v4: renderer swapped from satori (broken under Pages Functions — see
 // `_shared/og.js`) to hand-built SVG + resvg; invalidates old cached PNGs.
-const CACHE_KEY = "og:default:v4";
+const CACHE_KEY = "og:default:v5";
 
 export const onRequestGet = async ({ env, params }) => {
   const raw = String(params.name || "");

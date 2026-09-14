@@ -6,190 +6,17 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  openSlots,
-  fullCount,
-  computeKeyStatus,
-  knowledgeSummary,
-  KEY_STATE_INFO,
-  groupLobby,
-  browseCategories,
-  renderBrowseRounds,
-  renderBrowseShelf,
+  keyStateFor, KEY_STATE_INFO, groupLobby, browseCategories,
+  renderBrowseRounds, renderBrowseShelf,
 } from "./game.js";
 
-describe("openSlots", () => {
-  it("returns every index when nothing is locked", () => {
-    assert.deepEqual(openSlots(5, {}), [0, 1, 2, 3, 4]);
-  });
 
-  it("skips locked indices regardless of letter value", () => {
-    assert.deepEqual(openSlots(5, { 0: "P", 3: "R" }), [1, 2, 4]);
-  });
 
-  it("treats only 'undefined' as open — empty-string lock is still locked", () => {
-    assert.deepEqual(openSlots(4, { 0: "", 2: "X" }), [1, 3]);
-  });
-
-  it("returns [] when every slot is locked", () => {
-    assert.deepEqual(openSlots(3, { 0: "A", 1: "B", 2: "C" }), []);
-  });
-
-  it("returns [] for a zero-length word", () => {
-    assert.deepEqual(openSlots(0, {}), []);
-  });
-});
-
-describe("fullCount", () => {
-  it("counts the un-anchored slots across every word", () => {
-    // 5 + 4 + 3 = 12 letters total. 1 + 2 + 0 anchored = 3. Open = 9.
-    const words = [5, 4, 3];
-    const locked = [{ 0: "S" }, { 1: "A", 3: "Z" }, {}];
-    assert.equal(fullCount(words, locked), 9);
-  });
-
-  it("returns total letters when nothing is locked", () => {
-    assert.equal(fullCount([3, 4, 5], [{}, {}, {}]), 12);
-  });
-
-  it("returns 0 when every slot is locked", () => {
-    assert.equal(
-      fullCount([2, 3], [{ 0: "A", 1: "B" }, { 0: "C", 1: "D", 2: "E" }]),
-      0,
-    );
-  });
-
-  it("treats missing-index locked entries as empty", () => {
-    /* If `locked[wi]` is undefined we should count the whole word, not
-       throw. The lobby skeleton path can leak through with sparse
-       arrays mid-resume. */
-    const words = [4, 3];
-    const locked = [undefined, { 0: "A" }];
-    assert.equal(fullCount(words, locked), 4 + 2);
-  });
-});
-
-describe("computeKeyStatus", () => {
-  /* Owner's ruling (2026-09-10), authoritative: a letter ruled out in
-     one word must stay usable — and correctly styled — in a later
-     word. `active` is the word the player is currently entering;
-     "absent" is scoped to it alone (see the long comment on
-     computeKeyStatus in game.js for why). */
-  const baseSession = { words: [4, 3], category: "X" };
-  const emptyArgs = {
-    session: baseSession,
-    active: 0,
-    locked: [{}, {}],
-    presentGlobal: [],
-    absentByWord: [[], []],
-  };
-
-  it("returns {} when there is no session", () => {
-    assert.deepEqual(
-      computeKeyStatus({ ...emptyArgs, session: null }),
-      {},
-    );
-  });
-
-  it("returns {} when nothing is known yet", () => {
-    assert.deepEqual(computeKeyStatus(emptyArgs), {});
-  });
-
-  it("marks locked letters green (across both words)", () => {
-    const status = computeKeyStatus({
-      ...emptyArgs,
-      locked: [{ 0: "P" }, { 2: "R" }],
-    });
-    assert.equal(status.P, "green");
-    assert.equal(status.R, "green");
-  });
-
-  it("marks present-global letters yellow ('elsewhere') when not already green", () => {
-    const status = computeKeyStatus({
-      ...emptyArgs,
-      locked: [{ 0: "P" }, {}],
-      presentGlobal: ["E", "P"], // P is already green — yellow shouldn't downgrade
-    });
-    assert.equal(status.E, "yellow");
-    assert.equal(status.P, "green");
-  });
-
-  it("green wins over yellow even if presentGlobal is processed last", () => {
-    const status = computeKeyStatus({
-      ...emptyArgs,
-      locked: [{ 0: "A" }, {}],
-      presentGlobal: ["A"],
-    });
-    assert.equal(status.A, "green");
-  });
-
-  it("marks a letter absent when it's ruled out in the ACTIVE word", () => {
-    const status = computeKeyStatus({
-      ...emptyArgs,
-      active: 0,
-      absentByWord: [["Q"], []],
-    });
-    assert.equal(status.Q, "absent");
-  });
-
-  it("a letter ruled out in word 1 is usable — and correctly styled — in word 2", () => {
-    /* This is the owner's exact bug report: "Q" was ruled out while
-       entering word 1 (absentByWord[0]). Word 2 hasn't been tried and
-       has said nothing about Q either way. Moving the active word to
-       word 2 must NOT carry word 1's "absent" verdict forward — Q
-       renders untried (no status, no "dead key" styling), same as any
-       other letter nobody's tried yet, and nothing about it prevents
-       typing it (computeKeyStatus never sets a `disabled` flag). */
-    const wordOneAbsent = { ...emptyArgs, active: 0, absentByWord: [["Q"], []] };
-    assert.equal(computeKeyStatus(wordOneAbsent).Q, "absent");
-
-    const movedToWordTwo = { ...wordOneAbsent, active: 1 };
-    assert.equal(computeKeyStatus(movedToWordTwo).Q, undefined);
-  });
-
-  it("a letter absent from the whole phrase renders 'absent' ('not in phrase') for the word that ruled it out", () => {
-    const status = computeKeyStatus({
-      ...emptyArgs,
-      active: 0,
-      presentGlobal: [], // never found present anywhere
-      absentByWord: [["Z"], []],
-    });
-    assert.equal(status.Z, "absent");
-  });
-
-  it("a letter present later in the phrase renders the 'elsewhere' state, not 'absent', even where it was ruled out", () => {
-    /* "L" was ruled out of the ACTIVE word specifically, but a later
-       (already-tried) word revealed it's present in the phrase
-       (presentGlobal). The ruling: highlight this differently from
-       plain "absent" — "not in this word but in the phrase". */
-    const status = computeKeyStatus({
-      ...emptyArgs,
-      active: 0,
-      presentGlobal: ["L"],
-      absentByWord: [["L"], []],
-    });
-    assert.equal(status.L, "yellow");
-  });
-
-  it("makes no absent claim with no single active word (e.g. ALL-IN mode)", () => {
-    /* Without one active word to scope "absent" to, no claim is safe —
-       green/yellow still work, but nothing is marked absent. */
-    const status = computeKeyStatus({
-      ...emptyArgs,
-      active: null,
-      locked: [{ 0: "P" }, {}],
-      presentGlobal: ["E"],
-      absentByWord: [["Q"], ["Q"]],
-    });
-    assert.equal(status.P, "green");
-    assert.equal(status.E, "yellow");
-    assert.equal(status.Q, undefined);
-  });
-});
 
 describe("KEY_STATE_INFO — non-colour cues", () => {
   it("gives every non-default keyboard state its own glyph and aria suffix", () => {
     const states = Object.keys(KEY_STATE_INFO);
-    assert.deepEqual(states.sort(), ["absent", "green", "yellow"]);
+    assert.deepEqual(states.sort(), ["absent", "green"]);
     for (const s of states) {
       assert.ok(KEY_STATE_INFO[s].glyph, `${s} needs a non-empty glyph`);
       assert.ok(KEY_STATE_INFO[s].ariaSuffix, `${s} needs a non-empty aria suffix`);
@@ -299,64 +126,6 @@ describe("groupLobby", () => {
    shared/daily.js and is resolved server-side; its coverage lives in
    shared/daily.test.js. */
 
-describe("knowledgeSummary — the phrase-level read-out", () => {
-  const base = {
-    words: [5, 4, 3],
-    locked: [{ 0: "H", 1: "E" }, {}, { 2: "T" }],
-    wordSolved: [false, false, false],
-    presentGlobal: ["H", "E", "T", "R"],
-    lives: 3,
-    tokens: 1,
-  };
-
-  it("counts solved words and locked letters across the whole phrase", () => {
-    const k = knowledgeSummary(base);
-    assert.equal(k.totalWords, 3);
-    assert.equal(k.solvedWords, 0);
-    assert.equal(k.totalLetters, 12);
-    assert.equal(k.knownLetters, 3);
-  });
-
-  it("counts letters known to be in the phrase but not yet placed", () => {
-    // H, E, T are locked somewhere; only R is still floating.
-    assert.equal(knowledgeSummary(base).floating, 1);
-  });
-
-  it("names the unsolved word with the highest share of letters known", () => {
-    const k = knowledgeSummary(base);
-    // word 0: 2/5 = .4 · word 1: 0/4 = 0 · word 2: 1/3 = .33
-    assert.equal(k.bestTarget.wi, 0);
-    assert.equal(k.bestTarget.known, 2);
-    assert.equal(k.bestTarget.len, 5);
-  });
-
-  it("never proposes a solved word as the next target", () => {
-    const k = knowledgeSummary({
-      ...base,
-      locked: [{ 0: "H", 1: "E", 2: "L", 3: "L", 4: "O" }, {}, { 2: "T" }],
-      wordSolved: [true, false, false],
-    });
-    assert.notEqual(k.bestTarget.wi, 0);
-    assert.equal(k.bestTarget.wi, 2);
-    assert.equal(k.solvedWords, 1);
-  });
-
-  it("passes lives and tokens through with the shared-pool allowance", () => {
-    const k = knowledgeSummary(base);
-    assert.equal(k.lives, 3);
-    assert.equal(k.livesAllowed, 4);
-    assert.equal(k.tokens, 1);
-  });
-
-  it("survives a session that hasn't loaded yet", () => {
-    const k = knowledgeSummary({
-      words: undefined, locked: [], wordSolved: [], presentGlobal: [], lives: 4, tokens: 0,
-    });
-    assert.equal(k.totalWords, 0);
-    assert.equal(k.totalLetters, 0);
-    assert.equal(k.bestTarget, null);
-  });
-});
 
 /* ── FREE-PLAY BROWSE SHELF ──────────────────────────────────────────
    The lobby's free play used to collapse a category to one row and one
@@ -497,5 +266,20 @@ describe("renderBrowseShelf", () => {
   it("renders an empty shelf rather than throwing on no puzzles", () => {
     assert.match(renderBrowseShelf([], "a"), /data-bn="accordion"/);
     assert.match(renderBrowseShelf(null, "a"), /data-bn="accordion"/);
+  });
+});
+
+describe("keyStateFor — the keyboard from the server's view", () => {
+  it("returns {} with no round", () => {
+    assert.deepEqual(keyStateFor(null), {});
+  });
+  it("marks revealed letters green and missed letters absent, nothing else", () => {
+    assert.deepEqual(
+      keyStateFor({ revealed: ["A", "E"], missed: ["Z"] }),
+      { A: "green", E: "green", Z: "absent" },
+    );
+  });
+  it("has no third state — a letter is in the phrase or it is not", () => {
+    assert.deepEqual(Object.keys(KEY_STATE_INFO).sort(), ["absent", "green"]);
   });
 });

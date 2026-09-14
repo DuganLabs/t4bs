@@ -1022,110 +1022,95 @@ main[data-bn-view="play"] [data-bn-region="play-cbar"][data-allin] {
   background: rgba(255,77,77,.08); border-color: rgba(255,77,77,.5); color: #FF6E6E;
 }
 
-/* PHRASE GRID */
+/* PHRASE BOARD — v2. One row per word, one tile per letter. A tile is
+   either turned over ([data-on]) or hidden; an anchor carries an orange
+   underline so "free" reads at a glance; a tile that turns over on a hit
+   lifts for a beat ([data-just]); at the end, a tile the player never
+   revealed ([data-unearned]) is drawn in the paper tone so the brag —
+   how much was solved blind — is visible on the board itself. */
 main[data-bn-view="play"] [data-bn-region="grid"] {
   width: 100%; max-width: 540px;
   display: flex; flex-wrap: wrap; justify-content: center;
-  gap: 14px 22px; margin-bottom: 14px; padding: 14px 6px;
+  gap: 14px 22px; margin-bottom: 8px; padding: 16px 8px;
   background: #161412; border: 1.5px solid #222; border-radius: 12px;
   position: relative;
 }
-
-/* word row — one per word. Selector matches both SSR and post-hydration:
-   SSR: <div role="group" data-word-index>, post-hydration adds data-bn-region="word". */
+main[data-bn-view="play"] [data-bn-region="grid"][data-shake] { animation: t4-shake .35s; }
+@keyframes t4-shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 main[data-bn-view="play"] [data-bn-region="grid"] > [role="group"] {
-  display: flex; gap: 4px; position: relative; cursor: pointer;
+  display: flex; gap: 4px; position: relative;
 }
-main[data-bn-view="play"] [data-bn-region="grid"] > [role="group"][data-solved] {
-  cursor: default;
-}
-main[data-bn-view="play"] [data-bn-region="grid"] > [role="group"][data-active]::before {
-  content: ''; position: absolute; left: -6px; right: -6px; top: -6px; bottom: -6px;
-  border: 1.5px solid var(--rc); border-radius: 8px;
-  box-shadow: 0 0 18px rgba(var(--rg),.18); pointer-events: none;
-}
-main[data-bn-view="play"] [data-bn-region="grid"] > [role="group"][data-allin]::before {
-  content: ''; position: absolute; left: -6px; right: -6px; top: -6px; bottom: -6px;
-  border: 1.5px dashed rgba(255,110,110,.55); border-radius: 8px; pointer-events: none;
-}
-
-/* tile — one per letter cell. Selector matches both SSR <span role="img">
-   and post-hydration (which adds data-bn-region="tile"). */
 main[data-bn-view="play"] [data-bn-region="grid"] [role="img"] {
-  width: clamp(38px, 9.5vw, 46px); height: clamp(44px, 11.5vw, 52px);
+  width: clamp(36px, 9vw, 44px); height: clamp(42px, 11vw, 50px);
   border-radius: 5px; display: flex; align-items: center; justify-content: center;
   font-family: 'Bebas Neue', sans-serif; font-size: clamp(22px, 5.5vw, 28px);
-  user-select: none; flex-shrink: 0; transform-origin: center center;
-  transition: background .25s, border-color .2s; position: relative;
-  background: #161412; border: 1.5px solid #2A2724; color: #F0EDE4;
+  user-select: none; flex-shrink: 0;
+  transition: background .25s, color .25s, transform .25s; position: relative;
+  background: #1E1B17; border: 1.5px solid #2A2724; color: transparent;
 }
-main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-locked],
-main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-solved] {
-  background: #4EAF7C; color: #0A1F12; border-color: #4EAF7C;
-  box-shadow: 0 2px 5px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.35);
+main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-on] {
+  background: #FFF3E0; color: #5C2A00; border-color: #FFF3E0;
+  box-shadow: 0 2px 5px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.5);
 }
-main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-typed] {
-  background: #1E1C18; border: 1.5px solid #555; color: #F0EDE4; cursor: pointer;
+main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-anchor] {
+  box-shadow: inset 0 -3px 0 #E8920A, 0 2px 5px rgba(0,0,0,.4);
 }
-main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-cursor] {
-  border: 2px solid var(--rc);
-  box-shadow: 0 0 0 1px rgba(var(--rg),.5), 0 0 12px rgba(var(--rg),.35);
+main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-just] { transform: translateY(-4px); }
+main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-unearned] {
+  background: #2C2925; color: #988570; border-color: #2C2925; box-shadow: none;
 }
-main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-feedback="green"]  { background: #4EAF7C !important; color: #0A1F12 !important; border-color: #4EAF7C !important; }
-main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-feedback="yellow"] { background: #D4B445 !important; color: #1F1700 !important; border-color: #D4B445 !important; }
-main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-feedback="absent"] { background: #2C2925 !important; color: #5A5550 !important; border-color: #2C2925 !important; }
-main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-wagered] {
-  box-shadow: 0 0 0 2px #FFD700, 0 0 14px rgba(255,215,0,.55);
-}
-main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-wagered]::before {
-  content: '2×'; position: absolute; top: -8px; right: -8px;
-  font-size: 9px; letter-spacing: .5px;
-  background: #FFD700; color: #1A0A00; padding: 1px 4px; border-radius: 3px;
-  font-family: 'Bebas Neue', sans-serif;
-  box-shadow: 0 1px 4px rgba(0,0,0,.5); z-index: 2;
-}
-main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-allin-typed] {
-  box-shadow: 0 0 0 1.5px #FF6E6E, 0 0 12px rgba(255,77,77,.35);
+@media (prefers-reduced-motion: reduce) {
+  main[data-bn-view="play"] [data-bn-region="grid"] [role="img"] { transition: none; }
+  main[data-bn-view="play"] [data-bn-region="grid"] [role="img"][data-just] { transform: none; }
+  main[data-bn-view="play"] [data-bn-region="grid"][data-shake] { animation: none; }
 }
 
-/* KNOWLEDGE READ-OUT — <section data-bn-region="knowledge"> from
-   src/views/play.js. Phrase-level state: words solved, letters locked,
-   lives left (with the "one pool" label attached, because that's the
-   rule that decides the round), reveals banked, plus a one-line
-   summary of what's deduced but not yet placed. Sits directly under
-   the grid so it reads as part of the board, not chrome. */
-main[data-bn-view="play"] section[data-bn-region="knowledge"] {
+/* STATUS LINE — lives, the number under the Solve button, par. This is
+   the game's one decision made visible: "Solve now for 95 · par 85". */
+main[data-bn-view="play"] [data-bn-region="status"] {
   width: 100%; max-width: 540px;
-  display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;
-  padding: 10px 12px; background: #100F0D; border: 1px solid #1F1C18;
-  border-radius: 8px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 6px 10px; margin: 0;
 }
-main[data-bn-view="play"] [data-bn-region="knowledge"] > ul {
-  display: flex; gap: 8px; list-style: none; padding: 0; margin: 0;
+main[data-bn-view="play"] [data-bn-region="lives"] {
+  font-size: 13px; letter-spacing: 4px; color: #E8920A; white-space: nowrap;
 }
-main[data-bn-view="play"] [data-bn-region="know-stat"] {
-  flex: 1 1 0; min-width: 0;
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: 6px 2px; background: #161412; border: 1px solid #23201C; border-radius: 6px;
+main[data-bn-view="play"] [data-bn-region="lives"] i { font-style: normal; }
+main[data-bn-view="play"] [data-bn-region="lives"] i[data-lost] { opacity: .22; }
+main[data-bn-view="play"] [data-bn-region="now"] {
+  flex: 1; text-align: center;
+  font-family: 'Bebas Neue', sans-serif; font-size: 15px; letter-spacing: 1.5px;
+  color: #F0EDE4; font-variant-numeric: tabular-nums;
 }
-main[data-bn-view="play"] [data-bn-region="know-stat"] > strong {
-  font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 1.2px;
-  color: #F0EDE4; font-weight: 400; line-height: 1.1;
+main[data-bn-view="play"] [data-bn-region="play-meta"] {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: #988570;
+  margin-bottom: 10px; text-align: center;
 }
-main[data-bn-view="play"] [data-bn-region="know-stat"] > small {
-  font-size: 8px; letter-spacing: .9px; color: #A09B95; text-transform: uppercase;
-  text-align: center; line-height: 1.25;
+
+/* SOLVE SHEET — a native <dialog> with a text input, so the phone's own
+   keyboard comes up for the whole phrase. */
+[data-bn-region="solve-sheet"] [data-bn-region="solve-shape"] {
+  font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 3px;
+  color: #988570; text-align: center; margin: 0 0 10px; word-break: break-all;
 }
-/* Lives is the stat that ends rounds — orange, like the header counter,
-   and labelled with the pool rule rather than just "LIVES". */
-main[data-bn-view="play"] [data-bn-region="know-stat"][data-tone="lives"] {
-  border-color: rgba(232,146,10,.45);
+[data-bn-region="solve-sheet"] [data-bn-region="solve-input"] {
+  width: 100%; box-sizing: border-box;
+  font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 2px;
+  text-transform: uppercase; color: #F0EDE4; background: #0C0B09;
+  border: 1.5px solid #3A332B; border-radius: 6px; padding: 10px 12px; min-height: 48px;
 }
-main[data-bn-view="play"] [data-bn-region="know-stat"][data-tone="lives"] > strong { color: #E8920A; }
-main[data-bn-view="play"] [data-bn-region="know-stat"][data-tone="lives"] > small { color: #C08A4A; }
-main[data-bn-view="play"] [data-bn-region="know-hint"] {
-  font-size: 11px; line-height: 1.4; color: #A09B95; text-align: center;
+[data-bn-region="solve-sheet"] [data-bn-region="solve-input"]:focus-visible {
+  outline: 2px solid #E8920A; outline-offset: 2px;
 }
+[data-bn-region="solve-sheet"] [data-bn-region="solve-cost"] {
+  font-size: 12px; letter-spacing: .5px; color: #988570; text-align: center; margin: 10px 0 14px;
+}
+[data-bn-region="solve-sheet"] [data-bn-region="solve-actions"] {
+  display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;
+}
+
+/* END CARD — the "how" line under the verdict. */
+[data-bn-region="how"] { font-size: 13px; color: #C9C2B6; margin: 4px 0 8px; }
 
 /* END-OF-ROUND LEDGER LINE — "Daily 2026-09-11 · streak 🔥3" or
    "Free play · streak untouched". */
@@ -1134,38 +1119,9 @@ main[data-bn-view="play"] [data-bn-region="know-hint"] {
   color: #E8920A; margin-bottom: 10px;
 }
 
-/* KNOWLEDGE BANK */
-main[data-bn-view="play"] section[data-bn-region="bank"] {
-  width: 100%; max-width: 540px;
-  display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;
-  padding: 8px 12px; background: #100F0D; border: 1px solid #1F1C18;
-  border-radius: 8px; min-height: 42px;
-}
-main[data-bn-view="play"] [data-bn-region="bank-present"],
-main[data-bn-view="play"] [data-bn-region="bank-absent"] {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
-}
-main[data-bn-view="play"] section[data-bn-region="bank"] [data-bn-role="label"] {
-  font-size: 12px; letter-spacing: 1.3px; color: #9A9590;
-  text-transform: uppercase; margin-right: 4px;
-}
-main[data-bn-view="play"] section[data-bn-region="bank"] [data-bn-chip] {
-  font-family: 'Bebas Neue', sans-serif; font-size: 11px; letter-spacing: 1px;
-  padding: 2px 7px 3px; border-radius: 3px;
-}
-main[data-bn-view="play"] section[data-bn-region="bank"] [data-bn-chip="yellow"] {
-  background: rgba(212,180,69,.16); color: #D4B445; border: 1px solid rgba(212,180,69,.5);
-}
-main[data-bn-view="play"] section[data-bn-region="bank"] [data-bn-chip="absent"] {
-  background: rgba(70,65,60,.35); color: #6A6560; border: 1px solid #2C2925;
-  text-decoration: line-through;
-}
-
 /* KEYBOARD WRAP — fixed-bottom card. Centered, capped at 568px so on
    wide viewports it reads as a contained surface instead of a black
-   bar floating on the body's near-black gradient. On narrow viewports
-   the calc(100% - 8px) makes it edge-aligned with a 4px hairline
-   margin so the border-radius is visible. */
+   bar floating on the body's near-black gradient. */
 main[data-bn-view="play"] section[data-bn-region="keyboard"] {
   position: fixed; left: 50%; bottom: 0; z-index: 30;
   transform: translateX(-50%);
@@ -1176,31 +1132,8 @@ main[data-bn-view="play"] section[data-bn-region="keyboard"] {
   box-shadow: 0 -8px 24px rgba(0,0,0,.5);
   padding: 10px 12px calc(10px + env(safe-area-inset-bottom,0px));
 }
-main[data-bn-view="play"] section[data-bn-region="keyboard"][data-allin] {
-  background: linear-gradient(180deg, rgba(255,77,77,.06) 0%, #161412 30%);
-  border-color: rgba(255,77,77,.4); border-bottom: none;
-}
-main[data-bn-view="play"] [data-bn-region="kb-actions"] {
-  display: flex; align-items: center; gap: 8px;
-  max-width: 540px; margin: 0 auto 8px; padding: 0 4px;
-}
-main[data-bn-view="play"] button[data-bn-action="all-in"] {
-  background: #1A1815; border: 1px solid #FF4D4D; border-radius: 6px; color: #FF4D4D;
-  font-family: 'Bebas Neue', sans-serif; font-size: 12px; letter-spacing: 1.5px;
-  padding: 7px 14px; cursor: pointer; min-height: 34px; transition: all .15s; flex-shrink: 0;
-}
-main[data-bn-view="play"] button[data-bn-action="all-in"]:hover {
-  background: #FF4D4D; color: #1A0A0A; box-shadow: 0 0 18px rgba(255,77,77,.45);
-}
-main[data-bn-view="play"] button[data-bn-action="all-in"]:active { transform: scale(.94); }
-main[data-bn-view="play"] button[data-bn-action="all-in"]:disabled { opacity: .35; cursor: not-allowed; }
-main[data-bn-view="play"] button[data-bn-action="all-in"][data-on] { background: #FF4D4D; color: #1A0A0A; }
-
-main[data-bn-view="play"] [data-bn-region="stake-label"] {
-  display: block; flex: 1; text-align: right;
-  font-family: 'Bebas Neue', sans-serif; font-size: 12px; letter-spacing: 1.5px;
-  color: #FFD700; min-height: 18px;
-}
+/* A tried key is final: dim it and take it out of the tab order's way. */
+main[data-bn-view="play"] .bn-kb-key:disabled { cursor: default; }
 
 /* SUBMIT / MODERATE / ADMIN — minimum SSR styling so the static shell
    for these admin-only routes isn't unstyled while JS loads. */

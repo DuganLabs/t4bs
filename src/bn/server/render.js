@@ -45,7 +45,7 @@ const TITLES = {
 };
 
 const SITE_DESCRIPTION =
-  "Pick a category. Solve the hidden phrase. Stake the letters you're sure about.";
+  "Pick a category. Solve the hidden phrase. Every letter you didn't need is ten points.";
 
 /* Inline JSON sits inside <script type="application/json"> on the page
    so the client hydrator can read window-bound state without an
@@ -101,30 +101,39 @@ function shapeDaily(daily) {
 /** @param {import('./ssr-context.js').PlaySessionSsr | null} play */
 function shapePlay(play) {
   if (!play) return null;
-  /* Defensive: a partial play context (e.g. a row with null anchors
-     or null words leaking through from the DB) used to throw
-     "x is not iterable" here and 500 the whole SSR response. The
-     happy path always provides arrays — these `|| []` guards just
-     keep a malformed input from cascading. */
+  /* Defensive: a partial play context (a row with null anchors or null
+     words) used to throw "x is not iterable" here and 500 the whole SSR
+     response. The `|| []` guards keep malformed input from cascading.
+
+     v2: functions/_shared/ssr.js supplies `board` — per word, per tile,
+     the letter if it is revealed at the start (anchors, everywhere their
+     letter occurs) or null. When a caller hands only words + anchors
+     (older contexts, the ssr-audit fixtures) the board is rebuilt from
+     those with the anchor letter only at its own position, which is the
+     most the template can know without the phrase. */
   const anchors = play.anchors || [];
   const wordsIn = play.words || [];
-  const anchorMap = new Map();
-  for (const a of anchors) anchorMap.set(`${a.wi}-${a.li}`, a.letter);
-  const words = wordsIn.map((wordLen, wi) => ({
-    cells: Array.from({ length: wordLen }, (_, li) => ({
-      anchor: anchorMap.get(`${wi}-${li}`) ?? "",
-    })),
-  }));
-  const wordCount = wordsIn.length;
+  const anchorAt = new Set(anchors.map(a => `${a.wi}-${a.li}`));
+  const anchorMap = new Map(anchors.map(a => [`${a.wi}-${a.li}`, a.letter]));
+  const rows = Array.isArray(play.board)
+    ? play.board
+    : wordsIn.map((len, wi) => Array.from({ length: len }, (_, li) => anchorMap.get(`${wi}-${li}`) ?? null));
+  const board = rows.map((row, wi) => (row || []).map((letter, li) => ({
+    letter: letter ?? "",
+    anchor: anchorAt.has(`${wi}-${li}`),
+  })));
+  const wordCount = rows.length || wordsIn.length;
   return {
     id: play.id,
     category: play.category,
     submittedBy: play.submittedBy ?? "",
     totalLetters: play.totalLetters,
     wordsLabel: `${wordCount} word${wordCount === 1 ? "" : "s"}`,
-    words,
+    board,
+    par: play.par ?? "",
+    scoreIfSolved: play.scoreIfSolved ?? "",
     score: 0,
-    lives: 4,
+    lives: play.lives ?? 5,
     tokens: 0,
   };
 }

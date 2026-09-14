@@ -40,6 +40,7 @@ import { createHelpModal } from "./components/help-modal.js";
 import { createAuthModal } from "./components/auth-modal.js";
 import { createLobby } from "./views/lobby.js";
 import { createPlay } from "./views/play.js";
+import { createSessionState, shareGrid } from "./lib/session-state.js";
 /* submit / moderate / admin are gated behind user actions (clicking the
    submit FAB, navigating to /moderate or /admin) and are bundled with
    their own heavy deps (@basenative/admin, @basenative/combobox). They
@@ -75,17 +76,10 @@ const toast = signal(null);
 const helpOpen = signal(false);
 const authOpen = signal(false);
 
-const session       = signal(null);
-const locked        = signal([]);
-const presentGlobal = signal([]);
-const absentByWord  = signal([]);
-const wordSolved    = signal([]);
-const posFeedback   = signal([]);
-const score         = signal(0);
-const lives         = signal(4);
-const tokens        = signal(0);
-const phase         = signal("lobby");
-const reveal        = signal(null);
+/* The round as the client holds it — one server view, not nine derived
+   signals (see lib/session-state.js). */
+const round = createSessionState();
+const { session, phase, score, lives, tokens } = round;
 /* True while the /play boot resolver is running — distinguishes
    "still loading" from "definitively no session". */
 const playLoading   = signal(window.location.pathname === "/play");
@@ -194,7 +188,7 @@ api.daily().then(daily.set).catch(() => {});
           "resume-timeout",
         );
         if (isResumable(s)) {
-          hydrateSession(s, /* fresh */ false);
+          hydrateSession(s);
           router.navigate("/play");
           toaster("RESUMED — pick up where you left off", "good");
           return;
@@ -214,31 +208,8 @@ api.daily().then(daily.set).catch(() => {});
   }
 })();
 
-function hydrateSession(s, fresh) {
-  const lm = s.words.map(() => ({}));
-  s.anchors.forEach(a => { lm[a.wi][a.li] = a.letter; });
-  if (!fresh) {
-    Object.entries(s.locked || {}).forEach(([wi, m]) => {
-      Object.entries(m || {}).forEach(([li, letter]) => { lm[Number(wi)][Number(li)] = letter; });
-    });
-  }
-  session.set(s);
-  locked.set(lm);
-  presentGlobal.set(fresh ? [] : (s.presentGlobal || []));
-  absentByWord.set(fresh ? s.words.map(() => []) : (s.absentByWord || s.words.map(() => [])));
-  wordSolved.set(fresh ? s.words.map(() => false) : (s.wordSolved || s.words.map(() => false)));
-  score.set(fresh ? 0 : (s.score || 0));
-  lives.set(s.lives ?? 4);
-  tokens.set(fresh ? 0 : (s.tokens || 0));
-  reveal.set(null);
-  posFeedback.set(s.words.map((len, wi) => {
-    const arr = Array(len).fill(null);
-    if (!fresh) {
-      Object.keys(s.locked?.[wi] || {}).forEach(li => { arr[Number(li)] = "green"; });
-    }
-    return arr;
-  }));
-  phase.set("playing");
+function hydrateSession(s) {
+  round.apply(s);
   view.set("playing");
 }
 
@@ -249,7 +220,7 @@ async function startDaily() {
   try {
     const s = await withTimeout(api.startDaily(), RESUME_TIMEOUT_MS, "start-timeout");
     if (s.daily) daily.set(s.daily);
-    hydrateSession(s, true);
+    hydrateSession(s);
     await savePersisted(SESSION_KEY, { sessionId: s.sessionId }, 12 * 3600);
     router.navigate("/play");
   } catch (e) {
@@ -269,7 +240,7 @@ async function start(puzzleId) {
   error.set(null);
   try {
     const s = await withTimeout(api.startSession(puzzleId), RESUME_TIMEOUT_MS, "start-timeout");
-    hydrateSession(s, true);
+    hydrateSession(s);
     await savePersisted(SESSION_KEY, { sessionId: s.sessionId }, 12 * 3600);
     router.navigate("/play");
   } catch (e) {
@@ -281,20 +252,7 @@ async function start(puzzleId) {
 async function shareResult({ won }) {
   try {
     const s = session();
-    const sLocked = locked();
-    const sPos = posFeedback();
-    const grid = s.words.map((len, wi) => {
-      let row = "";
-      for (let li = 0; li < len; li++) {
-        const isLocked = sLocked[wi]?.[li] !== undefined;
-        const fb = sPos?.[wi]?.[li];
-        if (isLocked || fb === "green") row += "🟩";
-        else if (fb === "yellow")        row += "🟨";
-        else if (fb === "absent")        row += "⬛";
-        else                             row += "⬜";
-      }
-      return row;
-    }).join("\n");
+    const grid = shareGrid(s);
 
     let shareUrl = "https://t4bs.com";
     try {
@@ -456,13 +414,12 @@ effect(() => {
       return;
     }
     mount(viewSlot, createPlay({
-      session, locked, presentGlobal, absentByWord, wordSolved, posFeedback,
-      score, lives, tokens, phase, reveal,
+      session, phase, apply: round.apply,
       toaster,
       onResultRecorded: recordResultPersist,
       onDailyUpdate: daily.set,
       onShare: shareResult,
-      goLobby: () => { phase.set("lobby"); router.navigate("/"); },
+      goLobby: () => { round.clear(); router.navigate("/"); },
       retry: () => { const id = session()?.id; if (id) start(id); },
     }));
   }

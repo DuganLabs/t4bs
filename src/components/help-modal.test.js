@@ -42,26 +42,6 @@ describe("helpDialogHtml", () => {
     assert.doesNotMatch(html, /data-bn="dialog-close"/);
   });
 
-  it("explains the keyboard's four letter states, not just by colour name", () => {
-    /* Owner's ruling (2026-09-10): the keyboard needs a legend once it
-       grew a 4th distinguishable state, and it must not lean on colour
-       words alone — pair each state with its non-colour glyph too so
-       the explanation itself doesn't assume colour vision. Regression
-       coverage for "if there is no legend, add the minimum that makes
-       the states self-explanatory." */
-    const html = helpDialogHtml();
-    assert.match(html, /confirmed in this word/);
-    assert.match(html, /elsewhere in the phrase, not this word/);
-    assert.match(html, /not in this word/);
-    // Each state's glyph badge (matches the ::after content in
-    // styles.css and game.js's KEY_STATE_INFO) appears in the copy —
-    // not color-only language.
-    assert.match(html, /&check;|✓/);
-    assert.match(html, /&#9670;|◆/);
-    assert.match(html, /&#10005;|✕/);
-    // The "never locked out for the next word" half of the ruling.
-    assert.match(html, /never.*locked out.*next word|locked out.*next word/i);
-  });
 
 
   /* The design review's #4: "the lives rule is never explained, and
@@ -70,24 +50,9 @@ describe("helpDialogHtml", () => {
      costs a life, or that all words draw from ONE pool of four. A
      first-time player could lose a round to a rule the game never
      stated. */
-  it("states the lives rule: one shared pool for the whole phrase", () => {
-    const html = helpDialogHtml();
-    assert.match(html, /four for the whole phrase/i);
-    assert.match(html, /not four per word/i);
-    assert.match(html, /same pool/i);
-    // …and what spends one.
-    assert.match(html, /isn't <em>fully<\/em> correct costs one|fully<\/em> correct costs one/i);
-  });
 
   /* #5: the stake was sold as risk and only ever moved score, which
      floors at zero. It costs a life now — the copy has to say so. */
-  it("states what a stake actually costs, not just what it pays", () => {
-    const html = helpDialogHtml();
-    assert.match(html, /double/i);
-    assert.match(html, /one extra life/i);
-    assert.doesNotMatch(html, /wrong costs double/i,
-      "the old score-only framing must not survive alongside the life cost");
-  });
 
   it("explains the daily/free-play split and where the streak comes from", () => {
     const html = helpDialogHtml();
@@ -110,5 +75,22 @@ describe("helpDialogHtml", () => {
     // the #help-title label createHelpModal() sets at mount.
     assert.doesNotMatch(openTag, /aria-labelledby/);
     assert.doesNotMatch(html, /data-bn="dialog-title"/);
+  });
+
+  it("explains the two key states without relying on colour", () => {
+    const html = helpDialogHtml();
+    assert.match(html, /in the phrase, turned over/);
+    assert.match(html, /not in the phrase/);
+    assert.match(html, /&check;|✓/);
+    assert.match(html, /&#10005;|✕/);
+  });
+
+  it("states the v2 rules: five lives, a wrong solve costs one, ten a hidden letter, par", () => {
+    const html = helpDialogHtml();
+    assert.match(html, /one of five lives/i);
+    assert.match(html, /wrong costs one life and reveals nothing/i);
+    assert.match(html, /still hidden when you solve is worth/i);
+    assert.match(html, /par/i);
+    assert.doesNotMatch(html, /stake|cascade|ALL IN|four lives/i);
   });
 });

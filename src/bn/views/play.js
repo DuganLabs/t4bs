@@ -1,38 +1,46 @@
-/* play.html — exported as a string for both worker and vite
-   bundling. Edit this file to change the template; the .js wrapper
-   keeps it portable across the @basenative/server SSR worker and
-   any node:test consumers. */
+/* play.html — exported as a string for both worker and vite bundling.
+
+   v2 first paint: the category, the board with the anchor letters already
+   turned over (an anchor reveals its letter in every tile — see
+   shared/pure.js anchorLetters), the five lives, and the par. The keyboard
+   and the Solve control mount on hydration; without JavaScript the page
+   still shows the puzzle and says how to play it.
+
+   `play.board` is built server-side by functions/_shared/ssr.js from the
+   same boardFor() the engine uses, so the SSR tiles and the hydrated tiles
+   are the same function of the same data. */
 
 export default `<main aria-labelledby="play-title" data-bn-view="play">
   <template @if="play">
     <header data-bn-region="play-summary">
       <h1 id="play-title">{{ play.category }}</h1>
-      <p>
-        <small>#{{ play.id }}</small>
-        <small>{{ play.wordsLabel }} · {{ play.totalLetters }} letters</small>
-        <small>by <strong>{{ play.submittedBy }}</strong></small>
-      </p>
-      <p role="status" aria-live="polite" data-bn-bind="play-hint"></p>
-      <p role="status" aria-live="polite" data-bn-bind="play-cbar" hidden></p>
+      <p data-bn-region="play-meta">{{ play.wordsLabel }} · {{ play.totalLetters }} letters · par {{ play.par }} · by {{ play.submittedBy }}</p>
     </header>
 
-    <section aria-label="Phrase grid" data-bn-region="grid">
-      <template @for="word of play.words; track $index">
-        <div role="group" :aria-label="'Word ' + ($index + 1)" :data-word-index="$index">
-          <template @for="cell of word.cells; track $index">
+    <section aria-label="Phrase" data-bn-region="grid">
+      <template @for="row of play.board; track $index">
+        <div role="group" data-bn-region="word" :aria-label="'Word ' + ($index + 1)">
+          <template @for="cell of row; track $index">
             <span role="img"
-                  :data-locked="cell.anchor ? 'true' : false"
-                  :aria-label="cell.anchor ? cell.anchor + ' at position ' + ($index + 1) + ', locked' : 'Empty at position ' + ($index + 1)">
-              {{ cell.anchor }}
-            </span>
+                  data-bn-region="tile"
+                  :data-on="cell.letter ? '' : false"
+                  :data-anchor="cell.anchor ? '' : false"
+                  :aria-label="cell.letter ? cell.letter + ', position ' + ($index + 1) : 'hidden, position ' + ($index + 1)">{{ cell.letter }}</span>
           </template>
         </div>
       </template>
     </section>
 
-    <section aria-label="Letter bank" data-bn-region="bank" data-bn-bind="play-bank"></section>
-    <section aria-label="On-screen keyboard" data-bn-region="keyboard" data-bn-bind="play-keyboard"></section>
-    <section aria-label="Round result" data-bn-region="result" data-bn-bind="play-result" hidden></section>
+    <p data-bn-region="status" role="status">
+      <span data-bn-region="lives" aria-label="5 of 5 lives"><i aria-hidden="true">●</i><i aria-hidden="true">●</i><i aria-hidden="true">●</i><i aria-hidden="true">●</i><i aria-hidden="true">●</i></span>
+      <span data-bn-region="now">Solve now for {{ play.scoreIfSolved }} · par {{ play.par }}</span>
+    </p>
+
+    <noscript>
+      <p data-bn-region="noscript-hint">Tap letters to turn them over; solve when you know it. This round needs JavaScript to play.</p>
+    </noscript>
+
+    <section data-bn-region="keyboard" data-bn-bind="play-keyboard"></section>
   </template>
 
   <template @else>
