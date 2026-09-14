@@ -10,7 +10,7 @@ import { signal, effect } from "@basenative/runtime";
 import { renderAdminQueueList } from "@basenative/admin/components";
 import { bnAlert, bnButton, h } from "../lib/dom.js";
 import { bindHidden, bindText } from "../lib/bind.js";
-import { api } from "../lib/api.js";
+import { api, errorMessage } from "../lib/api.js";
 import { groupCatalogue, renderCatalogueShelf } from "../lib/game.js";
 
 export function createModerate({ toaster, goHome, onPreview }) {
@@ -48,7 +48,7 @@ export function createModerate({ toaster, goHome, onPreview }) {
      variant, and the message goes into its escaped text slot. */
   const errAlert = bnAlert({ variant: "error" });
   const errBox = errAlert.el;
-  bindText(errAlert.content, () => err() || "");
+  bindText(errAlert.content, () => errorMessage(err()));
   bindHidden(errBox, () => !err());
 
   const queueRoot = h("section", {
