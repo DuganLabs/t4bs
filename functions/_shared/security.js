@@ -102,7 +102,7 @@ export const SSR_CRITICAL_STYLE_HASH =
  *  hash. Vite does not minify inline <style> in HTML, so the source and
  *  built blocks are byte-identical and one hash covers both. */
 export const LEGACY_CRITICAL_STYLE_HASH =
-  "'sha256-6+b8O6GedH1WHtsAkd7h7mPwNJLCHUMb43vxScf+Bzs='";
+  "'sha256-o7aJo0p0ZW6PhR0c2gTvnVbGh9nrkybiPR3Jc1AYsho='";
 
 /** PAGE_STYLE in functions/s/[id].js — the share-landing chrome, used
  *  by both the real landing page and its not-found variant. */
