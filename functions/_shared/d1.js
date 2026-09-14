@@ -67,6 +67,44 @@ export function d1Dailies(DB) {
   };
 }
 
+/* The daily schedule — one row per UTC day (migrations/0005). `set` is
+   INSERT OR IGNORE so two isolates filling the same day cannot disagree:
+   the first write wins and the second reads it back. A pinned row is an
+   admin's decision and `set` never touches one. */
+export function d1Schedule(DB) {
+  return {
+    async get(day) {
+      const row = await DB.prepare(
+        "SELECT day, puzzle_id AS puzzleId, pinned FROM daily_schedule WHERE day=?1"
+      ).bind(day).first();
+      return row || null;
+    },
+    async set(day, puzzleId, pinned = 0) {
+      await DB.prepare(
+        "INSERT OR IGNORE INTO daily_schedule (day, puzzle_id, pinned) VALUES (?1, ?2, ?3)"
+      ).bind(day, Number(puzzleId), pinned ? 1 : 0).run();
+    },
+    /** Admin pin: overwrite whatever the filler chose. */
+    async pin(day, puzzleId) {
+      await DB.prepare(
+        `INSERT INTO daily_schedule (day, puzzle_id, pinned) VALUES (?1, ?2, 1)
+         ON CONFLICT(day) DO UPDATE SET puzzle_id=excluded.puzzle_id, pinned=1`
+      ).bind(day, Number(puzzleId)).run();
+    },
+    /** Every puzzle the schedule has handed out, for the no-repeat cycle. */
+    async usedPuzzleIds() {
+      const r = await DB.prepare("SELECT DISTINCT puzzle_id AS id FROM daily_schedule").all();
+      return (r.results || []).map(x => Number(x.id));
+    },
+    async range(fromDay, toDay) {
+      const r = await DB.prepare(
+        "SELECT day, puzzle_id AS puzzleId, pinned FROM daily_schedule WHERE day BETWEEN ?1 AND ?2 ORDER BY day"
+      ).bind(fromDay, toDay).all();
+      return r.results || [];
+    },
+  };
+}
+
 export function d1Submissions(DB) {
   return {
     async create({ category, phrase, anchors, submittedBy }) {
