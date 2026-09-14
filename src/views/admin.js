@@ -18,7 +18,7 @@ import { initTabs, renderTabs } from "@basenative/components";
 import { renderAdminQueueList, renderAdminUserList } from "@basenative/admin/components";
 import { bnAlert, bnButton, h } from "../lib/dom.js";
 import { bindHidden, bindText } from "../lib/bind.js";
-import { api } from "../lib/api.js";
+import { api, errorMessage } from "../lib/api.js";
 import {
   renderCatalogueTable, renderDecidedList, renderScheduleList, renderStatsNumbers,
 } from "../lib/admin-view.js";
@@ -32,16 +32,29 @@ const LABELS = {
 
 export function createAdmin({ currentHandle, toaster, goLobby }) {
   const err = signal(null);
-  const fail = (e) => { err.set(String(e?.data?.detail || e?.message || e)); toaster(String(e?.message || e), "bad"); };
+  const fail = (e) => { err.set(String(e?.data?.detail || e?.message || e)); toaster(errorMessage(e), "bad"); };
 
+  /* One error region for the whole page, in words rather than wire
+     codes (T4-052), with a way to try again. Every loader clears `err`
+     on entry, so a retry that succeeds takes the bar down with it; the
+     retry is a button, not a loop — a lapsed session would otherwise
+     hammer the endpoint and still fail. */
   const errAlert = bnAlert({ variant: "error" });
-  bindText(errAlert.content, () => err() || "");
+  bindText(errAlert.content, () => errorMessage(err()));
   bindHidden(errAlert.el, () => !err());
+  const retryBtn = bnButton("Try again", {
+    variant: "secondary",
+    type: "button",
+    attrs: 'data-bn-action="adm-retry"',
+    onClick: () => retry(),
+  });
+  bindHidden(retryBtn, () => !err());
+  const errRegion = h("div", { "data-bn-region": "error" }, errAlert.el, retryBtn);
 
   /* ── Catalogue ────────────────────────────────────────────────────── */
   const catalogue = signal(null);
   const editing = signal(null);           // a catalogue row, or null
-  const loadCatalogue = () => api.adminCatalogue().then(catalogue.set).catch(fail);
+  const loadCatalogue = () => { err.set(null); return api.adminCatalogue().then(catalogue.set).catch(fail); };
 
   const catTable = h("div", { "data-bn-region": "scroll" });
   effect(() => {
@@ -119,7 +132,7 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
 
   /* ── Daily ────────────────────────────────────────────────────────── */
   const schedule = signal(null);
-  const loadSchedule = () => api.adminSchedule(14, 30).then(schedule.set).catch(fail);
+  const loadSchedule = () => { err.set(null); return api.adminSchedule(14, 30).then(schedule.set).catch(fail); };
   const daily = h("div", { "data-bn-region": "tab-body" });
   effect(() => {
     const s = schedule();
@@ -139,7 +152,7 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
   /* ── Queue ────────────────────────────────────────────────────────── */
   const pending = signal(null);
   const decided = signal(null);
-  const loadQueue = () => Promise.all([api.modPending().then(pending.set), api.modDecided().then(decided.set)]).catch(fail);
+  const loadQueue = () => { err.set(null); return Promise.all([api.modPending().then(pending.set), api.modDecided().then(decided.set)]).catch(fail); };
   const queue = h("div", { "data-bn-region": "tab-body" });
   effect(() => {
     const p = pending(), d = decided();
@@ -164,7 +177,7 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
   const elevated = signal(null);
   const q = signal("");
   const results = signal(null);
-  const loadElevated = () => api.modUsers("").then(elevated.set).catch(fail);
+  const loadElevated = () => { err.set(null); return api.modUsers("").then(elevated.set).catch(fail); };
   let timer = null;
   effect(() => {
     const term = q().trim();
@@ -191,6 +204,10 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
   const lists = h("section", { "aria-label": LABELS.currentSection });
   effect(() => {
     const r = results(), u = elevated();
+    /* Error first, then null-means-loading — the order moderate.js uses.
+       Checking `u === null` alone left "loading…" up forever when the
+       first request failed (T4-052). */
+    if (err()) { lists.replaceChildren(); return; }
     if (u === null) { lists.innerHTML = `<p data-bn-region="status" role="status" aria-live="polite">loading…</p>`; return; }
     const tmp = document.createElement("div");
     tmp.innerHTML = renderAdminUserList({
@@ -217,7 +234,7 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
 
   /* ── Stats ────────────────────────────────────────────────────────── */
   const stats = signal(null);
-  const loadStats = () => api.adminStats().then(stats.set).catch(fail);
+  const loadStats = () => { err.set(null); return api.adminStats().then(stats.set).catch(fail); };
   const statsEl = h("div", { "data-bn-region": "tab-body" });
   effect(() => {
     const s = stats();
@@ -247,11 +264,19 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
      catalogue loads at once because it is the landing tab and the Daily
      tab's pin options come from it. */
   const loaded = new Set();
+  const LOADERS = { daily: loadSchedule, queue: loadQueue, people: loadElevated, stats: loadStats };
   const loadFor = (id) => {
     if (loaded.has(id)) return;
     loaded.add(id);
-    ({ daily: loadSchedule, queue: loadQueue, people: loadElevated, stats: loadStats })[id]?.();
+    LOADERS[id]?.();
   };
+  /* "Try again": the catalogue plus every tab that has been opened. The
+     error bar is shared, so a retry has to re-run whichever load failed
+     rather than guess. */
+  function retry() {
+    loadCatalogue();
+    for (const id of loaded) LOADERS[id]?.();
+  }
   loadCatalogue();
   queueMicrotask(() => {
     const root = tabsHost.querySelector('[data-bn="tabs"]');
@@ -270,7 +295,7 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
       h("p", { "data-bn-region": "sticky", "data-bn-variant": "narrow" }, "Admin"),
       tagline,
     ),
-    errAlert.el,
+    errRegion,
     tabsHost,
     bnButton("Play today's puzzle →", {
       variant: "secondary",

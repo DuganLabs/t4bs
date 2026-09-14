@@ -101,6 +101,24 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
     bind: (el) => {
       const handle = cb.hydrate(el);
       effect(() => handle.setOptions(existingCategories() || []));
+      /* Commit on blur (T4-032). @basenative/combobox 1.0.4 only commits
+         on Enter, Tab-with-a-row-active or a row click; tapping straight
+         into the Phrase field dismisses the popup and leaves the typed
+         text in the input while `category` is still "". The hint invites
+         "or type a new one", so replay here what commit() would have
+         done: an existing category matches case-insensitively, anything
+         else is the create path (same as onCreate). A mousedown on a
+         listbox row is preventDefault()ed by the package, so a row click
+         never races this. Idempotent: the same text twice is a no-op. */
+      const input = el.querySelector("input");
+      input?.addEventListener("blur", () => {
+        const typed = String(input.value || "").trim();
+        if (!typed) return;
+        const upper = typed.toUpperCase();
+        if (upper === category()) return;
+        const match = (existingCategories() || []).find(c => String(c).toUpperCase() === upper);
+        category.set(match ? String(match).toUpperCase() : upper);
+      });
     },
   });
 
@@ -185,7 +203,25 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
     attrs: 'data-bn-action="submit-confirm"',
   });
   bindText(submitBtn, () => busy() ? "…" : "SUBMIT FOR REVIEW");
-  bindDisabled(submitBtn, () => busy() || !category() || !phrase() || anchorKeys().length === 0);
+
+  /* Why SUBMIT is disabled, in words (T4-032). The button used to be
+     mute: four conditions folded into one boolean, and a form that
+     looked complete with a greyed-out button and nothing to explain it.
+     The first unmet condition, in form order; "" once all are met. */
+  const submitReason = computed(() => {
+    if (!category()) return "Pick or add a category";
+    if (!phrase().trim()) return "Type the phrase";
+    if (anchorKeys().length === 0) return "Tap at least one letter to reveal";
+    return "";
+  });
+  const submitHint = h("small", {
+    id: "submit-hint",
+    "data-bn-region": "hint",
+    "data-bn-bind": "submit-reason",
+    "aria-live": "polite",
+  });
+  bindText(submitHint, submitReason);
+  bindDisabled(submitBtn, () => busy() || !!submitReason());
 
   const cancelBtn = bnButton("Cancel", {
     variant: "secondary",
@@ -226,6 +262,7 @@ export function createSubmit({ existingCategories, onCancel, onSubmitted, toaste
       ),
       errBox,
     ),
+    submitHint,
     submitBtn,
     cancelBtn,
   );

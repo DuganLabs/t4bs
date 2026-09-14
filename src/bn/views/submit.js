@@ -69,6 +69,7 @@ export default `<main aria-labelledby="submit-title" data-bn-view="submit">
 
     </fieldset>
 
+    <small id="submit-hint" data-bn-region="hint" data-bn-bind="submit-reason" aria-live="polite">Pick or add a category</small>
     ${renderButton("SUBMIT FOR REVIEW", {
       variant: "primary",
       type: "submit",

@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 
 import { renderAdminQueueList } from "@basenative/admin/components";
 
-import { matchRoute, shouldRenderSsr } from "./route-table.js";
+import { matchRoute, routeToView, shouldRenderSsr } from "./route-table.js";
 import { renderPage } from "./server/render.js";
 import { decidePlayBoot, withTimeout, isResumable } from "./client/play-boot.js";
 
@@ -61,6 +61,25 @@ describe("matchRoute", () => {
   it("returns not-found for unknown paths", () => {
     assert.equal(matchRoute("/wat"),      "not-found");
     assert.equal(matchRoute("/play/123"), "not-found");
+  });
+});
+
+describe("routeToView", () => {
+  it("maps the five known routes to their client views", () => {
+    assert.equal(routeToView("home"),     "home");
+    assert.equal(routeToView("play"),     "playing");
+    assert.equal(routeToView("submit"),   "submit");
+    assert.equal(routeToView("moderate"), "moderate");
+    assert.equal(routeToView("admin"),    "admin");
+  });
+
+  it("keeps not-found as not-found — the client must not boot the game over the server's 404 (T4-031)", () => {
+    assert.equal(routeToView("not-found"), "not-found");
+    assert.equal(routeToView(matchRoute("/wat")), "not-found");
+  });
+
+  it("falls back to home only for an unknown or missing route name", () => {
+    assert.equal(routeToView(undefined), "home");
   });
 });
 

@@ -25,17 +25,6 @@ stale, fix it in the same PR that discovers it.
 - [`T4-033`](T4-033.md) — t4bs still records no analytics, and on main it ships a beacon whose every report is dropped cross-origin
   - **Do you want page-view analytics on t4bs — if yes, someone with the Cloudflare account needs to re-add t4bs.com to Web Analytics using Manual setup, turn automatic injection off, and hand over the new token; if no, we take the analytics permissions back out of the security policy and stop claiming it.**
 
-## Serious
-
-- [`T4-031`](T4-031.md) (small) — Every unknown URL renders the fully interactive lobby over the 404 the server sent, so a wrong link looks like a normal visit home
-
-## Annoying
-
-- [`T4-032`](T4-032.md) (small) — A typed-but-uncommitted new category is silently dropped when the picker closes, leaving the field looking filled and SUBMIT disabled with no reason given
-- [`T4-051`](T4-051.md) (small) — The share-link 404 tells the recipient the link expired, which nothing in the system can cause
-- [`T4-052`](T4-052.md) (small) — 'A dead puzzle link shows the player the raw string "error: puzzle-not-found", and /admin sits on "loading…" forever when its first request fails'
-- [`T4-054`](T4-054.md) (small) — The legacy shell's own CSS reset makes every primary button transparent with near-black text — which is what `npm run dev` and `?legacy=1` serve
-
 ---
 
-6 open tickets.
+1 open ticket.

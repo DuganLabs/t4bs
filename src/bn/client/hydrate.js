@@ -71,6 +71,7 @@ import { createSessionState, shareGrid } from "../../lib/session-state.js";
    raw). Lazy-loading them shaves the eager chunk for the
    solve-the-daily journey that 95%+ of visitors take. */
 import { decidePlayBoot, withTimeout, isResumable } from "./play-boot.js";
+import { routes, routeToView } from "../route-table.js";
 
 /** @typedef {import("../route-table.js").RouteName} RouteName */
 
@@ -140,13 +141,9 @@ const RESUME_TIMEOUT_MS = 8000;
 const toaster = makeToaster(toast);
 
 /* ── Router ────────────────────────────────────────────────────────── */
-const router = createRouter([
-  { path: "/",         name: "home" },
-  { path: "/play",     name: "play" },
-  { path: "/submit",   name: "submit" },
-  { path: "/moderate", name: "moderate" },
-  { path: "/admin",    name: "admin" },
-]);
+/* The same table the SSR worker matched against — one list, not a
+   second copy that can drift. */
+const router = createRouter([...routes]);
 interceptLinks(document, router);
 
 effect(() => {
@@ -160,6 +157,10 @@ effect(() => {
   else if (r.name === "submit")   view.set("submit");
   else if (r.name === "moderate") view.set("moderate");
   else if (r.name === "admin")    view.set("admin");
+  /* @basenative/router answers an unmatched path with `name: null`.
+     Without this arm `view` would keep whatever it had — the live game
+     — under a URL that does not exist (T4-031). */
+  else                            view.set("not-found");
 
   /* Keep <body data-route> — which layout.js stamps server-side — in
      step with the client router. styles.css keys the play view's
@@ -167,7 +168,7 @@ effect(() => {
      so one rule now covers the SSR paint and every client-side
      navigation; the shell no longer carries a second, separately
      maintained copy of that padding. */
-  if (typeof document !== "undefined" && document.body) document.body.dataset.route = r.name;
+  if (typeof document !== "undefined" && document.body) document.body.dataset.route = r.name || "not-found";
 });
 
 /* Leave /play when there is no round to show.
@@ -676,17 +677,12 @@ effect(() => {
       goLobby: finishRound,
       retry: () => { const id = session()?.id; if (id) start(id); },
     }));
+  } else if (v === "not-found") {
+    /* The server already sent a 404 and src/bn/views/not_found.js; this
+       is the client agreeing with it instead of mounting the game over
+       it. The URL is deliberately left alone — rewriting it to "/" is
+       the redirect-away-from-the-destination mistake the route-access
+       block above documents. */
+    mountNotice("Page not found", `No page at ${window.location.pathname}.`);
   }
 });
-
-/** @param {string | undefined} ssrRoute @returns {string} */
-function routeToView(ssrRoute) {
-  switch (ssrRoute) {
-    case "play":     return "playing";
-    case "submit":   return "submit";
-    case "moderate": return "moderate";
-    case "admin":    return "admin";
-    case "home":
-    default:         return "home";
-  }
-}

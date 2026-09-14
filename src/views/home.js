@@ -12,6 +12,7 @@
 import { computed, effect, signal } from "@basenative/runtime";
 import { bnAlert, bnButton, bnSkeleton, h } from "../lib/dom.js";
 import { bindHidden, bindText } from "../lib/bind.js";
+import { errorMessage } from "../lib/api.js";
 
 /** "6h 21m" / "12m" — how long until the next UTC daily unlocks. */
 export function formatCountdown(ms) {
@@ -63,7 +64,9 @@ export function createHome({ daily, error, starting, onShareLast, onSubmit }) {
 
   /* ── Error ─────────────────────────────────────────────────────── */
   const errAlert = bnAlert({ variant: "error" });
-  bindText(errAlert.content, () => error() || "");
+  /* The wire code, translated (T4-052): the player used to see the raw
+     "puzzle-not-found" a dead share link produces. */
+  bindText(errAlert.content, () => errorMessage(error()));
   bindHidden(errAlert.el, () => !error());
 
   /* ── Starting today's round ────────────────────────────────────── */

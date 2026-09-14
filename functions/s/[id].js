@@ -19,7 +19,7 @@ const esc = (s) => String(s)
   .replace(/'/g, "&#39;");
 
 /* Shared "wrap" chrome for both the real share landing page below and
-   the not-found page — same brand shell so an expired/typo'd link
+   the not-found page — same brand shell so a mangled or typo'd link
    doesn't dead-end on a bare plain-text response with no way back. */
 const PAGE_STYLE = `html,body{margin:0;min-height:100%;background:#0C0B09;color:#F0EDE4;font-family:-apple-system,BlinkMacSystemFont,"Inter",sans-serif;}
     .wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:18px;padding:24px;text-align:center;box-sizing:border-box;}
@@ -67,8 +67,11 @@ export const onRequestGet = async ({ request: _request, env, params }) => {
   }
 
   const card = await d1ShareCards(env.DB).get(id);
+  /* Share cards are never removed (no expiry column, no DELETE, no
+     cron), so an unknown id can only be one that was never minted — a
+     link mangled in transit. Say that; do not claim it aged out (T4-051). */
   if (!card) {
-    return new Response(notFoundPage("This share link has expired — the round it pointed to is gone."), {
+    return new Response(notFoundPage("We couldn't find that share link — it may have been cut short on the way. Ask for it again, or play today's puzzle."), {
       status: 404,
       headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
     });
