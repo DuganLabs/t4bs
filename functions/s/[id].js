@@ -21,25 +21,19 @@ const esc = (s) => String(s)
 /* Shared "wrap" chrome for both the real share landing page below and
    the not-found page — same brand shell so an expired/typo'd link
    doesn't dead-end on a bare plain-text response with no way back. */
-const PAGE_STYLE = `html,body{margin:0;height:100%;background:#0C0B09;color:#F0EDE4;font-family:-apple-system,BlinkMacSystemFont,"Inter",sans-serif;}
-    .wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:18px;padding:24px;text-align:center;}
+const PAGE_STYLE = `html,body{margin:0;min-height:100%;background:#0C0B09;color:#F0EDE4;font-family:-apple-system,BlinkMacSystemFont,"Inter",sans-serif;}
+    .wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:18px;padding:24px;text-align:center;box-sizing:border-box;}
     h1{margin:0;font-size:clamp(40px,9vw,96px);letter-spacing:-2px;color:#E8920A;font-weight:800;}
     p{margin:0;font-size:18px;color:#988570;}
-    a{color:#E8920A;text-decoration:none;font-weight:700;}`;
+    img{display:block;width:min(100%,640px);height:auto;aspect-ratio:1200/630;border-radius:14px;border:1px solid #2C2926;}
+    a{color:#E8920A;text-decoration:none;font-weight:700;}
+    a.play{display:inline-block;background:#E8920A;color:#1A0A00;border-radius:100px;padding:14px 28px;font-size:16px;letter-spacing:.5px;}`;
 
-/* Instant redirect for human visitors. Crawlers do not run JS, so they
-   stay on this page and scrape the OG meta above.
-
-   The destination is read out of <meta name="bn-play-url"> rather than
-   interpolated into the script body, so this block is a compile-time
-   constant with a stable CSP hash — see SHARE_REDIRECT_SCRIPT_HASH in
-   functions/_shared/security.js. Interpolating the URL here would make
-   the script text vary per response, which no hash could cover and
-   which would leave the CSP with no way to allow it short of
-   'unsafe-inline'. The meta tag is parsed before this script runs, so
-   the redirect is still immediate. */
-const REDIRECT_SCRIPT =
-  `<script>window.location.replace(document.querySelector('meta[name="bn-play-url"]').content)</script>`;
+/* No redirect. This page IS the share: the card image, the category, and
+   one button to play today's puzzle. It used to bounce every human to "/"
+   the instant JavaScript ran — which also ran inside iOS's link-metadata
+   fetcher, so the share sheet and Messages captured the destination of
+   the redirect (a bare "t4bs.com") instead of this page's card. */
 
 function notFoundPage(message) {
   return `<!DOCTYPE html>
@@ -122,16 +116,18 @@ export const onRequestGet = async ({ request: _request, env, params }) => {
   <meta name="twitter:image" content="${esc(ogImage)}" />
   <meta name="twitter:image:alt" content="Tabs — try this ${esc(card.category)} puzzle" />
 
+  <meta property="og:image:secure_url" content="${esc(ogImage)}" />
+  <meta property="og:image:type" content="image/png" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <meta name="bn-play-url" content="${esc(playUrl)}" />
+  <link rel="apple-touch-icon" href="${esc(origin)}/og/default.png" />
   <style>${PAGE_STYLE}</style>
-  ${REDIRECT_SCRIPT}
 </head>
 <body>
   <div class="wrap">
     <h1>Tabs</h1>
+    <img src="${esc(ogImage)}" width="1200" height="630" alt="${esc(card.category)} — ${card.score} points, ${card.won ? "solved" : "played"}" />
     <p>${esc(card.category)} — your turn</p>
-    <p><a href="${esc(playUrl)}">Play today's puzzle</a></p>
+    <p><a class="play" href="${esc(playUrl)}">Play today's puzzle</a></p>
   </div>
 </body>
 </html>`;

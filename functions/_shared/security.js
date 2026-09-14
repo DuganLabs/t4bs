@@ -107,13 +107,7 @@ export const LEGACY_CRITICAL_STYLE_HASH =
 /** PAGE_STYLE in functions/s/[id].js — the share-landing chrome, used
  *  by both the real landing page and its not-found variant. */
 export const SHARE_PAGE_STYLE_HASH =
-  "'sha256-2QOMrGSoJh6vcqqPn2SZJoKPBvVo0PSzGRxYxoLlG7c='";
-
-/** The share landing's redirect <script>. It reads the destination out
- *  of a <meta> tag precisely so this block stays a constant and can be
- *  hashed — see functions/s/[id].js. */
-export const SHARE_REDIRECT_SCRIPT_HASH =
-  "'sha256-BU3M4YOtp56w7IQRoU2MgB2TrqBmN5SS++74ABV4r5w='";
+  "'sha256-6iVEUOWWcxJGyQeabqBdSH4RueN9k86Le1VYt9wcyNM='";
 
 /** The `onload="this.media='all'"` attribute on the Google Fonts
  *  stylesheet link, in BOTH view trees. This is the media=print swap
@@ -176,12 +170,11 @@ export const harden = securityHeaders({
   csp: {
     /* 'self' (baseline) covers the hydrate bundle and every lazily
        imported view chunk — all same-origin /assets/*.js. t4bs loads no
-       third-party script at all. The two hashes are the font-swap
-       handler and the share-landing redirect; see above. */
+       third-party script at all. The one hash is the font-swap handler;
+       the share landing carries no script any more. */
     "script-src": [
       "'unsafe-hashes'",
       FONT_SWAP_HANDLER_HASH,
-      SHARE_REDIRECT_SCRIPT_HASH,
       ANALYTICS_SCRIPT_ORIGIN,
     ],
 

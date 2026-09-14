@@ -30,7 +30,6 @@ import {
   SSR_CRITICAL_STYLE_HASH,
   LEGACY_CRITICAL_STYLE_HASH,
   SHARE_PAGE_STYLE_HASH,
-  SHARE_REDIRECT_SCRIPT_HASH,
   FONT_SWAP_HANDLER_HASH,
   KEYBOARD_WIDE_KEY_STYLE_HASH,
   ANALYTICS_REPORT_ORIGIN,
@@ -265,7 +264,7 @@ describe("inline-content hashes are current", () => {
     assert.equal(sha256("this.media='all'"), FONT_SWAP_HANDLER_HASH);
   });
 
-  it("covers the share landing's style block and redirect script", () => {
+  it("covers the share landing's style block, and the landing carries no script", () => {
     const src = readFileSync(join(ROOT, "functions/s/[id].js"), "utf8");
 
     const style = src.match(/const PAGE_STYLE = `([\s\S]*?)`;/);
@@ -274,16 +273,10 @@ describe("inline-content hashes are current", () => {
     assert.equal(styleHash, SHARE_PAGE_STYLE_HASH,
       `SHARE_PAGE_STYLE_HASH is stale; set it to: ${styleHash}`);
 
-    const script = src.match(/<script\s*>([\s\S]*?)<\/script[^>]*>/i);
-    assert.ok(script, "redirect <script> not found in functions/s/[id].js");
-    const scriptHash = sha256(script[1]);
-    assert.equal(scriptHash, SHARE_REDIRECT_SCRIPT_HASH,
-      `SHARE_REDIRECT_SCRIPT_HASH is stale; set it to: ${scriptHash}`);
-
-    // The redirect script must stay a compile-time constant — a hash
-    // cannot cover a body that varies per response.
-    assert.ok(!script[1].includes("${"),
-      "the redirect script interpolates a value; no hash can cover it");
+    /* The landing used to redirect humans with an inline script; that script
+       also ran inside iOS's link-metadata fetcher, so shares captured the
+       redirect's destination instead of the card. The page is the share now. */
+    assert.ok(!/<script/i.test(src), "the share landing must carry no inline script");
   });
 
   it("covers every style attribute @basenative/keyboard emits", async () => {
