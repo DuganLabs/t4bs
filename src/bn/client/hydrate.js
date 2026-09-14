@@ -58,13 +58,12 @@ import {
 import { nativeShare, mintShareCard, composeShareText } from "@basenative/share/client";
 
 import { api } from "../../lib/api.js";
-import { groupLobby } from "../../lib/game.js";
 import { bnAlert, bnPending, bnSkeleton, mount, h } from "../../lib/dom.js";
 import { createHeader }    from "../../components/header.js";
 import { createToast, makeToaster } from "../../components/toast.js";
 import { createHelpModal } from "../../components/help-modal.js";
 import { createAuthModal } from "../../components/auth-modal.js";
-import { createLobby }    from "../../views/lobby.js";
+import { createHome }     from "../../views/home.js";
 import { createPlay }     from "../../views/play.js";
 import { createSessionState, shareGrid } from "../../lib/session-state.js";
 /* submit / moderate / admin are gated behind user actions and pull in
@@ -110,7 +109,6 @@ window.addEventListener("unhandledrejection", (e) => {
 /* ── App-level signals, seeded from SSR where possible ────────────── */
 const view  = signal(routeToView(SSR.route));
 const user  = signal(SSR.user || null);
-const lobby = signal(SSR.lobby || null);
 const error = signal(null);
 const stats = signal({});
 const toast = signal(null);
@@ -128,11 +126,11 @@ const daily         = signal(SSR.daily || null);
 
 /* Distinguishes "we are actively trying to resolve a session" from
    "we definitively have no session". Without this the view effect can't
-   tell whether to show "Loading round…" or to bounce home, and a stalled
-   resume leaves the user staring at the loader forever. Seeded `true`
-   only when the SSR-rendered route is /play; every other entry point
-   starts the user away from the play view. */
-const playLoading = signal(SSR.route === "play");
+   tell whether to show the skeleton or the done card, and a stalled
+   resume leaves the user staring at a loader forever. Seeded `true` on
+   the two routes that carry a round — "/" (today's puzzle) and /play (a
+   preview); every other entry point starts the user away from the game. */
+const playLoading = signal(SSR.route === "home" || SSR.route === "play");
 
 /* Bound on resume failure so the resume timeout / network error etc.
    can be communicated as a toast without coupling the boot routine to
@@ -143,7 +141,7 @@ const toaster = makeToaster(toast);
 
 /* ── Router ────────────────────────────────────────────────────────── */
 const router = createRouter([
-  { path: "/",         name: "lobby" },
+  { path: "/",         name: "home" },
   { path: "/play",     name: "play" },
   { path: "/submit",   name: "submit" },
   { path: "/moderate", name: "moderate" },
@@ -153,7 +151,11 @@ interceptLinks(document, router);
 
 effect(() => {
   const r = router.currentRoute();
-  if (r.name === "lobby")         view.set("lobby");
+  /* "/" shows the live round while one is open and the home frame
+     otherwise; both are "playing" as far as the view slot is concerned
+     when a session exists. `session` is read through peek so a move
+     mid-round does not re-run this route effect. */
+  if (r.name === "home")          view.set((session.peek ? session.peek() : session()) ? "playing" : "home");
   else if (r.name === "play")     view.set("playing");
   else if (r.name === "submit")   view.set("submit");
   else if (r.name === "moderate") view.set("moderate");
@@ -170,18 +172,16 @@ effect(() => {
 
 /* Leave /play when there is no round to show.
 
-   /play is the one route that genuinely cannot be deep-linked on its
-   own: a session is created by POST, never by a GET, so a bare /play
-   with no ?play=/?daily= and nothing saved has nothing to render. The
-   shareable forms — /play?play=<id> and /play?daily=1 — do work, and
-   decidePlayBoot resolves them before this is ever reached.
+   /play cannot be deep-linked on its own: a session is created by POST,
+   never by a GET, so a bare /play with no ?play= and nothing saved has
+   nothing to render. The preview form — /play?play=<id> — does work, and
+   decidePlayBoot resolves it before this is ever reached.
 
-   The bounce REPLACES the history entry instead of pushing one. It used
-   to push, so the lobby's Back button went to /play, which bounced to
-   the lobby again — the user was pinned to the page with no way back to
-   wherever they came from. */
+   The bounce REPLACES the history entry instead of pushing one, so the
+   Back button does not lead straight back into the bounce. */
 function leavePlay() {
-  router.navigate("/", { replace: true });
+  if (window.location.pathname === "/play") router.navigate("/", { replace: true });
+  view.set(session() ? "playing" : "home");
 }
 
 /* ── Stats + session resume via @basenative/persist ───────────────── */
@@ -216,39 +216,28 @@ async function recordResultPersist(won, finalScore, category, mode) {
   stats.set(s);
   /* The authoritative daily snapshot arrives on the response that ended
      the round (createPlay's onDailyUpdate). Refresh anyway for the
-     free-play case and for any round that ended without one. */
+     preview case and for any round that ended without one. */
   api.daily().then(daily.set).catch(() => {});
 }
 
-/* ── Initial fetches: skipped when SSR pre-populated the signal ───── */
-if (!SSR.lobby) {
-  api.listPuzzles().then(lobby.set).catch(e => error.set(String(e.message || e)));
-}
+/* ── Initial fetch: skipped when SSR pre-populated the signal ─────── */
 if (!SSR.daily) {
   api.daily().then(daily.set).catch(() => {});
 }
 
-/* Categories for the submit form's combobox.
-
-   These never needed fetching. renderSsr() already shapes
-   `ctx.submit.existingCategories` for the /submit route, and the SSR
-   template prints every one of them into the <datalist> — they arrive
-   in the same HTML response as the form. The client view was reading
-   only the lobby listing, so on any entry where that listing wasn't in
-   hand yet the combobox mounted with an empty option set and filled in
-   later, which is exactly the "no category picker in the form" the
-   owner reported (and why it turned up on its own a moment later).
-
-   Reading both sources means the picker is populated on its first
-   paint, with no second round trip to wait on. */
-const ssrCategories = Array.isArray(SSR.submit?.existingCategories)
-  ? SSR.submit.existingCategories
-  : [];
-const knownCategories = () => {
-  const seen = new Set(ssrCategories);
-  for (const g of groupLobby(lobby()) || []) seen.add(g.category);
-  return [...seen].sort((a, b) => a.localeCompare(b));
-};
+/* Categories for the submit form's combobox. renderSsr() shapes
+   `ctx.submit.existingCategories` for the /submit route, so a direct hit
+   has them on first paint; a client-side navigation to /submit fetches
+   the listing once, on entry. */
+const categories = signal(Array.isArray(SSR.submit?.existingCategories) ? SSR.submit.existingCategories : []);
+const knownCategories = () => categories();
+function loadCategories() {
+  api.listPuzzles().then((rows) => {
+    const seen = new Set(categories());
+    for (const p of rows || []) seen.add(p.category);
+    categories.set([...seen].sort((a, b) => a.localeCompare(b)));
+  }).catch(() => {});
+}
 
 /* Is `user()` an answer yet, or just "we haven't asked"?
 
@@ -281,7 +270,7 @@ if (!SSR.user) {
 (async () => {
   try {
     const saved = await loadPersisted(SESSION_KEY).catch(() => null);
-    const intent = decidePlayBoot(window.location, saved);
+    const intent = decidePlayBoot(window.location, saved, daily());
 
     /* Routes other than /play and / never touch session start/resume —
        decidePlayBoot returns "ignore" for them so e.g. a moderator
@@ -298,9 +287,6 @@ if (!SSR.user) {
     }
 
     if (intent.kind === "daily") {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("daily");
-      window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
       await startDaily();
       return;
     }
@@ -313,8 +299,12 @@ if (!SSR.user) {
           "resume-timeout",
         );
         if (isResumable(s)) {
+          /* A daily resumes where it lives — on "/"; a preview on /play.
+             Today's daily saved from a previous visit is the common case,
+             and the server has already refused a second start for it. */
           hydrateSession(s);
-          if (window.location.pathname !== "/play") router.navigate("/play");
+          const wanted = s.mode === "daily" ? "/" : "/play";
+          if (window.location.pathname !== wanted) router.navigate(wanted, { replace: true });
           toaster("RESUMED — pick up where you left off", "good");
           return;
         }
@@ -326,29 +316,27 @@ if (!SSR.user) {
       }
     }
 
-    /* "home" intent OR resume failed/expired: get the user off /play.
-       Previously this relied on a fall-through `if (!session()) navigate("/")`
-       check that never ran when the resume promise stalled forever. */
-    if (window.location.pathname === "/play") leavePlay();
+    /* A resume that failed or expired on "/" falls through to today's
+       puzzle, exactly as a fresh visit would; on /play there is nothing
+       left to show. */
+    if (window.location.pathname === "/") {
+      const d = daily();
+      if (d?.puzzleId && !d.playedToday) { await startDaily(); return; }
+    }
+    leavePlay();
   } finally {
     playLoading.set(false);
   }
 })();
-
-/* The lobby no longer auto-starts anything. Auto-start existed to sell
-   the Wordle-style "one puzzle a day" framing while the pick was
-   client-side and unenforced; now the daily is real, the lobby's job is
-   to show the streak, today's card and the free-play shelf and let the
-   player choose. */
 
 function hydrateSession(s) {
   round.apply(s);
   view.set("playing");
 }
 
-/* Today's daily. The server picks the puzzle and refuses a second run
-   on the same UTC day — a 409 here means "already played", which is a
-   lobby state, not an error. */
+/* Today's puzzle, started in place on "/". The server picks the puzzle
+   and refuses a second run on the same UTC day — a 409 here means
+   "already played", which is the done card, not an error. */
 async function startDaily() {
   error.set(null);
   try {
@@ -356,32 +344,28 @@ async function startDaily() {
     if (s.daily) daily.set(s.daily);
     hydrateSession(s);
     await savePersisted(SESSION_KEY, { sessionId: s.sessionId }, 12 * 3600);
-    router.navigate("/play");
+    if (window.location.pathname !== "/") router.navigate("/", { replace: true });
   } catch (e) {
     const err = /** @type {{ data?: { daily?: unknown }, message?: string }} */ (e);
-    if (err?.data?.daily) {
-      daily.set(err.data.daily);
-      toaster("TODAY'S PUZZLE IS DONE — free play below", "good");
-    } else {
-      error.set(String(err?.message || e));
-    }
-    if (window.location.pathname === "/play") leavePlay();
+    if (err?.data?.daily) daily.set(err.data.daily);
+    else error.set(String(err?.message || e));
+    leavePlay();
   }
 }
 
-/** Free play — any approved puzzle, unlimited, never recorded. */
+/** A preview — one approved puzzle, unlimited, never recorded. */
 async function start(puzzleId) {
   error.set(null);
   try {
     const s = await withTimeout(api.startSession(puzzleId), RESUME_TIMEOUT_MS, "start-timeout");
     hydrateSession(s);
     await savePersisted(SESSION_KEY, { sessionId: s.sessionId }, 12 * 3600);
-    router.navigate("/play");
+    if (window.location.pathname !== "/play") router.navigate("/play");
   } catch (e) {
     error.set(String(/** @type {Error} */ (e)?.message || e));
     /* Don't strand the user on /play with no session — surface the
-       error on the lobby where the message + retry are visible. */
-    if (window.location.pathname === "/play") leavePlay();
+       error on the home frame where the message is visible. */
+    leavePlay();
   }
 }
 
@@ -560,7 +544,7 @@ function mountNotice(title, message) {
     h("section", { "data-bn-region": "gate", "aria-live": "polite" },
       h("p", { "data-bn-region": "sticky", "data-bn-variant": "narrow" }, title),
       alert.el,
-      h("a", { href: "/", "data-bn-action": "gate-lobby" }, "Go to the puzzle lobby"),
+      h("a", { href: "/", "data-bn-action": "gate-home" }, "Play today's puzzle"),
     ),
   ));
 }
@@ -597,13 +581,21 @@ function canEnter(routeName) {
   return false;
 }
 
+/* Leaving a finished round: the daily's home is "/", where the done
+   card now is; a preview goes home too — there is nothing else on /play. */
+function finishRound() {
+  round.clear();
+  if (window.location.pathname !== "/") router.navigate("/");
+  view.set("home");
+}
+
 effect(() => {
   const v = view();
-  if (v === "lobby") {
-    mount(viewSlot, createLobby({
-      lobby, daily, error, user,
-      onDaily: startDaily,
-      onFree: start,
+  if (v === "home") {
+    mount(viewSlot, createHome({
+      daily, error,
+      starting: playLoading,
+      onShareLast: null,
       onSubmit: () => {
         if (user()) router.navigate("/submit");
         else authOpen.set(true);
@@ -611,21 +603,19 @@ effect(() => {
     }));
   } else if (v === "submit") {
     if (!canEnter("submit")) return;
+    loadCategories();
     mountLazy("submit", () => import("../../views/submit.js"), (mod) => mod.createSubmit({
       existingCategories: knownCategories,
       onCancel: () => router.navigate("/"),
-      onSubmitted: () => {
-        api.listPuzzles().then(lobby.set).catch(() => {});
-        router.navigate("/");
-      },
+      onSubmitted: () => router.navigate("/"),
       toaster,
     }), () => bnSkeleton({ height: "3rem", count: 4 }));
   } else if (v === "moderate") {
     if (!canEnter("moderate")) return;
     mountLazy("moderate", () => import("../../views/moderate.js"), (mod) => mod.createModerate({
       toaster,
-      goLobby: () => router.navigate("/"),
-      onLobbyChange: () => api.listPuzzles().then(lobby.set).catch(() => {}),
+      goHome: () => router.navigate("/"),
+      onPreview: (id) => start(id),
     }), () => bnSkeleton({ height: "4rem", count: 3 }));
   } else if (v === "admin") {
     if (!canEnter("admin")) return;
@@ -637,16 +627,12 @@ effect(() => {
   } else if (v === "playing") {
     if (!session()) {
       if (playLoading()) {
-        mount(viewSlot,
-          h("div", { role: "status", "aria-live": "polite", "aria-busy": "true" },
-            bnPending("Loading round…"),
-          ),
-        );
+        /* On "/" the SSR board is already painted under us; keep the
+           frame (streak strip + skeleton) rather than a bare spinner. */
+        mount(viewSlot, createHome({ daily, error, starting: playLoading, onShareLast: null, onSubmit: () => router.navigate("/submit") }));
       } else {
-        /* Boot resolver gave up but route still says /play — flip back
-           to the lobby instead of dead-ending here. */
         mount(viewSlot);
-        if (window.location.pathname === "/play") leavePlay();
+        leavePlay();
       }
       return;
     }
@@ -656,7 +642,7 @@ effect(() => {
       onResultRecorded: recordResultPersist,
       onDailyUpdate: daily.set,
       onShare: shareResult,
-      goLobby: () => { round.clear(); router.navigate("/"); },
+      goLobby: finishRound,
       retry: () => { const id = session()?.id; if (id) start(id); },
     }));
   }
@@ -669,7 +655,7 @@ function routeToView(ssrRoute) {
     case "submit":   return "submit";
     case "moderate": return "moderate";
     case "admin":    return "admin";
-    case "lobby":
-    default:         return "lobby";
+    case "home":
+    default:         return "home";
   }
 }

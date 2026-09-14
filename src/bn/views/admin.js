@@ -53,7 +53,7 @@ export default `<main aria-labelledby="admin-title" data-bn-view="admin">
   <h1 id="admin-title">Admin</h1>
 
   <template @if="forbidden">
-    ${renderAlert('You need admin access. <a href="/">Back to lobby</a>.', { variant: "error" })}
+    ${renderAlert('You need admin access. <a href="/">Play today&#39;s puzzle</a>.', { variant: "error" })}
   </template>
 
   <template @else>
@@ -70,8 +70,8 @@ export default `<main aria-labelledby="admin-title" data-bn-view="admin">
       ],
     })}
 
-    <a href="/" data-bn-action="to-lobby" data-bn-variant="leave"
-       aria-label="Leave admin and go to the puzzle lobby">Go to the puzzle lobby →</a>
+    <a href="/" data-bn-action="to-home" data-bn-variant="leave"
+       aria-label="Leave admin and play today's puzzle">Play today's puzzle →</a>
   </template>
 </main>
 `;

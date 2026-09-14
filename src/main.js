@@ -1,7 +1,8 @@
 /* T4BS — BaseNative SSR/SPA shell entry point.
    Replaces the React 18 app with a signal-driven runtime.
 
-   - Routing: @basenative/router (hash-free) for /, /play, /moderate, /admin.
+   - Routing: @basenative/router (hash-free) for / (today's puzzle), /play
+     (preview), /submit, /moderate, /admin.
      /s/:id is handled by functions/s/[id].js (worker-rendered) and never
      reaches this bundle.
    - Persistence: @basenative/persist for session resume + stats.
@@ -32,13 +33,12 @@ import {
 import { nativeShare, mintShareCard, composeShareText } from "@basenative/share/client";
 
 import { api } from "./lib/api.js";
-import { groupLobby } from "./lib/game.js";
 import { bnAlert, mount, h } from "./lib/dom.js";
 import { createHeader } from "./components/header.js";
 import { createToast, makeToaster } from "./components/toast.js";
 import { createHelpModal } from "./components/help-modal.js";
 import { createAuthModal } from "./components/auth-modal.js";
-import { createLobby } from "./views/lobby.js";
+import { createHome } from "./views/home.js";
 import { createPlay } from "./views/play.js";
 import { createSessionState, shareGrid } from "./lib/session-state.js";
 /* submit / moderate / admin are gated behind user actions (clicking the
@@ -67,9 +67,9 @@ window.addEventListener("unhandledrejection", (e) => {
 });
 
 /* ── App-level signals ─────────────────────────────────────────────────── */
-const view  = signal("lobby");      // 'lobby' | 'playing' | 'submit' | 'moderate' | 'admin'
+const view  = signal("home");       // 'home' | 'playing' | 'submit' | 'moderate' | 'admin'
 const user  = signal(null);
-const lobby = signal(null);
+const categories = signal([]);
 const error = signal(null);
 const stats = signal({});
 const toast = signal(null);
@@ -82,7 +82,7 @@ const round = createSessionState();
 const { session, phase, score, lives, tokens } = round;
 /* True while the /play boot resolver is running — distinguishes
    "still loading" from "definitively no session". */
-const playLoading   = signal(window.location.pathname === "/play");
+const playLoading   = signal(window.location.pathname === "/play" || window.location.pathname === "/");
 
 /* Today's daily as the SERVER sees it (GET /api/daily): which puzzle,
    whether this player already finished it, and their streak. Mirrors
@@ -96,7 +96,7 @@ const toaster = makeToaster(toast);
 
 /* ── Router ────────────────────────────────────────────────────────────── */
 const router = createRouter([
-  { path: "/",         name: "lobby" },
+  { path: "/",         name: "home" },
   { path: "/play",     name: "play" },
   { path: "/submit",   name: "submit" },
   { path: "/moderate", name: "moderate" },
@@ -109,7 +109,7 @@ interceptLinks(document, router);
 
 effect(() => {
   const r = router.currentRoute();
-  if (r.name === "lobby")         view.set("lobby");
+  if (r.name === "home")          view.set((session.peek ? session.peek() : session()) ? "playing" : "home");
   else if (r.name === "play")     view.set("playing");
   else if (r.name === "submit")   view.set("submit");
   else if (r.name === "moderate") view.set("moderate");
@@ -150,15 +150,24 @@ async function recordResultPersist(won, finalScore, category, mode) {
   api.daily().then(daily.set).catch(() => {});
 }
 
-/* ── Boot the lobby + me + resume / deep-link ──────────────────────────── */
-api.listPuzzles().then(lobby.set).catch(e => error.set(String(e.message || e)));
+/* ── Boot: me + today's status, then resume / start / deep-link ────────── */
 api.me().then(r => user.set(r.user)).catch(() => {});
-api.daily().then(daily.set).catch(() => {});
+const dailyReady = api.daily().then(daily.set).catch(() => {});
+function loadCategories() {
+  api.listPuzzles().then((rows) => {
+    const seen = new Set(categories());
+    for (const p of rows || []) seen.add(p.category);
+    categories.set([...seen].sort((a, b) => a.localeCompare(b)));
+  }).catch(() => {});
+}
 
 (async () => {
   try {
     const saved = await loadPersisted(SESSION_KEY).catch(() => null);
-    const intent = decidePlayBoot(window.location, saved);
+    /* No SSR seed on this entry, so the daily status has to land before
+       the boot decision can read it. */
+    await dailyReady;
+    const intent = decidePlayBoot(window.location, saved, daily());
 
     // Routes other than /play and / never touch session start/resume —
     // see the matching comment in bn/client/hydrate.js.
@@ -173,9 +182,6 @@ api.daily().then(daily.set).catch(() => {});
     }
 
     if (intent.kind === "daily") {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("daily");
-      window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
       await startDaily();
       return;
     }
@@ -189,7 +195,8 @@ api.daily().then(daily.set).catch(() => {});
         );
         if (isResumable(s)) {
           hydrateSession(s);
-          router.navigate("/play");
+          const wanted = s.mode === "daily" ? "/" : "/play";
+          if (window.location.pathname !== wanted) router.navigate(wanted, { replace: true });
           toaster("RESUMED — pick up where you left off", "good");
           return;
         }
@@ -202,19 +209,34 @@ api.daily().then(daily.set).catch(() => {});
       }
     }
 
-    if (window.location.pathname === "/play") router.navigate("/");
+    if (window.location.pathname === "/") {
+      const d = daily();
+      if (d?.puzzleId && !d.playedToday) { await startDaily(); return; }
+    }
+    leavePlay();
   } finally {
     playLoading.set(false);
   }
 })();
+
+function leavePlay() {
+  if (window.location.pathname === "/play") router.navigate("/", { replace: true });
+  view.set(session() ? "playing" : "home");
+}
+
+function finishRound() {
+  round.clear();
+  if (window.location.pathname !== "/") router.navigate("/");
+  view.set("home");
+}
 
 function hydrateSession(s) {
   round.apply(s);
   view.set("playing");
 }
 
-/* Today's daily — server-picked, once per UTC day. A 409 means it's
-   already been played, which is a lobby state and not an error. */
+/* Today's puzzle, started in place on "/". A 409 means it's already
+   been played, which is the done card and not an error. */
 async function startDaily() {
   error.set(null);
   try {
@@ -222,30 +244,26 @@ async function startDaily() {
     if (s.daily) daily.set(s.daily);
     hydrateSession(s);
     await savePersisted(SESSION_KEY, { sessionId: s.sessionId }, 12 * 3600);
-    router.navigate("/play");
+    if (window.location.pathname !== "/") router.navigate("/", { replace: true });
   } catch (e) {
     const err = /** @type {{ data?: { daily?: unknown }, message?: string }} */ (e);
-    if (err?.data?.daily) {
-      daily.set(err.data.daily);
-      toaster("TODAY'S PUZZLE IS DONE — free play below", "good");
-    } else {
-      error.set(String(err?.message || e));
-    }
-    if (window.location.pathname === "/play") router.navigate("/");
+    if (err?.data?.daily) daily.set(err.data.daily);
+    else error.set(String(err?.message || e));
+    leavePlay();
   }
 }
 
-/** Free play — any approved puzzle, unlimited, never recorded. */
+/** A preview — one approved puzzle, unlimited, never recorded. */
 async function start(puzzleId) {
   error.set(null);
   try {
     const s = await withTimeout(api.startSession(puzzleId), RESUME_TIMEOUT_MS, "start-timeout");
     hydrateSession(s);
     await savePersisted(SESSION_KEY, { sessionId: s.sessionId }, 12 * 3600);
-    router.navigate("/play");
+    if (window.location.pathname !== "/play") router.navigate("/play");
   } catch (e) {
     error.set(String(/** @type {Error} */ (e)?.message || e));
-    if (window.location.pathname === "/play") router.navigate("/");
+    leavePlay();
   }
 }
 
@@ -357,11 +375,11 @@ mount(root,
 // just replacing children on `viewSlot`.
 effect(() => {
   const v = view();
-  if (v === "lobby") {
-    mount(viewSlot, createLobby({
-      lobby, daily, error, user,
-      onDaily: startDaily,
-      onFree: start,
+  if (v === "home") {
+    mount(viewSlot, createHome({
+      daily, error,
+      starting: playLoading,
+      onShareLast: null,
       onSubmit: () => {
         if (user()) router.navigate("/submit");
         else authOpen.set(true);
@@ -373,14 +391,11 @@ effect(() => {
       authOpen.set(true);
       return;
     }
+    loadCategories();
     mountLazy("submit", () => import("./views/submit.js"), (mod) => mod.createSubmit({
-      existingCategories: () => groupLobby(lobby())?.map(g => g.category) || [],
+      existingCategories: () => categories(),
       onCancel: () => router.navigate("/"),
-      onSubmitted: () => {
-        // Refresh lobby (in case admin auto-approved) and bounce home.
-        api.listPuzzles().then(lobby.set).catch(() => {});
-        router.navigate("/");
-      },
+      onSubmitted: () => router.navigate("/"),
       toaster,
     }));
   } else if (v === "moderate") {
@@ -390,8 +405,8 @@ effect(() => {
     }
     mountLazy("moderate", () => import("./views/moderate.js"), (mod) => mod.createModerate({
       toaster,
-      goLobby: () => router.navigate("/"),
-      onLobbyChange: () => api.listPuzzles().then(lobby.set).catch(() => {}),
+      goHome: () => router.navigate("/"),
+      onPreview: (id) => start(id),
     }));
   } else if (v === "admin") {
     if (!user()?.isAdmin) {
@@ -406,10 +421,10 @@ effect(() => {
   } else if (v === "playing") {
     if (!session()) {
       if (playLoading()) {
-        mount(viewSlot, h("p", { "data-bn-region": "status", role: "status", "aria-live": "polite" }, "loading round…"));
+        mount(viewSlot, createHome({ daily, error, starting: playLoading, onShareLast: null, onSubmit: () => router.navigate("/submit") }));
       } else {
         mount(viewSlot);
-        if (window.location.pathname === "/play") router.navigate("/");
+        leavePlay();
       }
       return;
     }
@@ -419,7 +434,7 @@ effect(() => {
       onResultRecorded: recordResultPersist,
       onDailyUpdate: daily.set,
       onShare: shareResult,
-      goLobby: () => { round.clear(); router.navigate("/"); },
+      goLobby: finishRound,
       retry: () => { const id = session()?.id; if (id) start(id); },
     }));
   }

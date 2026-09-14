@@ -1,16 +1,24 @@
-/* Pure boot-policy for the /play route.
+/* Pure boot-policy for the routes that carry a round: "/" (today's
+   puzzle) and "/play" (a preview).
 
    Splitting this out from the hydrator buys us a unit-testable surface
-   for the "what should the client do when /play loads?" question. The
-   hydrator stays an imperative orchestrator; the *decision* lives here.
+   for the "what should the client do when the page loads?" question.
+   The hydrator stays an imperative orchestrator; the *decision* lives
+   here.
 
-   On a fresh GET to /play (refresh, deep-link, share-card click) the
-   server has no session context — sessions are mutating and we don't
-   create one per crawler hit. The client resolves it in priority order:
+   On a fresh GET the server has no session context — sessions are
+   mutating and we don't create one per crawler hit. The client resolves
+   it in priority order:
 
-     1. ?play=<id> in the URL — start a new round on that puzzle.
-     2. A saved session id in local storage — resume it.
-     3. Nothing → bounce home so the user picks a round.
+     /            1. a saved, unfinished round → resume it in place
+                  2. today's puzzle is open for this player → start it
+                  3. nothing (played already, or nothing scheduled) → the
+                     home view draws the done card / the notice
+     /play        1. ?play=<id> → start a preview of that puzzle
+                  2. ?daily=1 (old share links) → home, where today's
+                     puzzle already is
+                  3. a saved round → resume it
+                  4. nothing → home
 
    Without this resolver the user used to stare at "Loading round…"
    indefinitely (the symptom that PR #43 tried to fix and didn't). */
@@ -25,34 +33,34 @@
  */
 
 /**
- * Decide what the client should do when the /play route boots.
+ * Decide what the client should do when the page boots.
  *
  * @param {{ search: string, pathname?: string }} location  Just the bits of `Location` we read.
  * @param {{ sessionId?: string } | null | undefined} saved Whatever `loadPersisted("t4bs:session")` returned.
+ * @param {{ puzzleId?: number | null, playedToday?: boolean } | null | undefined} [daily]
+ *        The server's daily status, when the caller has it. Only "/" reads it.
  * @returns {BootIntent}
  */
-export function decidePlayBoot(location, saved) {
-  /* Only resolve a start/resume/home *play* intent for the routes that
-     boot policy actually owns: /play itself, and / (the lobby, which
-     already offers its own "pick a round" / daily-auto-start affordance
-     around an in-progress session). Direct navigation or a reload of
+export function decidePlayBoot(location, saved, daily) {
+  /* Only "/" and "/play" carry a round. Direct navigation or a reload of
      /moderate, /admin or /submit must not get hijacked into the game —
-     this used to run unconditionally, so a moderator reloading the queue
-     with an unfinished daily saved would get bounced straight into
-     /play. Callers of an "ignore" intent leave the current route alone
-     and skip start/resume entirely. */
+     this used to run unconditionally, so a moderator reloading the
+     queue with an unfinished daily saved would get bounced into it. */
   const pathname = location.pathname ?? "/play";
   if (pathname !== "/play" && pathname !== "/") {
     return { kind: "ignore" };
   }
 
   const params = new URLSearchParams(location.search || "");
-  /* `?daily=1` asks the SERVER for today's puzzle (POST /api/session
-     {mode:"daily"}) rather than naming an id — it's the shareable "play
-     today's Tabs" link, and it can't be used to replay a finished day
-     because the server refuses a second run. Checked before `?play=`
-     so a link carrying both resolves to the authoritative one. */
-  if (params.get("daily") === "1") return { kind: "daily" };
+  const hasSaved = !!(saved && typeof saved.sessionId === "string" && saved.sessionId.length > 0);
+
+  if (pathname === "/") {
+    if (hasSaved) return { kind: "resume", sessionId: /** @type {string} */ (saved.sessionId) };
+    if (daily && daily.puzzleId && !daily.playedToday) return { kind: "daily" };
+    return { kind: "home" };
+  }
+
+  /* /play */
   const playRaw = params.get("play");
   if (playRaw !== null) {
     const playId = Number(playRaw);
@@ -60,9 +68,10 @@ export function decidePlayBoot(location, saved) {
       return { kind: "start", puzzleId: playId };
     }
   }
-  if (saved && typeof saved.sessionId === "string" && saved.sessionId.length > 0) {
-    return { kind: "resume", sessionId: saved.sessionId };
-  }
+  /* The old shareable "play today's Tabs" link. Today's puzzle lives on
+     "/" now, so the answer is simply "go home". */
+  if (params.get("daily") === "1") return { kind: "home" };
+  if (hasSaved) return { kind: "resume", sessionId: /** @type {string} */ (saved.sessionId) };
   return { kind: "home" };
 }
 

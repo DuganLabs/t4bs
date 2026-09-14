@@ -272,9 +272,9 @@ export function createAdmin({ currentHandle, toaster, goLobby }) {
     ),
     errAlert.el,
     tabsHost,
-    bnButton("Go to the puzzle lobby →", {
+    bnButton("Play today's puzzle →", {
       variant: "secondary",
-      attrs: 'data-bn-variant="leave" data-bn-action="to-lobby" aria-label="Leave admin and go to the puzzle lobby"',
+      attrs: 'data-bn-variant="leave" data-bn-action="to-home" aria-label="Leave admin and play today&#39;s puzzle"',
       onClick: goLobby,
     }),
   );

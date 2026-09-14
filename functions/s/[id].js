@@ -90,7 +90,10 @@ export const onRequestGet = async ({ request: _request, env, params }) => {
   // If the share card has a puzzle_id, recipients land directly on that
   // puzzle. If not (legacy cards minted before migration 0002), fall back
   // to the lobby.
-  const playUrl = card.puzzleId ? `/?play=${card.puzzleId}` : "/";
+  /* Always home: the game is one puzzle a day, so whoever opens a share
+     link plays TODAY'S puzzle — not the one the sender played. Nobody
+     needs the exact link the sender had. */
+  const playUrl = "/";
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -128,7 +131,7 @@ export const onRequestGet = async ({ request: _request, env, params }) => {
   <div class="wrap">
     <h1>Tabs</h1>
     <p>${esc(card.category)} — your turn</p>
-    <p><a href="${esc(playUrl)}">Play this puzzle</a></p>
+    <p><a href="${esc(playUrl)}">Play today's puzzle</a></p>
   </div>
 </body>
 </html>`;

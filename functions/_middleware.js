@@ -53,7 +53,6 @@ async function renderError(ctx, err) {
     pathname: url.pathname,
     user: null,
     error: String(err?.message || err || "render failed"),
-    lobby: null,
     daily: null,
     play: null,
     submit: { existingCategories: [] },

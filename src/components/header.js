@@ -19,14 +19,14 @@ export function createHeader({
 }) {
   /* axe `label-content-name-mismatch` — when a control has visible
      text, its accessible name must contain that text. The accessible
-     name is "T4BS — back to lobby" via visible text + sr-only suffix. */
+     name is "T4BS — today's puzzle" via visible text + sr-only suffix. */
   const logo = h("a", {
     href: "/",
     "data-bn-action": "logo",
     onClick: (e) => { e.preventDefault(); onLogo(); },
   },
     h("strong", null, "T", h("em", null, "4"), "BS"),
-    h("span", { class: "sr-only" }, " — back to lobby"),
+    h("span", { class: "sr-only" }, " — today's puzzle"),
   );
 
   // Playing-mode stats — <output> matches the SSR <output aria-label="Score"> shape

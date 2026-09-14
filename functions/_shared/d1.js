@@ -8,6 +8,15 @@ export function d1Puzzles(DB) {
       ).all();
       return r.results || [];
     },
+    /* Moderators: the approved catalogue with the phrases showing. The
+       player-facing listing above deliberately omits `phrase`; this one
+       is served only behind requireModerator (api/moderate/catalogue). */
+    async listApprovedWithPhrases() {
+      const r = await DB.prepare(
+        "SELECT id, category, phrase, submitted_by AS submittedBy FROM puzzles WHERE status='approved' ORDER BY category, id"
+      ).all();
+      return r.results || [];
+    },
     /* Admin: every puzzle, with what the sessions table says about it.
        plays counts every round started; wins counts finished-won; the
        average is over won rounds only, which is the number that says

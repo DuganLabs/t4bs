@@ -11,13 +11,16 @@ import { renderAdminQueueList } from "@basenative/admin/components";
 import { bnAlert, bnButton, h } from "../lib/dom.js";
 import { bindHidden, bindText } from "../lib/bind.js";
 import { api } from "../lib/api.js";
+import { groupCatalogue, renderCatalogueShelf } from "../lib/game.js";
 
-export function createModerate({ toaster, onLobbyChange, goLobby }) {
-  const list = signal(null);
-  const err  = signal(null);
+export function createModerate({ toaster, goHome, onPreview }) {
+  const list      = signal(null);
+  const catalogue = signal(null);
+  const err       = signal(null);
 
   function load() {
     api.modPending().then(list.set).catch(e => err.set(String(e.message || e)));
+    api.modCatalogue().then(catalogue.set).catch(e => err.set(String(e.message || e)));
   }
   load();
 
@@ -36,7 +39,6 @@ export function createModerate({ toaster, onLobbyChange, goLobby }) {
       toaster(status === "approved" ? "APPROVED" : "REJECTED",
               status === "approved" ? "great" : "bad");
       load();
-      onLobbyChange?.();
     } catch (e) {
       toaster(String(e.message || e), "bad");
     }
@@ -73,27 +75,63 @@ export function createModerate({ toaster, onLobbyChange, goLobby }) {
     decide(Number(btn.dataset.id), btn.dataset.decision);
   });
 
+  /* The catalogue — same string helper the SSR template uses, so the
+     repaint is byte-identical to the first paint. Preview is a real
+     link (works before hydration); after it, the click starts the
+     preview round in place instead of a full navigation. */
+  const catalogueHost = h("div", { "data-bn-bind": "moderate-catalogue" });
+  effect(() => {
+    if (err()) { catalogueHost.replaceChildren(); return; }
+    const rows = catalogue();
+    if (rows === null) {
+      catalogueHost.replaceChildren(
+        h("p", { "data-bn-region": "status", role: "status", "aria-live": "polite" }, "loading…"),
+      );
+      return;
+    }
+    if (rows.length === 0) {
+      catalogueHost.replaceChildren(h("p", { "data-bn-region": "status" }, "No approved phrases yet."));
+      return;
+    }
+    catalogueHost.innerHTML = renderCatalogueShelf(groupCatalogue(rows));
+  });
+  catalogueHost.addEventListener("click", (e) => {
+    const a = e.target.closest('a[data-bn-action="preview"]');
+    if (!a) return;
+    const id = Number(a.dataset.puzzleId);
+    if (!Number.isFinite(id)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onPreview(id);
+  });
+
+  const catalogueSection = h("section", {
+    "aria-labelledby": "moderate-catalogue-title",
+    "data-bn-region": "catalogue-section",
+  },
+    h("h2", { id: "moderate-catalogue-title" }, "Catalogue"),
+    h("p", { "data-bn-region": "catalogue-note" },
+      "Every approved phrase, by category. Preview opens one puzzle without touching the daily or anyone's streak."),
+    catalogueHost,
+  );
+
   return h("main", {
     "aria-labelledby": "moderate-title",
     "data-bn-view": "moderate",
   },
     h("header", null,
-      h("h1", { id: "moderate-title", class: "sr-only" }, "Moderation queue"),
-      h("p", { "data-bn-region": "sticky", "data-bn-variant": "narrow" }, "Moderation queue"),
+      h("h1", { id: "moderate-title", class: "sr-only" }, "Moderation"),
+      h("p", { "data-bn-region": "sticky", "data-bn-variant": "narrow" }, "Moderation"),
       h("p", { "data-bn-region": "tagline" }, "Approve or reject pending phrases"),
     ),
     errBox,
     queueRoot,
-    /* Not a back action — it goes to the lobby, which is where APPROVED
-       puzzles live, and it goes there regardless of how the moderator
-       reached the queue. The old "← Back" label promised history
-       navigation and delivered a different view; this names the
-       destination and points forward. */
-    bnButton("Go to the puzzle lobby →", {
+    catalogueSection,
+    bnButton("Play today's puzzle →", {
       variant: "secondary",
-      attrs: 'data-bn-variant="leave" data-bn-action="to-lobby" '
-        + 'aria-label="Leave the moderation queue and go to the puzzle lobby, where approved puzzles are listed"',
-      onClick: goLobby,
+      attrs: 'data-bn-variant="leave" data-bn-action="to-home" '
+        + 'aria-label="Leave moderation and play today\'s puzzle"',
+      onClick: goHome,
     }),
   );
 }
