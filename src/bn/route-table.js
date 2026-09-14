@@ -26,6 +26,26 @@ export function matchRoute(pathname) {
   return "not-found";
 }
 
+/* The client-side view a route name boots into. Lives here, not in
+   hydrate.js, so it stays pure and testable: hydrate.js runs the whole
+   app at import time and cannot be loaded by node --test.
+
+   "not-found" MUST map to itself. It used to fall into the default arm
+   and the client would boot as if it were home, mounting the live game
+   over the 404 the server had just sent (T4-031). */
+/** @param {string | undefined} ssrRoute @returns {'home'|'playing'|'submit'|'moderate'|'admin'|'not-found'} */
+export function routeToView(ssrRoute) {
+  switch (ssrRoute) {
+    case "play":      return "playing";
+    case "submit":    return "submit";
+    case "moderate":  return "moderate";
+    case "admin":     return "admin";
+    case "not-found": return "not-found";
+    case "home":
+    default:          return "home";
+  }
+}
+
 /* Asset / API / OG / share paths fall through to their own handlers
    so the SSR worker never intercepts them. `?legacy=1` is the escape
    hatch back to the static SPA shell at dist/index.html. */

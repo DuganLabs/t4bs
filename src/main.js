@@ -47,6 +47,7 @@ import { createSessionState, shareGrid } from "./lib/session-state.js";
    load lazily via dynamic import below — keeping them out of the eager
    chunk shaves ~10 kB gzipped for the typical play-only journey. */
 import { decidePlayBoot, withTimeout, isResumable } from "./bn/client/play-boot.js";
+import { routes } from "./bn/route-table.js";
 
 /* ── error logging (carryover from the React main) ─────────────────────── */
 function postLog(payload) {
@@ -67,7 +68,7 @@ window.addEventListener("unhandledrejection", (e) => {
 });
 
 /* ── App-level signals ─────────────────────────────────────────────────── */
-const view  = signal("home");       // 'home' | 'playing' | 'submit' | 'moderate' | 'admin'
+const view  = signal("home");       // 'home' | 'playing' | 'submit' | 'moderate' | 'admin' | 'not-found'
 const user  = signal(null);
 const categories = signal([]);
 const error = signal(null);
@@ -95,13 +96,7 @@ const RESUME_TIMEOUT_MS = 8000;
 const toaster = makeToaster(toast);
 
 /* ── Router ────────────────────────────────────────────────────────────── */
-const router = createRouter([
-  { path: "/",         name: "home" },
-  { path: "/play",     name: "play" },
-  { path: "/submit",   name: "submit" },
-  { path: "/moderate", name: "moderate" },
-  { path: "/admin",    name: "admin" },
-]);
+const router = createRouter([...routes]);
 // interceptLinks signature is (root, router) — first arg is the DOM element to
 // listen on, second is the router. Passing only `router` made `root` = router,
 // which has no addEventListener → blank-page crash.
@@ -114,11 +109,12 @@ effect(() => {
   else if (r.name === "submit")   view.set("submit");
   else if (r.name === "moderate") view.set("moderate");
   else if (r.name === "admin")    view.set("admin");
+  else                            view.set("not-found");   // router gives name: null for an unmatched path (T4-031)
 
   /* Mirror the SSR shell's <body data-route>, so the one rule that sizes
      the play view's keyboard gutter (`body[data-route="play"] #app`)
      works on this legacy entry too. */
-  if (typeof document !== "undefined" && document.body) document.body.dataset.route = r.name;
+  if (typeof document !== "undefined" && document.body) document.body.dataset.route = r.name || "not-found";
 });
 
 /* ── Stats + session resume via @basenative/persist ────────────────────── */
@@ -472,5 +468,19 @@ effect(() => {
       goLobby: finishRound,
       retry: () => { const id = session()?.id; if (id) start(id); },
     }));
+  } else if (v === "not-found") {
+    /* Same dead end hydrate.js renders: say where we are, offer the way
+       out, leave the wrong URL in the address bar so it can be noticed
+       and reported (T4-031). */
+    const alert = bnAlert({ variant: "warning" });
+    alert.content.textContent = `No page at ${window.location.pathname}.`;
+    mount(viewSlot, h("main", { "aria-labelledby": "gate-title", "data-bn-view": "gate" },
+      h("h1", { id: "gate-title", class: "sr-only" }, "Page not found"),
+      h("section", { "data-bn-region": "gate", "aria-live": "polite" },
+        h("p", { "data-bn-region": "sticky", "data-bn-variant": "narrow" }, "Page not found"),
+        alert.el,
+        h("a", { href: "/", "data-bn-action": "gate-home" }, "Play today's puzzle"),
+      ),
+    ));
   }
 });

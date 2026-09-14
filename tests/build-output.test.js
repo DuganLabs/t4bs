@@ -22,6 +22,12 @@ const DIST = join(ROOT, "dist");
 describe("vite build chunk split (PR #64)", () => {
   let manifest;
   let chunkSources = {};
+  /* The eager shared chunk: the largest non-entry chunk both client
+     entries import statically. Rollup names it after whichever shared
+     module it picks first (play-boot for a long time, route-table once
+     hydrate.js and main.js started importing the route table), so it
+     is found by shape, not by name. */
+  let eagerShared = { name: "", source: "" };
 
   before(() => {
     /* Always rebuild so the assertion reflects current source. The
@@ -40,6 +46,17 @@ describe("vite build chunk split (PR #64)", () => {
       if (entry.file && entry.file.endsWith(".js")) {
         chunkSources[entry.name || entry.file] = readFileSync(join(DIST, entry.file), "utf-8");
       }
+    }
+
+    const entries = ["index.html", "src/bn/client/hydrate.js"].map(k => manifest[k]).filter(Boolean);
+    const sharedKeys = entries
+      .map(e => new Set(e.imports || []))
+      .reduce((acc, set) => acc === null ? set : new Set([...acc].filter(k => set.has(k))), null) || new Set();
+    for (const key of sharedKeys) {
+      const entry = manifest[key];
+      if (!entry?.file?.endsWith(".js") || entry.isEntry || entry.isDynamicEntry) continue;
+      const source = readFileSync(join(DIST, entry.file), "utf-8");
+      if (source.length > eagerShared.source.length) eagerShared = { name: entry.name || key, source };
     }
   });
 
@@ -77,21 +94,21 @@ describe("vite build chunk split (PR #64)", () => {
   });
 
   describe("eager chunk hygiene", () => {
-    it("the play-boot eager chunk does not carry @basenative/combobox internals", () => {
-      const playBoot = chunkSources["play-boot"];
-      assert.ok(playBoot, "play-boot chunk missing — chunk-naming may have shifted");
+    it("the eager shared chunk does not carry @basenative/combobox internals", () => {
+      const playBoot = eagerShared.source;
+      assert.ok(playBoot, "no chunk is imported statically by both client entries — the chunk graph has changed shape");
       /* "Combobox" is the public factory name from @basenative/combobox.
          If it's in the eager chunk, submit's dynamic import() didn't
          work and the dep is back in the always-loaded path. */
       assert.equal(
         playBoot.includes("Combobox"),
         false,
-        "Combobox factory leaked back into the eager play-boot chunk",
+        `Combobox factory leaked back into the eager shared chunk (${eagerShared.name})`,
       );
     });
 
-    it("the play-boot eager chunk does not carry @basenative/admin's bn-admin- markup strings", () => {
-      const playBoot = chunkSources["play-boot"];
+    it("the eager shared chunk does not carry @basenative/admin's bn-admin- markup strings", () => {
+      const playBoot = eagerShared.source;
       /* renderAdminQueueList + renderAdminUserList emit a flock of
          bn-admin-* class names. If those land in play-boot it means
          moderate/admin views (or their deps) leaked into the eager
@@ -99,7 +116,7 @@ describe("vite build chunk split (PR #64)", () => {
       assert.equal(
         playBoot.includes("bn-admin-"),
         false,
-        "bn-admin-* strings leaked into the eager play-boot chunk",
+        `bn-admin-* strings leaked into the eager shared chunk (${eagerShared.name})`,
       );
     });
   });
@@ -142,12 +159,11 @@ describe("vite build chunk split (PR #64)", () => {
        62 KB still trips it, and that is the only way the chunk gets
        there — a lazy view (submit/moderate/admin) re-entering the eager
        import graph. A kilobyte of markup helper is not that. */
-    it("play-boot raw size stays under 58 KB", () => {
-      const playBoot = chunkSources["play-boot"];
-      const rawKb = playBoot.length / 1024;
+    it("the eager shared chunk's raw size stays under 58 KB", () => {
+      const rawKb = eagerShared.source.length / 1024;
       assert.ok(
         rawKb < 58,
-        `play-boot is ${rawKb.toFixed(1)} KB raw — over the 58 KB budget. Did a lazy view sneak back into the eager graph?`,
+        `${eagerShared.name} is ${rawKb.toFixed(1)} KB raw — over the 58 KB budget. Did a lazy view sneak back into the eager graph?`,
       );
     });
   });
