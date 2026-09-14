@@ -14,6 +14,7 @@ import { matchRoute }   from "../../src/bn/route-table.js";
 import { renderPage }   from "../../src/bn/server/render.js";
 import { loadAssets }   from "../../src/bn/server/manifest.js";
 import { createEngine } from "../../shared/engine.js";
+import { catalogueRow } from "../../shared/admin-stats.js";
 import { LIVES, anchorLetters, boardFor, hiddenCount, publicShape, scoreFor, wordsOf } from "../../shared/pure.js";
 import {
   d1Puzzles, d1Sessions, d1Submissions, d1Users,
@@ -58,7 +59,7 @@ export async function renderSsr({ request, env }) {
   const assetsPromise = loadAssets(env, url);
 
   /** @type {{ lobby: any[] | null, daily: any, play: any, modPending: any[] | null, adminElevated: any[] | null }} */
-  const fetched = { lobby: null, daily: null, play: null, modPending: null, adminElevated: null };
+  const fetched = { lobby: null, daily: null, play: null, modPending: null, adminElevated: null, adminCatalogue: null };
   let dataError = null;
   /** Set when an anonymous player id had to be minted for the daily. */
   let setCookie = null;
@@ -93,7 +94,12 @@ export async function renderSsr({ request, env }) {
   } else if (route === "admin") {
     dataPromise = (async () => {
       const u = await userPromise;
-      if (u && u.isAdmin) fetched.adminElevated = await d1Users(env.DB).listByRoles(["moderator", "admin"]);
+      if (u && u.isAdmin) {
+        [fetched.adminElevated, fetched.adminCatalogue] = await Promise.all([
+          d1Users(env.DB).listByRoles(["moderator", "admin"]),
+          d1Puzzles(env.DB).listAllWithStats().then(rows => rows.map(catalogueRow)),
+        ]);
+      }
     })();
   }
 
@@ -121,6 +127,7 @@ export async function renderSsr({ request, env }) {
     },
     admin: {
       elevated: fetched.adminElevated,
+      catalogue: fetched.adminCatalogue,
       currentHandle: user?.handle || null,
       forbidden: route === "admin" && !(user && user.isAdmin),
     },

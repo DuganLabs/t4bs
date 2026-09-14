@@ -1243,3 +1243,40 @@ main[data-bn-view="not-found"] > h1 {
     scroll-behavior: auto !important;
   }
 }
+
+/* ADMIN v2 — one route, five tabs (docs/PRD.md §4). The tabs and the
+   table are @basenative/components (renderTabs / renderTable) and take
+   their chrome from components.css; these rules only size the admin
+   surface, give the catalogue table room to scroll, and mark the rows the
+   win-rate column says to look at. */
+main[data-bn-view="admin"] { max-width: 880px; }
+main[data-bn-view="admin"] [data-bn="tabs"] { width: 100%; }
+main[data-bn-view="admin"] [data-bn-region="tab-body"] { padding-block: 12px; }
+main[data-bn-view="admin"] [data-bn-region="scroll"] { overflow-x: auto; width: 100%; }
+main[data-bn-view="admin"] table { font-size: 13px; white-space: nowrap; }
+main[data-bn-view="admin"] table td[data-bn-cell="phrase"] { white-space: normal; min-width: 14rem; }
+main[data-bn-view="admin"] tr[data-suspicious] td:first-child::before {
+  content: '⚠ '; color: #E8920A;
+}
+main[data-bn-view="admin"] tr[data-status="retired"] { opacity: .5; }
+main[data-bn-view="admin"] [data-bn-region="numbers"] {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 8px; margin: 0 0 12px;
+}
+main[data-bn-view="admin"] [data-bn-region="number"] {
+  background: #161412; border: 1px solid #2A2724; border-radius: 8px; padding: 10px 12px;
+}
+main[data-bn-view="admin"] [data-bn-region="number"] > strong {
+  display: block; font-family: 'Bebas Neue', sans-serif; font-size: 28px; line-height: 1; color: #F0EDE4;
+  font-variant-numeric: tabular-nums;
+}
+main[data-bn-view="admin"] [data-bn-region="number"] > small {
+  display: block; margin-top: 4px; font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; color: #988570;
+}
+main[data-bn-view="admin"] [data-bn-region="day-row"][data-today] { outline: 1.5px solid #E8920A; outline-offset: -1px; }
+main[data-bn-view="admin"] [data-bn-region="pin"] { font: inherit; background: #0C0B09; color: #F0EDE4; border: 1px solid #3A332B; border-radius: 4px; padding: 4px 6px; max-width: 16rem; }
+main[data-bn-view="admin"] [data-bn-region="edit-form"] { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; align-items: end; margin: 12px 0; padding: 12px; background: #161412; border: 1px solid #2A2724; border-radius: 8px; }
+main[data-bn-view="admin"] [data-bn-region="edit-form"] label { display: grid; gap: 4px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #988570; }
+main[data-bn-view="admin"] [data-bn-region="edit-form"] input { font: inherit; background: #0C0B09; color: #F0EDE4; border: 1px solid #3A332B; border-radius: 4px; padding: 6px 8px; min-height: 36px; }
+main[data-bn-view="admin"] [data-bn-region="edit-form"] [data-bn-span="2"] { grid-column: 1 / -1; }
+main[data-bn-view="admin"] [data-bn-region="decided"] li { padding: 8px 0; border-bottom: 1px solid #2A2724; font-size: 13px; }
+main[data-bn-view="admin"] [data-bn-region="decided"] li small { color: #988570; }

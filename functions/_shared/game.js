@@ -40,7 +40,7 @@ export function gameEngine(env) {
  *
  * @param {any} env @param {number[]} approvedIds @param {string} day
  */
-async function scheduledPuzzleId(env, approvedIds, day) {
+export async function scheduledPuzzleId(env, approvedIds, day) {
   if (approvedIds.length === 0) return null;
   const approved = new Set(approvedIds);
   try {

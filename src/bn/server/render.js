@@ -25,6 +25,7 @@ import moderateHtml from "../views/moderate.js";
 import adminHtml from "../views/admin.js";
 import notFoundHtml from "../views/not_found.js";
 import { groupLobby, renderBrowseShelf } from "../../lib/game.js";
+import { renderCatalogueTable } from "../../lib/admin-view.js";
 
 const VIEW_TEMPLATES = {
   "lobby":     lobbyHtml,
@@ -179,10 +180,15 @@ function renderView(ctx) {
         })),
       });
     case "admin":
+      /* The catalogue table is rendered with @basenative/components'
+         renderTable — the same call the client makes after hydration — and
+         marked raw, exactly as the moderation queue does with its list. */
       return render(tpl, {
         forbidden: !!ctx.admin.forbidden,
         elevated: ctx.admin.elevated ?? [],
         currentHandle: ctx.admin.currentHandle ?? "",
+        catalogueCount: (ctx.admin.catalogue ?? []).length,
+        catalogueHtml: raw(renderCatalogueTable(ctx.admin.catalogue ?? [])),
       });
     case "not-found":
     default:
