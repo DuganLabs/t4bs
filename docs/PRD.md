@@ -1,195 +1,271 @@
-# T4BS — Product Requirements Document
+# Tabs (T4BS) — Product Requirements Document, v2
 
-> Status: **draft** · Owner: Warren Dugan · Last updated: 2026-09-11 (architecture, milestones, glossary corrected against the code)
+> Status: **v2 — ground-up redesign, 2026-09-13** · Owner: Warren Dugan
 >
-> This PRD is the canonical source of truth for what t4bs is, who it's for, and what it does. Issues and milestones in [DuganLabs/t4bs](https://github.com/DuganLabs/t4bs) reflect this document — when reality drifts, update the doc *and* the issues.
+> v1 of this document described the game as shipped through 2026-09-11. This
+> version replaces it. §0 says why; everything after it is the game as it is
+> being rebuilt. The v1 text is in git history (`docs/PRD.md` at `d1361ec`).
 
 ---
 
-## 1. Overview
+## 0. Why v2 exists
 
-**Tabs** (visual mark `T4BS`, secret meaning *Time For BS*) is a quick category puzzle. The player gets a single category, a hidden multi-word phrase, and four lives **shared across the whole phrase** — any word guess that isn't fully correct spends one, whichever word it was. They type letters into the tiles, *stake* the positions they're sure about (double points if right, one extra life if wrong), and gamble on a final ALL IN guess for the kill. Every guess is server-authoritative — the answer never crosses the wire until the round is over.
+The numbers on 2026-09-13, from the production database:
 
-There is one **daily** puzzle per UTC day, the same one for every player, chosen server-side and recorded once per player per day; solving it grows a streak. **Free play** is the rest of the catalogue, unlimited and unrecorded.
+| | |
+|---|---|
+| Rounds started, all time | 603 |
+| Rounds started, last 7 days | 139 |
+| Daily results recorded, all time | **1** |
+| Daily results won | **0** |
+| Approved puzzles | 12 |
+| Share cards minted | 14 |
 
-The game is the public flagship for **BaseNative** (DuganLabs's open-source shared runtime + abstractions library). When BaseNative ships a new primitive — auth, OG image rendering, virtual keyboard, admin tooling — Tabs is where it gets shown off in production.
+People start rounds. Nobody finishes one. The daily — the entire retention
+mechanic — has been completed once in the product's life, and that one was a
+loss.
 
-Made by **The Synonym Toast Bunch** (the group; the game's domain is `t4bs.com` because Synonym Toast Bunch is too long).
+Playing it explains the table. A round is four lives shared across the whole
+phrase, and **any word guess that is not letter-perfect spends one.** On a
+six-word phrase that is three misses in total. Two wrong three-letter guesses
+(one staked) took a fresh round from four lives to one. The difficulty is
+bimodal: recognise the phrase from the category and two anchor letters and the
+round is trivial — type six words, done, no tension at all. Fail to recognise
+it and there is no path in: Wordle-style feedback is built for deducing one
+word over six attempts, and this hands out three attempts for six words.
 
-### One-line pitch
-"Pick one, solve it. Stake what you know, gamble on what you don't."
+The mechanics do not cohere because each was added to patch the last. Stakes
+were "decorative" until they were given a life cost; anchors were added because
+ten house puzzles "started from a blank grid against a shared pool of four
+lives"; cascade tokens were added to hand back the letters the lives took away;
+ALL IN is a game-over button whose instructions name a SHOVE control that does
+not exist. Seven systems — lives, score, per-word feedback, stakes, cascades,
+anchors, all-in — to deliver one decision the player never actually feels.
 
----
+Twelve puzzles cannot sustain a daily. The picker is `hash(day) % 12`.
 
-## 2. Goals
+## 1. The game
 
-1. **Be a great game.** Tight loop: 30–90 seconds per round, addictive, mobile-first, sharable.
-2. **Showcase BaseNative.** Every architectural decision should make BaseNative look good. If t4bs needs something BaseNative can't do, that's a BaseNative bug.
-3. **Stay free, ad-free, account-optional.** Anyone can play unauthenticated. Auth gates submission/moderation, never play.
-4. **Polished UX.** "DIALED" is the bar. Focus management, motion preferences, haptics, sub-100ms perceived latency.
+**Tabs** is a phrase-reveal puzzle. One category. One hidden phrase. You reveal
+letters one at a time, and the moment you know the phrase you solve it — and
+the fewer letters you needed, the higher you score.
 
-## Non-goals
+That is the whole loop. One mechanic, one decision per turn, thirty to ninety
+seconds.
 
-- Multiplayer or real-time PvP. The game is single-player vs the house.
-- Monetization. No ads, no subscriptions, no IAPs.
-- Native mobile apps. PWA is fine; native is overkill for this scope.
-- Cross-platform parity beyond modern browsers (Safari/Chrome/Firefox, last 2 versions).
+### 1.1 A round
 
----
+1. The board shows the category and the phrase as blank tiles, word by word,
+   with two or three **anchor** letters already revealed.
+2. Tap a letter. If it is in the phrase, every instance turns over. If not,
+   the key goes dark and you lose a **life**. You have five.
+3. At any moment, tap **SOLVE** and type the phrase. Right: the round ends and
+   you score. Wrong: you lose a life, nothing is revealed, play continues.
+4. Out of lives: the phrase is revealed, the round is over, you score nothing.
 
-## 3. Users
+### 1.2 Scoring
 
-### Primary: the player
-Curious, casually competitive, plays on phone in spare moments. Wants quick rounds, fair difficulty, and shareable wins. Does not want an account.
+Score is **letters you did not need**. Every hidden tile still blank when you
+solve is worth 10. A phrase with 20 letters, solved with 8 still hidden, scores
+80. Each life you still hold at the end adds 5.
 
-### Secondary: the contributor
-Wants to submit phrases for the queue. Needs an account (passkey only). May earn moderator status.
+That makes the game's one decision real at every turn: reveal another letter
+(safer, and it costs you ten points a tile) or solve now (you might not know it
+yet). It is the same tension v1 sold as "stake what you know, gamble on what
+you don't" — delivered by the score itself instead of a side-bet system.
 
-### Tertiary: the moderator / admin
-Approves submission queue, manages other moderators (admin-only). Lightweight tool, not a CMS.
+Every puzzle carries a **par**: the score a strong player gets, set when the
+puzzle is authored (default: solve with half the non-anchor letters hidden).
+The end screen shows your score against par, so 80 means something.
 
----
+### 1.3 What is gone from v1
 
-## 4. Key flows
+- **Per-word guessing and Wordle feedback.** Letters are guessed against the
+  whole phrase; the phrase is solved as one thing.
+- **Stakes.** The score system is the bet.
+- **Cascade tokens.** There is nothing to give back because nothing is taken
+  away for a correct letter.
+- **ALL IN as a mode.** SOLVE is one button, always available, never fatal by
+  itself.
+- **The knowledge panel.** The board is the knowledge.
 
-### 4.1 Play a round
-1. Lobby → *today's puzzle* (server-picked, one per UTC day, once per player) or a
-   free-play card → server creates a session, returns words/anchors/lives/score.
-   Anchor letters are mandatory content, not optional flavour: every puzzle opens
-   with at least one position revealed.
-2. Type letters into tiles using on-screen keyboard.
-3. Tap a tile to *stake* it — double points on that position if it's right, one
-   extra life lost if any staked position is wrong (capped at one extra per guess).
-4. Submit guess → server reveals green/yellow/absent feedback per position, and
-   spends a life unless the word came back fully correct.
-5. Repeat until phrase solved or out of lives. The knowledge panel under the grid
-   keeps words-solved / letters-known / lives-left visible throughout.
-6. End-state overlay: solved → confetti + share; busted → reveal answer + retry/share.
-7. Resume mid-round if user reloads (server is authoritative; client localStorage holds session id).
+Nothing on the list was removed for being complicated. Each was removed because
+the score system does its job.
 
-### 4.2 ALL IN
-Mid-round, player can press ALL IN to type the *full* remaining phrase in one shove. If correct, max bonus. If wrong, game over.
+### 1.4 Daily and free play
 
-### 4.3 Submit a phrase
-Authenticated user → submit form → preview → POST → enters `submissions` queue with `status='pending'`.
+Unchanged in intent, fixed in execution.
 
-### 4.4 Approve queue (mods + admins)
-`/moderate` → list of pending submissions → approve (copies into `puzzles` table) or reject. Audit trail in `decided_by`.
+- **Daily:** one puzzle per UTC day, the same for everyone, one attempt,
+  recorded, drives the streak. Now picked from a **schedule** (§4.3), not a
+  hash over the catalogue, so it cannot repeat until the catalogue has cycled
+  and an admin can pin a puzzle to a date.
+- **Free play:** everything else, unlimited, unrecorded.
 
-### 4.5 Promote a moderator (admins only)
-`/admin` → search by handle → promote to moderator/admin or demote to user. Audit trail in `users.role_changed_*`.
+### 1.5 Sharing
 
-### 4.6 Share a result
-End-state → "Share result" → POST `/api/share-cards` mints an id → native share sheet with text + `https://t4bs.com/s/{id}` URL → recipient sees a custom OG card with their score, category, and tile grid.
+End of round → share card. The grid shows which tiles were revealed and which
+were still hidden at the solve — the hidden ones are the brag. Score against
+par, category, streak. Same `/s/{id}` mechanism and OG pipeline as v1.
 
----
+## 2. Goals and non-goals
+
+Unchanged from v1, restated:
+
+1. **Be a great game.** Tight loop, mobile-first, shareable, and — new —
+   *finishable*. The measure is daily completions, which is currently one.
+2. **Showcase BaseNative.** Every surface is built from `@basenative/*`.
+3. **Free, ad-free, account-optional.** Play never needs an account.
+4. **Polished.** Focus, motion preferences, haptics, sub-100ms perceived latency.
+
+Non-goals: multiplayer, monetisation, native apps, browsers older than the last
+two versions.
+
+## 3. Content
+
+Twelve puzzles is the other half of why the daily failed. v2 ships with a
+catalogue of **at least 365** puzzles across the existing categories plus new
+ones (idioms, song titles, book titles, landmarks, foods, sayings), authored
+in `shared/seed-puzzles.js` with anchors and par, and applied by migration.
+The submission queue stays for community phrases; it is no longer the only
+source.
+
+Rules for a puzzle (`shared/submission.js`, unchanged shape):
+2–10 words, each 2–10 letters, 36 letters total at most, letters and spaces
+only, at least one anchor and at most `maxAnchors(words)`. New: `par`
+(integer, computed from the phrase if absent).
+
+## 4. Admin
+
+The v1 admin was two screens — a submission queue and a role picker — for a
+catalogue nobody submitted to (0 pending, 3 users). v2's admin is the tool for
+running the game.
+
+One route, `/admin`, admin-only, tabbed (`@basenative/components` tabs):
+
+### 4.1 Catalogue
+Every puzzle: category, phrase, anchors, par, source, status, **plays / win
+rate / median score** from `sessions`. Search and filter. Edit phrase,
+category, anchors, par. Retire a puzzle (status `retired` — never deleted;
+sessions and share cards reference it). Add a puzzle directly, bypassing the
+queue.
+
+The win-rate column is the point: a puzzle with 40 plays and a 5% win rate is
+mis-anchored or mis-parred, and this is where you see it.
+
+### 4.2 Daily
+The next 30 days as a list, each with its scheduled puzzle. Pin any puzzle to
+any future date; unpinned days fill from the shuffled cycle. Past days show
+plays, completions, win rate.
+
+### 4.3 Schedule model
+`daily_schedule (day PK, puzzle_id, pinned INTEGER)`. A cron-free approach:
+when `/api/daily` is asked for a day that has no row, the server fills it —
+next unused puzzle in a deterministic shuffle of the catalogue seeded once —
+and writes the row. Pinned rows are never overwritten. Result: no repeats until
+every puzzle has been today's, and an admin can override any day.
+
+### 4.4 Queue
+The existing moderation queue, rendered by `@basenative/admin`, with the one
+thing it lacked: reject asks for confirmation and a reason (T4-021), and
+rejected items remain visible in a "decided" list.
+
+### 4.5 People
+The existing role management.
+
+### 4.6 Stats
+Rounds by day, daily completion rate, streak distribution, share cards. The
+table in §0, live.
 
 ## 5. Data model
 
-Stored in Cloudflare D1 (`tabs-db`).
+| Table | Change |
+|---|---|
+| `puzzles` | `+ par INTEGER`, `+ status 'retired'` in the CHECK, `+ plays/wins` are computed, not stored |
+| `sessions` | `state` JSON is the v2 engine state (§6); v1 sessions are invalid and are purged by migration |
+| `daily_schedule` | **new** — `day TEXT PK, puzzle_id INTEGER, pinned INTEGER DEFAULT 0` |
+| `daily_results` | unchanged |
+| `share_cards` | `grid` now encodes revealed/hidden per tile; `+ par INTEGER` |
+| `submissions` | `+ reason TEXT` for rejections |
+| `users`, `credentials`, `challenges`, `user_sessions` | unchanged |
 
-| Table | Purpose | Key fields |
-|---|---|---|
-| `puzzles` | Approved phrases playable from the lobby | `id`, `category`, `phrase`, `anchors` (JSON), `submitted_by`, `status` |
-| `daily_results` | One row per player per UTC day — makes the daily un-replayable and the streak real | `player_key`, `day`, `puzzle_id`, `outcome`, `score` (PK `player_key,day`) |
-| `submissions` | Pending/decided user submissions | `id`, `category`, `phrase`, `anchors`, `submitted_by`, `status`, `decided_by`, `decided_at` |
-| `sessions` | Active in-flight game sessions | `id`, `puzzle_id`, `state` (JSON of engine state), `updated_at` |
-| `users` | Authenticated users | `id`, `handle` (unique CI), `role` (`user`\|`moderator`\|`admin`), `role_changed_*` |
-| `credentials` | WebAuthn passkeys | `id`, `user_id`, `public_key`, `counter`, `transports` |
-| `challenges` | Short-lived WebAuthn challenges | `challenge`, `user_id`, `purpose`, `expires_at` |
-| `user_sessions` | Active auth sessions (cookie tokens) | `id`, `user_id`, `expires_at` |
-| `share_cards` | Minted share-card records | `id` (slug), `session_id`, `user_id`, `category`, `score`, `won`, `grid` |
+## 6. Engine
 
-**KV:** `OG_CACHE` namespace caches rendered PNGs (`og:default:v1`, `og:score:{id}`) and font/wasm assets (`font:inter-{weight}`, `wasm:resvg-{ver}`).
+`shared/engine.js` is rewritten. The store interfaces (`puzzles`, `sessions`,
+`onFinish`) are kept so the D1 wiring and the Vite mock do not change.
 
----
+State per session:
 
-## 6. Design principles
+```
+{ puzzleId, mode, day, playerKey, started,
+  lives: 5, revealed: Set<letter>, missed: Set<letter>,
+  solveAttempts: number, finished: null|'won'|'lost', score: 0 }
+```
 
-- **Server is the source of truth.** Letters, scores, lives, anchors — all server-computed. Client renders what the server returns.
-- **The answer never crosses the wire** until the round is finished.
-- **Mobile-first, thumb-reachable.** All actions sit within the bottom 60% of the screen.
-- **Motion has meaning.** Tile flips signal feedback. Confetti signals win. `prefers-reduced-motion` honored.
-- **Color tokens (canonical):** bg `#0C0B09` · accent `#E8920A` · tile `#FFF3E0` · letter `#5C2A00` · green `#3F9D5B` · yellow `#E8B73B` · muted `#988570`.
-- **Type:** `Bebas Neue` for in-app numerics + headers (current); Inter on OG cards (server-rendered).
-- **A11y is product, not polish.** Labels, focus rings, ARIA-live for score updates, hit-targets ≥ 44pt.
+Operations — every one server-authoritative, the phrase never leaves the
+server before `finished`:
 
----
+- `startSession(puzzleId, opts)` → public shape: category, word lengths,
+  anchor reveals, lives, par.
+- `guessLetter(sessionId, letter)` → `{ hit: boolean, positions: [{wi, li}],
+  lives, revealedCount, finished }`. A repeated letter is a no-op, not a life.
+- `solve(sessionId, phrase)` → `{ correct, score, lives, finished, reveal }`.
+  Wrong: `lives - 1`, nothing revealed.
+- `resumeSession(sessionId)` → current board.
 
-## 7. Architecture
+Scoring, pure, in `shared/pure.js`: `hiddenAtSolve * 10 + livesLeft * 5`.
 
-### Current (as of 2026-09-11)
-- **BaseNative signal-driven SSR is the default render path**, not a Vite React SPA. `@basenative/server` + `@basenative/router` + `@basenative/runtime` render every route (`src/bn/server/render.js`, `src/bn/views/*`); Vite builds the hydration client (`src/bn/client/hydrate.js`) and a `?legacy=1` fallback entry (`src/main.js`) — both BaseNative-based. There is no `App.jsx` and no React anywhere in the tree; that migration is complete, not a future milestone (see §8, M3).
-- Cloudflare Pages Functions (Workers runtime) for `/api/*`, `/og/*`, `/s/*`, and the SSR dispatch itself (`functions/_middleware.js`).
-- Cloudflare D1 for persistence.
-- Cloudflare KV (`OG_CACHE`) for OG image + font/wasm cache.
-- WebAuthn auth via `@basenative/auth-webauthn` (wrapping `@simplewebauthn/server`) — also already adopted, not a target.
-- OG image rendering is hand-built SVG rasterized via `@resvg/resvg-wasm` — **not** satori/`@basenative/og-image`. That package was evaluated and rejected: satori's `harfbuzzjs` dependency reads `self.location.href` at module load, which doesn't exist under the Workers runtime, and neither of its WASM-loading strategies is viable there either (see `functions/_shared/og.js`'s file header for the full writeup).
-- BaseNative packages already in production: `@basenative/router`, `@basenative/components`, `@basenative/keyboard`, `@basenative/admin`, `@basenative/persist`, `@basenative/share`, `@basenative/auth-webauthn`, `@basenative/combobox`, `@basenative/eslint-config`, `@basenative/tsconfig`.
-- `shared/engine.js` is the only large piece that stayed bespoke through the SSR rewrite — it encodes the game itself and is shared unchanged between the SSR path and the mock dev server.
+## 7. Client
 
----
+Same architecture as v1 (BaseNative SSR default, hydration client, `?legacy=1`
+fallback). The play view is rebuilt:
 
-## 8. Milestones
+- **Board**: words as tile groups; anchors and revealed letters filled;
+  hidden tiles blank. Tap does nothing on the board — the keyboard is the
+  only input, which removes the whole class of "which word am I in" bugs.
+- **Keyboard**: `@basenative/keyboard`, with keys in three states: untried,
+  hit, miss.
+- **SOLVE**: one primary button. Opens a sheet with the phrase's word shape
+  and a text input; Enter submits. Escape or "Keep guessing" closes it.
+- **Status line**: lives as five marks, current score-if-solved-now, par.
+  That one number — "solve now for 80" — is what makes the decision visible.
+- **End dialog**: solved / revealed, score against par, streak, share.
 
-> Each milestone maps 1:1 to a GitHub milestone. All four (#2-#5) are still open on GitHub as of 2026-09-11; the status below reflects what the code actually does, which is ahead of the tracker in three of the four cases.
+Everything works without JavaScript for the first paint; the round itself
+needs it, as in v1.
 
-### M0 — Phase 0 stop-gaps (✅ shipped Apr 2026)
-- Real moderator role + DB-driven permissions.
-- Static OG meta on home, dynamic per-score OG cards via satori + resvg-wasm.
-- Admin promotion UI.
-- **Commit:** `a4fddfe`.
+## 8. What this replaces in the backlog
 
-### M1 — BaseNative readiness (✅ done, except one item rejected)
-- Adopted and in production: `@basenative/keyboard`, `@basenative/admin`, `@basenative/persist`, `@basenative/share`, `@basenative/auth-webauthn`, `@basenative/combobox`, `@basenative/router`, `@basenative/components`, `@basenative/eslint-config`, `@basenative/tsconfig` — see `package.json` and the import sites in `src/bn/`, `src/main.js`, `src/views/`.
-- `@basenative/og-image` — **rejected, not pending.** Satori's `harfbuzzjs` dependency is incompatible with the Workers runtime (crashes reading `self.location.href`, and its WASM-loading fallback needs runtime `WebAssembly.instantiate(bytes)`, which Workers disallow). `functions/_shared/og.js` ships a hand-built SVG renderer via `@resvg/resvg-wasm` instead — same package this repo already uses successfully for OG rendering via a static WASM import.
-- `wrangler-preset` and `doppler` BaseNative packages: not found in this repo's dependencies or the BaseNative package inventory; dropped from this list as unverifiable.
+Of the nine open t4bs tickets, four are made moot by the rewrite and are
+closed by the PR that lands it: T4-030 (SHOVE — ALL IN is gone), T4-032
+(submit category — the picker is rebuilt on the catalogue), T4-052 (dead
+puzzle link copy — rebuilt), T4-053 (the FAB — the lobby is rebuilt). T4-021
+is delivered by §4.4. The remaining four are independent of gameplay and
+stay: T4-031 (404 hydration), T4-033 (analytics token), T4-051 (share-link
+404 copy), T4-054 (legacy CSS reset).
 
-### M2 — Org uniformity (mostly done)
-- `deploy.yml` and `lighthouse.yml` already call `DuganLabs/.github` reusable workflows (`cf-deploy.yml@v2`, `d1-migrate.yml@v2`, `lighthouse.yml@v2`) via Doppler-sourced secrets.
-- `ci.yml` and `bundle-size.yml` are still inlined — not blocked on repo visibility (t4bs is public) but on the reusable workflows not authenticating to GitHub Packages, which 401s `npm ci` on any PR that touches the lockfile (every Dependabot PR). `DuganLabs/.github` `v2` reportedly carries the fix; switching these two back to reusables is the remaining work here.
+## 9. Delivery
 
-### M3 — t4bs clean rewrite on BaseNative (✅ done)
-- BaseNative SSR (`src/bn/`) is the default for every route today, not a `?next=1` opt-in. The legacy static shell lives behind `?legacy=1` instead, and even that fallback is BaseNative/signals-based (`src/main.js`), not the original React SPA.
-- Same DB (`tabs-db`), same domain (`t4bs.com`).
-- View Transitions API adoption was not verified in this pass — re-check before claiming it.
+In order, each its own PR, each playable when it lands:
 
-### M4 — Polish + launch (open)
-- `lighthouse.yml` currently gates PRs at 80/95/80/95 (perf/a11y/best-practices/seo) against production, not 100/100/100/100 — the ceiling on best-practices/perf is a third-party Cloudflare bot-mitigation script that can't be removed from the repo (see that file's comments).
-- No automated axe-core check runs in CI. Several axe-driven fixes exist as manual, one-off code comments (e.g. `src/bn/views/header.js`, `src/components/header.js`), not a repeatable 0-violations gate.
-- JS-gzip budget is enforced (`bundle-size.yml`, 60KB budget, ~31KB actual per that file's comments) but the ≤30KB target and the launch blog post are not verified done here.
-
----
-
-## 9. Open questions
-
-- Mobile haptics: should ALL IN trigger a heavy haptic? Currently subtle.
-- Submission moderation: should rejected submissions surface a reason to the submitter?
-- Share card variants per platform? Current single-card works everywhere; could ship dedicated Twitter / Discord variants.
-- Leaderboards? Out of scope for M0–M3, but worth a parking-lot.
-
----
+1. **Engine v2 + tests** — `shared/`, the three API routes, session purge
+   migration. Nothing visible changes yet; the old client breaks against it,
+   so this and (2) merge together.
+2. **Play view v2** — the board, keyboard, SOLVE, end dialog, share grid.
+3. **Content** — 365+ puzzles, `par`, `daily_schedule`, the scheduler.
+4. **Admin v2** — catalogue, daily, queue with reasons, people, stats.
+5. **Lobby copy and the four surviving tickets.**
 
 ## 10. Glossary
 
-- **Anchor** — a letter pre-revealed at game start (helps the player bootstrap).
-  Required: `validateSubmission` rejects a phrase with none, and the ten house
-  puzzles carry two each (`shared/seed-puzzles.js`).
-- **Stake** — a bet on a single tile position, consumed on submit. Double points
-  if that position comes back green; **one extra life** if any staked position
-  doesn't. It was score-only (and therefore free, since score floors at zero)
-  until 2026-09-11.
-- **Life** — one of four, **shared across the entire phrase**. Spent by any word
-  submission that isn't fully correct, and by a busted stake.
-- **ALL IN** — a single shove of the entire remaining phrase; max bonus or game over.
-- **House** — the default `submitted_by` value for puzzles bundled with the app.
-- **Cascade** — a spendable letter-reveal token, not an animation. Cold-solving a word on the first attempt (`priorWrongs === 0`) earns one cascade token (`shared/engine.js`'s `startSession`/guess handling sets `cascadeEarned` and increments `sess.tokens`); the player spends a token via `spendCascade(sessionId, wordIndex, letterIndex)` to reveal any unrevealed tile in any unsolved word. See §4.1 and §6 above for the player-facing flow.
-- **Daily** — the one puzzle available for a given UTC day, the same for every
-  player, picked by `shared/daily.js` and recorded once per player in
-  `daily_results`. Not replayable for score.
-- **Streak** — consecutive UTC days whose daily was solved. Server-side, so it
-  survives a new device and can't be inflated by replaying free play.
+- **Anchor** — a letter revealed at the start. Every puzzle has at least one.
+- **Life** — one of five. Lost on a missed letter or a wrong solve.
+- **Solve** — typing the whole phrase. The only way to win.
+- **Par** — the score a strong player gets on this puzzle.
+- **Daily** — the day's one puzzle, scheduled, one attempt, drives the streak.
+- **Streak** — consecutive UTC days whose daily was solved.
 
 ---
 
-_Last verified against the code: 2026-09-11 (commit `d1361ec`)._
+_v2 written 2026-09-13 against production data and a played round. Not yet
+verified against code: nothing in §6–§7 exists until delivery step 1 merges._
