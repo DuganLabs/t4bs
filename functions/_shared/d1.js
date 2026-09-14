@@ -8,6 +8,48 @@ export function d1Puzzles(DB) {
       ).all();
       return r.results || [];
     },
+    /* Admin: every puzzle, with what the sessions table says about it.
+       plays counts every round started; wins counts finished-won; the
+       average is over won rounds only, which is the number that says
+       whether a puzzle is parred right. A puzzle nobody has played reads
+       0 / 0 / null. */
+    async listAllWithStats() {
+      const r = await DB.prepare(
+        `SELECT p.id, p.category, p.phrase, p.anchors, p.par, p.status,
+                p.submitted_by AS submittedBy, p.created_at AS createdAt,
+                COUNT(s.id) AS plays,
+                SUM(CASE WHEN json_extract(s.state, '$.finished') = 'won' THEN 1 ELSE 0 END) AS wins,
+                AVG(CASE WHEN json_extract(s.state, '$.finished') = 'won'
+                         THEN json_extract(s.state, '$.score') END) AS avgWinScore
+           FROM puzzles p
+           LEFT JOIN sessions s ON s.puzzle_id = p.id
+          GROUP BY p.id
+          ORDER BY p.id`
+      ).all();
+      return (r.results || []).map(x => ({ ...x, anchors: JSON.parse(x.anchors) }));
+    },
+    /* Admin edit. Only the fields given change; `status` is 'approved' or
+       'retired' — a retired puzzle stops being offered while every session
+       and share card that references it keeps resolving. */
+    async update(id, { category, phrase, anchors, par, status }) {
+      const sets = []; const args = [];
+      if (category !== undefined) { sets.push(`category=?${args.length + 1}`); args.push(category); }
+      if (phrase !== undefined)   { sets.push(`phrase=?${args.length + 1}`);   args.push(phrase); }
+      if (anchors !== undefined)  { sets.push(`anchors=?${args.length + 1}`);  args.push(JSON.stringify(anchors)); }
+      if (par !== undefined)      { sets.push(`par=?${args.length + 1}`);      args.push(par === null ? null : Number(par)); }
+      if (status !== undefined)   { sets.push(`status=?${args.length + 1}`);   args.push(status); }
+      if (sets.length === 0) return false;
+      args.push(Number(id));
+      const r = await DB.prepare(`UPDATE puzzles SET ${sets.join(", ")} WHERE id=?${args.length}`).bind(...args).run();
+      return (r.meta?.changes ?? 0) > 0;
+    },
+    /* Admin add — straight to approved, bypassing the queue. */
+    async insert({ category, phrase, anchors, par, submittedBy }) {
+      const r = await DB.prepare(
+        "INSERT INTO puzzles (category, phrase, anchors, par, submitted_by, status) VALUES (?1, ?2, ?3, ?4, ?5, 'approved') RETURNING id"
+      ).bind(category, phrase, JSON.stringify(anchors), par ?? null, submittedBy).first();
+      return r.id;
+    },
     async getApproved(id) {
       // `par` may be NULL — shared/pure.js parFor() derives a default then.
       const row = await DB.prepare(
@@ -55,6 +97,15 @@ export function d1Dailies(DB) {
         `INSERT OR IGNORE INTO daily_results (player_key, day, puzzle_id, outcome, score)
            VALUES (?1, ?2, ?3, ?4, ?5)`
       ).bind(playerKey, day, Number(puzzleId), outcome, Number(score) || 0).run();
+    },
+    /* Per-day completions, for the schedule tab's past days. */
+    async byDay(fromDay, toDay) {
+      const r = await DB.prepare(
+        `SELECT day, COUNT(*) AS plays, SUM(CASE WHEN outcome='won' THEN 1 ELSE 0 END) AS wins,
+                AVG(CASE WHEN outcome='won' THEN score END) AS avgWinScore
+           FROM daily_results WHERE day BETWEEN ?1 AND ?2 GROUP BY day`
+      ).bind(fromDay, toDay).all();
+      return r.results || [];
     },
     /* Streaks only ever walk backwards from today until they hit a gap,
        so a bounded window is plenty and keeps the read O(1)-ish. */
@@ -119,14 +170,25 @@ export function d1Submissions(DB) {
       ).all();
       return (r.results || []).map(x => ({ ...x, anchors: JSON.parse(x.anchors) }));
     },
-    async decide(id, status, decidedBy) {
+    /* Decided rows stay visible (T4-021): a rejection is a decision someone
+       can see and revisit, not a disappearance. */
+    async listDecided(limit = 100) {
+      const r = await DB.prepare(
+        `SELECT id, category, phrase, submitted_by AS submittedBy, status, reason,
+                decided_by AS decidedBy, decided_at AS decidedAt
+           FROM submissions WHERE status != 'pending'
+          ORDER BY decided_at DESC LIMIT ?1`
+      ).bind(limit).all();
+      return r.results || [];
+    },
+    async decide(id, status, decidedBy, reason = null) {
       const sub = await DB.prepare(
         "SELECT category, phrase, anchors, submitted_by AS submittedBy FROM submissions WHERE id=?1 AND status='pending'"
       ).bind(id).first();
       if (!sub) return null;
       await DB.prepare(
-        "UPDATE submissions SET status=?1, decided_by=?2, decided_at=unixepoch() WHERE id=?3"
-      ).bind(status, decidedBy, id).run();
+        "UPDATE submissions SET status=?1, decided_by=?2, decided_at=unixepoch(), reason=?4 WHERE id=?3"
+      ).bind(status, decidedBy, id, status === "rejected" ? (reason || null) : null).run();
       if (status === "approved") {
         await DB.prepare(
           "INSERT INTO puzzles (category, phrase, anchors, submitted_by, status) VALUES (?1, ?2, ?3, ?4, 'approved')"
@@ -275,6 +337,37 @@ export function d1UserSessions(DB) {
     },
     async destroy(token) {
       await DB.prepare("DELETE FROM user_sessions WHERE id=?1").bind(token).run();
+    },
+  };
+}
+
+/* The numbers on the admin Stats tab — the table at the top of docs/PRD.md
+   v2, live. Rounds per day come from sessions.created_at; the rest are
+   counts the other stores already own. */
+export function d1Stats(DB) {
+  return {
+    async roundsByDay(days = 14) {
+      const r = await DB.prepare(
+        `SELECT date(created_at, 'unixepoch') AS day, COUNT(*) AS rounds,
+                SUM(CASE WHEN json_extract(state, '$.finished') = 'won' THEN 1 ELSE 0 END) AS won,
+                SUM(CASE WHEN json_extract(state, '$.finished') = 'lost' THEN 1 ELSE 0 END) AS lost
+           FROM sessions WHERE created_at >= unixepoch() - ?1 * 86400
+          GROUP BY day ORDER BY day`
+      ).bind(days).all();
+      return r.results || [];
+    },
+    async totals() {
+      const row = await DB.prepare(
+        `SELECT (SELECT COUNT(*) FROM sessions) AS rounds,
+                (SELECT COUNT(*) FROM daily_results) AS dailyResults,
+                (SELECT SUM(CASE WHEN outcome='won' THEN 1 ELSE 0 END) FROM daily_results) AS dailyWins,
+                (SELECT COUNT(DISTINCT player_key) FROM daily_results) AS dailyPlayers,
+                (SELECT COUNT(*) FROM share_cards) AS shareCards,
+                (SELECT COUNT(*) FROM puzzles WHERE status='approved') AS puzzles,
+                (SELECT COUNT(*) FROM submissions WHERE status='pending') AS pending,
+                (SELECT COUNT(*) FROM users) AS users`
+      ).first();
+      return row || {};
     },
   };
 }

@@ -21,9 +21,18 @@ export function createModerate({ toaster, onLobbyChange, goLobby }) {
   }
   load();
 
+  /* Reject asks first, and asks why (T4-021). It used to commit on the
+     first tap, ten pixels from Approve on a phone, with nothing recorded
+     and the row gone from every list. The reason is stored on the row and
+     shown in the admin queue's decided list. */
   async function decide(id, status) {
+    let reason = "";
+    if (status === "rejected") {
+      reason = (window.prompt("Reject this phrase? Say why — the submitter sees this in the decided list.", "") || "").trim();
+      if (!reason) { toaster("NOT REJECTED — no reason given", "bad"); return; }
+    }
     try {
-      await api.modDecide(id, status);
+      await api.modDecide(id, status, reason);
       toaster(status === "approved" ? "APPROVED" : "REJECTED",
               status === "approved" ? "great" : "bad");
       load();

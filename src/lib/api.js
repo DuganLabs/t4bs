@@ -43,11 +43,19 @@ export const api = {
   /* submissions + moderation */
   submit:       (puzzle)                           => post("/submit", puzzle),
   modPending:   ()                                 => get("/moderate/pending"),
-  modDecide:    (id, status)                       => post("/moderate/decide", { id, status }),
+  modDecide:    (id, status, reason = "")          => post("/moderate/decide", { id, status, reason }),
 
-  /* admin */
+  modDecided:   ()                                 => get("/moderate/decided"),
+
+  /* admin — docs/PRD.md §4 */
   modUsers:     (q = "")                           => get(`/moderate/users${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   modPromote:   (userId, role)                     => post("/moderate/promote", { userId, role }),
+  adminCatalogue: ()                               => get("/admin/catalogue"),
+  adminAddPuzzle: (puzzle)                         => post("/admin/puzzles", puzzle),
+  adminEditPuzzle: (id, fields)                    => req(`/admin/puzzles/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) }),
+  adminSchedule: (past = 14, ahead = 30)           => get(`/admin/schedule?past=${past}&ahead=${ahead}`),
+  adminPin:     (day, puzzleId)                    => req("/admin/schedule", { method: "PUT", body: JSON.stringify({ day, puzzleId }) }),
+  adminStats:   ()                                 => get("/admin/stats"),
 
   /* share cards */
   mintShareCard: (body)                            => post("/share-cards", body),

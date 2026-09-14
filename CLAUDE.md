@@ -90,9 +90,17 @@ npm run cf:deploy   # or: gh push triggers auto-deploy via .github/workflows/dep
 
 **Bootstrap:** `wrangler.toml [vars] ADMIN_HANDLES = "wmd"` is a *seed* — on successful WebAuthn login, `seedAdminRole()` (in [functions/_shared/util.js](functions/_shared/util.js)) upgrades the user's DB role to admin if their handle matches. This avoids hand-rolling SQL to bootstrap admins.
 
-**Promotion UI:** `/admin` route, admin-only. Search a handle, promote/demote.
+**Admin (v2, docs/PRD.md §4):** `/admin`, admin-only, five tabs — Catalogue
+(every puzzle with plays / win rate / average winning score; edit, retire,
+add straight to the catalogue), Daily (the schedule window, `daily_schedule`;
+pin any puzzle to any future day), Queue (pending + the decided list with
+reject reasons), People (roles), Stats (the PRD's table, live). The API is
+`functions/api/admin/*`, all `requireAdmin`; the string renderers the SSR
+and the client share are `src/lib/admin-view.js`, the pure maths is
+`shared/admin-stats.js`.
 
-**Queue review:** `/moderate` route, moderators + admins.
+**Queue review:** `/moderate` route, moderators + admins. Reject asks for a
+reason and records it (`submissions.reason`, migration 0006).
 
 ## OG / share cards
 

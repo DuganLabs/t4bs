@@ -534,3 +534,21 @@ describe("isResumable", () => {
     assert.equal(isResumable({ ...valid, anchors: undefined }), false);
   });
 });
+
+describe("admin v2 SSR", () => {
+  it("renders five tabs and the catalogue table on first paint", () => {
+    const html = renderPage(baseCtx({
+      route: "admin", pathname: "/admin",
+      user: { handle: "warren", role: "admin", isAdmin: true, isModerator: true },
+      admin: {
+        elevated: [], currentHandle: "warren", forbidden: false,
+        catalogue: [{ id: 9, category: "FAIRY TALES", phrase: "HAPPILY EVER AFTER", anchors: [], par: 85, parIsDerived: true, status: "approved", submittedBy: "house", plays: 0, wins: 0, winRate: null, winRateLabel: "—", avgWinScore: null, suspicious: false }],
+      },
+    }), ASSETS);
+    assert.match(html, /data-bn="tabs"/);
+    for (const t of ["Catalogue", "Daily", "Queue", "People", "Stats"]) assert.match(html, new RegExp(`>${t}<`));
+    assert.match(html, /data-bn="table"/);
+    assert.match(html, /HAPPILY EVER AFTER/);
+    assert.match(html, /1 puzzles in the catalogue/);
+  });
+});
