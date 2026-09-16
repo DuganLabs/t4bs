@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import { renderPage } from "../src/bn/server/render.js";
+import { onRequestGet as shareLanding } from "../functions/s/[id].js";
 
 const ASSETS = { js: "/assets/bn-hydrate.js", css: ["/assets/app.css"] };
 
@@ -274,5 +275,96 @@ describe("share landing copy — functions/s/[id].js", () => {
 
   it("still offers the way out", () => {
     assert.ok(src.includes(`<a href="/">Play today's puzzle</a>`));
+  });
+
+  /* The client shares this URL and NOTHING else — no fetched PNG, no
+     `File` on the share sheet (see shareResult in src/main.js and
+     src/bn/client/hydrate.js). That only pays off if this page hands a
+     crawler everything it needs to draw the card itself. Every URL in
+     the meta must be absolute on the public origin: iMessage, Slack and
+     Twitter resolve og:image against nothing, so a relative path
+     unfurls as a blank card and the recipient gets a naked link. */
+  const CARD = {
+    id: "k5n4zwar",
+    sessionId: "s1",
+    userId: null,
+    puzzleId: 7,
+    category: "Proverbs",
+    score: 87,
+    won: 1,
+    grid: "\u{1F7E9}\u{1F7E8}",
+    createdAt: "2026-09-15T00:00:00Z",
+  };
+  const ENV = {
+    PUBLIC_ORIGIN: "https://t4bs.com",
+    DB: { prepare: () => ({ bind: () => ({ first: async () => ({ ...CARD }) }) }) },
+  };
+
+  const landing = async () => {
+    const res = await shareLanding({
+      request: new Request("https://t4bs.com/s/k5n4zwar"),
+      env: ENV,
+      params: { id: "k5n4zwar" },
+    });
+    return await res.text();
+  };
+
+  const meta = (html, attr, name) => {
+    const m = html.match(new RegExp(`<meta ${attr}="${name}" content="([^"]*)"`));
+    return m ? m[1] : null;
+  };
+  const og = (html, name) => meta(html, "property", name);
+  const tw = (html, name) => meta(html, "name", name);
+
+  it("points og:image at the card PNG, absolute, with its dimensions", async () => {
+    const html = await landing();
+    assert.equal(og(html, "og:image"), "https://t4bs.com/og/score/k5n4zwar.png");
+    assert.equal(og(html, "og:image:width"), "1200");
+    assert.equal(og(html, "og:image:height"), "630");
+    assert.equal(og(html, "og:image:secure_url"), "https://t4bs.com/og/score/k5n4zwar.png");
+  });
+
+  it("carries a per-card og:title and og:description", async () => {
+    const html = await landing();
+    assert.match(og(html, "og:title"), /Proverbs/);
+    assert.match(og(html, "og:description"), /Proverbs/);
+    assert.match(og(html, "og:description"), /87/);
+  });
+
+  it("asks for the big Twitter card, with its own image", async () => {
+    const html = await landing();
+    assert.equal(tw(html, "twitter:card"), "summary_large_image");
+    assert.equal(tw(html, "twitter:image"), "https://t4bs.com/og/score/k5n4zwar.png");
+    assert.ok(tw(html, "twitter:title"), "twitter:title must be present");
+  });
+
+  it("declares og:url as the absolute /s/{id} the client shares", async () => {
+    const html = await landing();
+    assert.equal(og(html, "og:url"), "https://t4bs.com/s/k5n4zwar");
+  });
+
+  it("leaves no relative URL in any og:/twitter: tag", async () => {
+    const html = await landing();
+    const urlish = [...html.matchAll(/<meta (?:property|name)="((?:og|twitter):[a-z_:]*(?:image|url)[a-z_:]*)" content="([^"]*)"/g)];
+    assert.ok(urlish.length >= 4, "expected the og/twitter image + url tags to be emitted");
+    for (const [, name, value] of urlish) {
+      // :alt is prose, :type a MIME type, :width/:height plain integers.
+      if (/:(alt|type|width|height)$/.test(name)) continue;
+      assert.match(
+        value, /^https:\/\/t4bs\.com\//,
+        `${name} must be absolute on the public origin — a crawler has no base URL to resolve "${value}" against`,
+      );
+    }
+  });
+
+  it("honours PUBLIC_ORIGIN rather than hard-coding the domain", async () => {
+    const res = await shareLanding({
+      request: new Request("https://staging.t4bs.com/s/k5n4zwar"),
+      env: { ...ENV, PUBLIC_ORIGIN: "https://staging.t4bs.com" },
+      params: { id: "k5n4zwar" },
+    });
+    const html = await res.text();
+    assert.equal(og(html, "og:image"), "https://staging.t4bs.com/og/score/k5n4zwar.png");
+    assert.equal(og(html, "og:url"), "https://staging.t4bs.com/s/k5n4zwar");
   });
 });

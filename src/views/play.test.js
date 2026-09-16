@@ -120,3 +120,89 @@ describe("the play keyboard is wired per word", () => {
     );
   });
 });
+
+
+/* ── The share sheet shares a LINK, not a picture ──────────────────────
+
+   Reported on iOS: sharing a finished round offered "tabs-k5n4zwar.png,
+   24 KB" — a bare image file — instead of a link that unfurls. The cause
+   was shareResult fetching the card PNG, wrapping it in a `File` and
+   passing it to navigator.share, because iOS refuses `files` and `url`
+   in one payload: the link was demoted into the text and the recipient
+   got an orphan picture with nothing to tap.
+
+   The link alone is the right payload. `/s/<id>` already carries the
+   Open Graph meta for that exact result (og:image -> /og/score/<id>.png,
+   og:title, twitter:card=summary_large_image — pinned in
+   tests/ssr-audit.test.js), so Messages, Slack and the rest fetch and
+   render the card themselves from the URL.
+
+   shareResult is DUPLICATED — src/main.js is the `?legacy=1` entry,
+   src/bn/client/hydrate.js the default one — and fixing only one of them
+   is exactly how this regresses, so both are read here. Comments are
+   stripped first: the explanation above each copy names `File` and
+   `files` on purpose. */
+describe("shareResult shares the /s/{id} link and nothing else", () => {
+  const SHARE_ENTRIES = {
+    "src/main.js": join(here, "../main.js"),
+    "src/bn/client/hydrate.js": join(here, "../bn/client/hydrate.js"),
+  };
+
+  for (const [label, path] of Object.entries(SHARE_ENTRIES)) {
+    describe(label, () => {
+      const fn = (() => {
+        const src = stripComments(readFileSync(path, "utf8"));
+        const m = src.match(/async function shareResult\([\s\S]*?\n\}/);
+        assert.ok(m, `${label} must still define shareResult`);
+        return m[0];
+      })();
+
+      it("never builds a File out of the card image", () => {
+        assert.equal(
+          /new File\(/.test(fn), false,
+          "attaching the PNG is what made iOS offer a bare tabs-<id>.png instead of a link",
+        );
+      });
+
+      it("never probes navigator.canShare", () => {
+        assert.equal(
+          /canShare/.test(fn), false,
+          "canShare only exists here to gate a file attachment — there is no attachment any more",
+        );
+      });
+
+      it("never fetches the card image", () => {
+        assert.equal(
+          /\bfetch\(/.test(fn), false,
+          "the crawler on the receiving end fetches /og/score/<id>.png from the OG tag; the client must not",
+        );
+        assert.equal(
+          /imageUrl/.test(fn), false,
+          "shareResult has no business with the image URL — only /s/<id> is shared",
+        );
+      });
+
+      it("passes no files to the share sheet", () => {
+        assert.equal(
+          /\bfiles\b/.test(fn), false,
+          "a `files` payload makes iOS drop `url`, which is the whole bug",
+        );
+      });
+
+      it("hands navigator.share a payload carrying url", () => {
+        const call = fn.match(/nativeShare\(([\s\S]*?)\);/);
+        assert.ok(call, `${label} must still route the share through nativeShare`);
+        assert.match(
+          call[1], /\burl:\s*shareUrl\b/,
+          "the share URL must ride in `url`, not be concatenated into `text` — only a real `url` unfurls",
+        );
+        assert.match(call[1], /\btext\b/, "the emoji grid still goes along as `text`");
+      });
+
+      it("keeps the clipboard fallback's status strings", () => {
+        assert.match(fn, /status === "shared"[\s\S]*?"\u2713 Shared"/);
+        assert.match(fn, /status === "copied"[\s\S]*?"\u2713 Link copied"/);
+      });
+    });
+  }
+});

@@ -292,11 +292,18 @@ async function mintResult({ won }) {
   return out;
 }
 
-/* Share the card AS AN IMAGE where the platform allows it (iOS/Android
-   share sheets, via the Web Share API's `files`), with the text and the
-   link alongside; otherwise text + link; otherwise the clipboard. The
-   image is what people actually see in a chat — a bare link's preview is
-   at the mercy of the receiving app. */
+/* Share the LINK, and nothing but the link.
+
+   `shareUrl` is `/s/<id>`, and that page already carries the Open Graph
+   tags for this exact result — `og:image` pointing at
+   `/og/score/<id>.png`, plus `og:title`, `og:description` and
+   `twitter:card=summary_large_image` — so Messages, Slack, Discord and
+   the rest fetch the card themselves and unfurl it as the preview. We do
+   not fetch the PNG here, and never attach it as a `File`: iOS refuses
+   `files` and `url` in one payload, so attaching the image demoted the
+   link into the text and the share sheet handed the recipient a bare
+   `tabs-<id>.png` — an orphan picture with nothing to tap. A link
+   renders the same card AND leads back to the game. */
 async function shareResult({ won, card }) {
   try {
     const s = session();
@@ -308,18 +315,7 @@ async function shareResult({ won, card }) {
       "Tabs · ${category} · ${score}pts · ${verdict}\n\n${grid}",
       { category: s.category, score: score(), verdict: won ? "Solved" : "Busted", grid },
     );
-    let files;
-    if (c?.imageUrl && typeof navigator.canShare === "function") {
-      try {
-        const blob = await (await fetch(c.imageUrl)).blob();
-        const file = new File([blob], `tabs-${c.id}.png`, { type: "image/png" });
-        if (navigator.canShare({ files: [file] })) files = [file];
-      } catch { /* image share not possible here — fall back to text + link */ }
-    }
-    /* With an image attached the link rides inside the text: iOS refuses
-       files + url together on some versions, and a link in the text still
-       gets a tappable preview in Messages. */
-    const r = await nativeShare(files ? { text: `${text}\n${shareUrl}`, files } : { text, url: shareUrl });
+    const r = await nativeShare({ text, url: shareUrl });
     if (r?.status === "shared") return "✓ Shared";
     if (r?.status === "copied") return "✓ Link copied";
     return "Couldn't share";
