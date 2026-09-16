@@ -20,7 +20,7 @@ import {
   d1Puzzles, d1Sessions, d1Submissions, d1Users,
 } from "./d1.js";
 import {
-  currentUser, getRole, isAdmin, isModerator, playerIdentity,
+  currentUser, getRole, isAdmin, isModerator, playerIdentity, visitorZone,
 } from "./util.js";
 import { dailyStatus } from "./game.js";
 
@@ -75,7 +75,10 @@ export async function renderSsr({ request, env }) {
     dataPromise = (async () => {
       const who = await playerIdentity(request, env);
       setCookie = who.setCookie;
-      fetched.daily = await dailyStatus(env, who.key);
+      /* The visitor's zone comes from `request.cf` alone (visitorZone) —
+         never from the URL — so the first paint is their day, not the
+         edge's. */
+      fetched.daily = await dailyStatus(env, who.key, { zone: visitorZone(request) });
       if (fetched.daily?.puzzleId && !fetched.daily.playedToday) {
         fetched.play = await resolvePlay(env, fetched.daily.puzzleId);
       }

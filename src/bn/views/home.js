@@ -19,10 +19,15 @@
                  say so, don't show a blank.
 
    The catalogue — every phrase by category — is a moderator's surface
-   (/moderate), not a player's. Nothing here lists it. */
+   (/moderate), not a player's. Nothing here lists it.
+
+   No zone is named in the copy. The daily rolls at midnight where the
+   PLAYER is — shared/daily.js keys the day off the visitor's own zone,
+   reported by the edge on `request.cf.timezone` — so "midnight Central
+   Time", which this line used to say, was wrong for everybody outside
+   one zone. "Your midnight" is true wherever it is read. */
 
 import { renderAlert } from "@basenative/components";
-import { DAILY_ZONE_LABEL } from "../../../shared/daily.js";
 import playBoardHtml from "./play-board.js";
 
 export default `<main aria-labelledby="home-title" data-bn-view="home">
@@ -51,7 +56,7 @@ export default `<main aria-labelledby="home-title" data-bn-view="home">
       <h2 id="home-done-title" data-bn-region="daily-result">{{ daily.resultLabel }}</h2>
       <p data-bn-region="daily-score"><strong>{{ daily.score }}</strong> points</p>
       <p data-bn-region="daily-cat">{{ daily.category }} · {{ daily.day }}</p>
-      <p data-bn-region="daily-next">Next puzzle at midnight ${DAILY_ZONE_LABEL}</p>
+      <p data-bn-region="daily-next">Next puzzle at your midnight</p>
     </section>
   </template>
 

@@ -5,25 +5,125 @@
    at the same instant, the streak survives a day that isn't over yet,
    and it breaks the moment a daily is lost.
 
-   The reported bug these were rewritten for: the day key was UTC, which
-   rolls at 7 PM CDT / 6 PM CST, so a player in US Central who opened the
-   game after dinner got TOMORROW's puzzle and a countdown that was wrong
-   by the same amount. The rollover is now midnight in DAILY_ZONE. */
+   Two reported bugs shaped this. First the day key was UTC, which rolls
+   at 7 PM CDT, so a player in US Central who opened the game after
+   dinner got TOMORROW's puzzle and a countdown wrong by the same
+   amount. Fixing that with ONE fixed zone (America/Chicago) then broke
+   the owner on US Pacific, whose daily rolled at 10 PM. No fixed zone is
+   right for everybody, so the key is the VISITOR's own local date and
+   every function here takes the zone as an argument.
+
+   Most of the cases below still pin America/Chicago (CHI) explicitly:
+   they are about DST, rollover instants and countdown arithmetic, which
+   need a zone that actually has transitions, not about which zone is
+   chosen. The cases that ARE about the zone choice are the first and
+   last describes. */
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
-  DAILY_ZONE, DAILY_ZONE_LABEL, zonedDayKey, shiftDay, zoneMidnightMs,
+  FALLBACK_ZONE, resolveZone, zonedDayKey, shiftDay, zoneMidnightMs,
   msUntilNextRollover, pickDailyPuzzleId, computeStreak, nextDailyPuzzleId,
 } from "./daily.js";
 
 const HOUR = 3_600_000;
 
-describe("DAILY_ZONE", () => {
-  it("is one fixed zone, and the label matches it", () => {
-    assert.equal(DAILY_ZONE, "America/Chicago");
-    assert.equal(DAILY_ZONE_LABEL, "Central Time");
+/* The zone the DST/rollover cases below are written against. It is not
+   "the" zone any more — it is just a zone with transitions. */
+const CHI = "America/Chicago";
+const LA = "America/Los_Angeles";
+const NY = "America/New_York";
+
+describe("the visitor's own zone decides the day", () => {
+  it("gives two players different day keys at the same instant", () => {
+    /* 2026-09-15 05:30Z: 01:30 in New York (already the 15th) and 22:30
+       in Los Angeles (still the 14th). Both are right — they are on
+       different calendar dates at that moment. This is the case a single
+       fixed zone cannot serve: whichever one is picked, the other player
+       is handed a date they are not on. */
+    const at = new Date("2026-09-15T05:30:00Z");
+    assert.equal(zonedDayKey(at, NY), "2026-09-15");
+    assert.equal(zonedDayKey(at, LA), "2026-09-14");
+    assert.notEqual(zonedDayKey(at, NY), zonedDayKey(at, LA));
+  });
+
+  it("rolls over at each player's own midnight, three hours apart", () => {
+    /* The owner's bug: on Chicago's clock his daily changed at 10 PM. In
+       his own zone the rollover is midnight, as it should be. */
+    assert.equal(zoneMidnightMs("2026-09-15", LA), Date.parse("2026-09-15T07:00:00Z"));
+    assert.equal(zoneMidnightMs("2026-09-15", NY), Date.parse("2026-09-15T04:00:00Z"));
+    assert.equal(zoneMidnightMs("2026-09-15", CHI), Date.parse("2026-09-15T05:00:00Z"));
+
+    // 9 PM Pacific on the 14th: three hours of the 14th left, not zero.
+    const evening = new Date("2026-09-15T04:00:00Z");
+    assert.equal(zonedDayKey(evening, LA), "2026-09-14");
+    assert.equal(msUntilNextRollover(evening, LA), 3 * HOUR);
+  });
+
+  it("keeps the streak on the player's own clock", () => {
+    /* Same history, same instant, two zones: each player's streak is
+       walked from THEIR today, so neither breaks at the other's
+       midnight. computeStreak is only ever handed a key that came from
+       zonedDayKey in the same zone as the rollover. */
+    const history = [
+      { day: "2026-09-14", outcome: "won" },
+      { day: "2026-09-13", outcome: "won" },
+    ];
+    const at = new Date("2026-09-15T05:30:00Z");
+    const pacific = computeStreak(history, zonedDayKey(at, LA));
+    assert.equal(pacific.current, 2);
+    assert.equal(pacific.playedToday, true, "still the 14th in LA — today is played");
+    const eastern = computeStreak(history, zonedDayKey(at, NY));
+    assert.equal(eastern.current, 2);
+    assert.equal(eastern.playedToday, false, "the 15th in NY — today is not played yet, run stands");
+  });
+
+  it("still hands everyone on the same date the same puzzle", () => {
+    /* What the copy promises now. The pick is a pure function of the day
+       key, so a shared calendar date is a shared phrase even though the
+       date starts at a different instant for each player. */
+    const ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    const at = new Date("2026-09-15T13:00:00Z");   // the 15th in both zones
+    assert.equal(zonedDayKey(at, LA), zonedDayKey(at, NY));
+    assert.equal(
+      pickDailyPuzzleId(ids, zonedDayKey(at, LA)),
+      pickDailyPuzzleId(ids, zonedDayKey(at, NY)),
+    );
+  });
+});
+
+describe("FALLBACK_ZONE — when no zone is known", () => {
+  const at = new Date("2026-09-15T05:30:00Z");
+
+  it("is used when the caller has no zone to give", () => {
+    // Local dev, the Vite mock, a request with no `cf`.
+    assert.equal(FALLBACK_ZONE, "America/Chicago");
+    assert.equal(zonedDayKey(at), zonedDayKey(at, FALLBACK_ZONE));
+    assert.equal(zonedDayKey(at, undefined), "2026-09-15");
+    assert.equal(msUntilNextRollover(at), msUntilNextRollover(at, FALLBACK_ZONE));
+    assert.equal(zoneMidnightMs("2026-09-15"), zoneMidnightMs("2026-09-15", FALLBACK_ZONE));
+  });
+
+  it("is used instead of throwing on a zone Intl rejects", () => {
+    /* A bad `timeZone` makes Intl.DateTimeFormat throw a RangeError. A
+       500 on a garbled cf.timezone would be a worse answer than
+       yesterday's puzzle, so every entry point falls back. */
+    for (const bad of ["Mars/Olympus_Mons", "not a zone", "", "   ", "PST8PDT/../etc", null, 7, {}, []]) {
+      assert.equal(resolveZone(bad), FALLBACK_ZONE, String(bad));
+      assert.equal(zonedDayKey(at, bad), "2026-09-15", String(bad));
+      assert.ok(Number.isFinite(msUntilNextRollover(at, bad)), String(bad));
+      assert.ok(Number.isFinite(zoneMidnightMs("2026-09-15", bad)), String(bad));
+    }
+  });
+
+  it("passes a real zone straight through, whitespace and all", () => {
+    assert.equal(resolveZone(LA), LA);
+    assert.equal(resolveZone(" America/Los_Angeles "), LA);
+    assert.equal(resolveZone("UTC"), "UTC");
+    assert.equal(zonedDayKey(at, "UTC"), "2026-09-15");
+    assert.equal(zonedDayKey(new Date("2026-09-15T23:59:59Z"), "Pacific/Kiritimati"), "2026-09-16");
   });
 });
 
@@ -31,40 +131,21 @@ describe("zonedDayKey", () => {
   it("does NOT roll at UTC midnight — the bug a US Central player hit", () => {
     /* 23:00Z is 6 PM CDT: still today's puzzle, not tomorrow's. Under the
        old UTC key this instant answered "2026-09-15". */
-    assert.equal(zonedDayKey(new Date("2026-09-14T23:00:00Z")), "2026-09-14");
-    assert.equal(zonedDayKey(new Date("2026-09-15T00:00:00Z")), "2026-09-14");
-    assert.equal(zonedDayKey(new Date("2026-09-15T04:59:59Z")), "2026-09-14");
+    assert.equal(zonedDayKey(new Date("2026-09-14T23:00:00Z"), CHI), "2026-09-14");
+    assert.equal(zonedDayKey(new Date("2026-09-15T00:00:00Z"), CHI), "2026-09-14");
+    assert.equal(zonedDayKey(new Date("2026-09-15T04:59:59Z"), CHI), "2026-09-14");
   });
 
   it("rolls at midnight in DAILY_ZONE, not before or after", () => {
     // 05:00Z is 00:00 CDT — the new day starts exactly there.
-    assert.equal(zonedDayKey(new Date("2026-09-15T05:00:00Z")), "2026-09-15");
+    assert.equal(zonedDayKey(new Date("2026-09-15T05:00:00Z"), CHI), "2026-09-15");
     // 05:30Z is 12:30 AM CDT, which is already the 15th.
-    assert.equal(zonedDayKey(new Date("2026-09-15T05:30:00Z")), "2026-09-15");
+    assert.equal(zonedDayKey(new Date("2026-09-15T05:30:00Z"), CHI), "2026-09-15");
   });
 
   it("follows DST: the rollover is 05:00Z in summer and 06:00Z in winter", () => {
-    assert.equal(zonedDayKey(new Date("2026-12-15T05:59:59Z")), "2026-12-14");
-    assert.equal(zonedDayKey(new Date("2026-12-15T06:00:00Z")), "2026-12-15");
-  });
-
-  it("ignores the machine's own zone — the server is authoritative", () => {
-    /* If this ever starts reading a local date, the whole catalogue is
-       replayable by a client that lies about its clock (see the module
-       header). Kiritimati is UTC+14: local date and DAILY_ZONE date
-       disagree by a day at this instant. */
-    const at = new Date("2026-09-14T23:00:00Z");
-    const previous = process.env.TZ;
-    try {
-      process.env.TZ = "Pacific/Kiritimati";
-      assert.equal(at.getDate(), 15, "sanity: the runner's local date really did move");
-      assert.equal(zonedDayKey(at), "2026-09-14");
-      process.env.TZ = "UTC";
-      assert.equal(zonedDayKey(at), "2026-09-14");
-    } finally {
-      if (previous === undefined) delete process.env.TZ;
-      else process.env.TZ = previous;
-    }
+    assert.equal(zonedDayKey(new Date("2026-12-15T05:59:59Z"), CHI), "2026-12-14");
+    assert.equal(zonedDayKey(new Date("2026-12-15T06:00:00Z"), CHI), "2026-12-15");
   });
 });
 
@@ -107,9 +188,9 @@ describe("shiftDay", () => {
        shiftDay predicts. */
     let key = "2026-01-01";
     for (let i = 0; i < 365 * 3; i++) {
-      const start = zoneMidnightMs(key);
-      assert.equal(zonedDayKey(new Date(start)), key, `midnight of ${key}`);
-      assert.equal(zonedDayKey(new Date(start - 1)), shiftDay(key, -1), `one ms before ${key}`);
+      const start = zoneMidnightMs(key, CHI);
+      assert.equal(zonedDayKey(new Date(start), CHI), key, `midnight of ${key}`);
+      assert.equal(zonedDayKey(new Date(start - 1), CHI), shiftDay(key, -1), `one ms before ${key}`);
       key = shiftDay(key, 1);
     }
   });
@@ -117,37 +198,37 @@ describe("shiftDay", () => {
 
 describe("zoneMidnightMs — the rollover instant", () => {
   it("is midnight in DAILY_ZONE, in both halves of the year", () => {
-    assert.equal(zoneMidnightMs("2026-09-15"), Date.parse("2026-09-15T05:00:00Z"), "CDT: UTC-5");
-    assert.equal(zoneMidnightMs("2026-12-15"), Date.parse("2026-12-15T06:00:00Z"), "CST: UTC-6");
+    assert.equal(zoneMidnightMs("2026-09-15", CHI), Date.parse("2026-09-15T05:00:00Z"), "CDT: UTC-5");
+    assert.equal(zoneMidnightMs("2026-12-15", CHI), Date.parse("2026-12-15T06:00:00Z"), "CST: UTC-6");
   });
 
   it("is midnight on the DST days too", () => {
     // Both transitions happen at 2 AM local, so local midnight is ordinary.
-    assert.equal(zoneMidnightMs("2026-11-01"), Date.parse("2026-11-01T05:00:00Z"), "still CDT at midnight");
-    assert.equal(zoneMidnightMs("2026-11-02"), Date.parse("2026-11-02T06:00:00Z"), "CST by the next midnight");
-    assert.equal(zoneMidnightMs("2027-03-14"), Date.parse("2027-03-14T06:00:00Z"), "still CST at midnight");
-    assert.equal(zoneMidnightMs("2027-03-15"), Date.parse("2027-03-15T05:00:00Z"), "CDT by the next midnight");
+    assert.equal(zoneMidnightMs("2026-11-01", CHI), Date.parse("2026-11-01T05:00:00Z"), "still CDT at midnight");
+    assert.equal(zoneMidnightMs("2026-11-02", CHI), Date.parse("2026-11-02T06:00:00Z"), "CST by the next midnight");
+    assert.equal(zoneMidnightMs("2027-03-14", CHI), Date.parse("2027-03-14T06:00:00Z"), "still CST at midnight");
+    assert.equal(zoneMidnightMs("2027-03-15", CHI), Date.parse("2027-03-15T05:00:00Z"), "CDT by the next midnight");
   });
 
   it("makes the DST days 23 and 25 hours long, as they really are", () => {
-    assert.equal((zoneMidnightMs("2027-03-15") - zoneMidnightMs("2027-03-14")) / HOUR, 23);
-    assert.equal((zoneMidnightMs("2026-11-02") - zoneMidnightMs("2026-11-01")) / HOUR, 25);
+    assert.equal((zoneMidnightMs("2027-03-15", CHI) - zoneMidnightMs("2027-03-14", CHI)) / HOUR, 23);
+    assert.equal((zoneMidnightMs("2026-11-02", CHI) - zoneMidnightMs("2026-11-01", CHI)) / HOUR, 25);
   });
 
   it("is NaN for a malformed key rather than a silent wrong instant", () => {
-    assert.ok(Number.isNaN(zoneMidnightMs("2026-9-1")));
+    assert.ok(Number.isNaN(zoneMidnightMs("2026-9-1", CHI)));
   });
 });
 
 describe("msUntilNextRollover", () => {
   it("tells the evening Central player the truth", () => {
     // 6 PM CDT → six hours to the next puzzle. The UTC version said "0h".
-    assert.equal(msUntilNextRollover(new Date("2026-09-14T23:00:00Z")), 6 * HOUR);
-    assert.equal(msUntilNextRollover(new Date("2026-09-15T04:00:00Z")), 1 * HOUR);
+    assert.equal(msUntilNextRollover(new Date("2026-09-14T23:00:00Z"), CHI), 6 * HOUR);
+    assert.equal(msUntilNextRollover(new Date("2026-09-15T04:00:00Z"), CHI), 1 * HOUR);
   });
 
   it("is a whole day at the rollover itself, not zero", () => {
-    assert.equal(msUntilNextRollover(new Date("2026-09-15T05:00:00Z")), 24 * HOUR);
+    assert.equal(msUntilNextRollover(new Date("2026-09-15T05:00:00Z"), CHI), 24 * HOUR);
   });
 
   it("is never negative, and never longer than the day it is counting", () => {
@@ -157,10 +238,10 @@ describe("msUntilNextRollover", () => {
     let seen24 = false, seen25 = false, seen23 = false;
     for (let t = Date.parse("2026-01-01T00:00:00Z"); t < Date.parse("2028-01-01T00:00:00Z"); t += 37 * 60_000) {
       const now = new Date(t);
-      const ms = msUntilNextRollover(now);
+      const ms = msUntilNextRollover(now, CHI);
       assert.ok(ms >= 0, `negative countdown at ${now.toISOString()}`);
       assert.ok(ms <= 25 * HOUR, `countdown over 25h at ${now.toISOString()}`);
-      const dayLength = zoneMidnightMs(shiftDay(zonedDayKey(now), 1)) - zoneMidnightMs(zonedDayKey(now));
+      const dayLength = zoneMidnightMs(shiftDay(zonedDayKey(now, CHI), 1), CHI) - zoneMidnightMs(zonedDayKey(now, CHI), CHI);
       assert.ok(ms <= dayLength, `countdown longer than its own day at ${now.toISOString()}`);
       if (dayLength === 24 * HOUR) seen24 = true;
       if (dayLength === 25 * HOUR) seen25 = true;
@@ -175,9 +256,9 @@ describe("msUntilNextRollover", () => {
       "2027-03-14T05:30:00Z", "2027-03-14T12:00:00Z", "2026-12-31T23:59:00Z",
     ]) {
       const now = new Date(iso);
-      const landing = now.getTime() + msUntilNextRollover(now);
-      assert.equal(zonedDayKey(new Date(landing)), shiftDay(zonedDayKey(now), 1), iso);
-      assert.equal(landing, zoneMidnightMs(shiftDay(zonedDayKey(now), 1)), iso);
+      const landing = now.getTime() + msUntilNextRollover(now, CHI);
+      assert.equal(zonedDayKey(new Date(landing), CHI), shiftDay(zonedDayKey(now, CHI), 1), iso);
+      assert.equal(landing, zoneMidnightMs(shiftDay(zonedDayKey(now, CHI), 1), CHI), iso);
     }
   });
 });
@@ -269,12 +350,12 @@ describe("computeStreak", () => {
        moved to "yesterday", and the player's streak silently reset. */
     const history = [won("2026-09-14"), won("2026-09-13"), won("2026-09-12")];
     for (const iso of ["2026-09-14T22:59:00Z", "2026-09-15T00:30:00Z", "2026-09-15T04:59:00Z"]) {
-      const r = computeStreak(history, zonedDayKey(new Date(iso)));
+      const r = computeStreak(history, zonedDayKey(new Date(iso), CHI));
       assert.equal(r.current, 3, iso);
       assert.equal(r.playedToday, true, iso);
     }
     // After the real rollover, today is unplayed and the run still stands.
-    const after = computeStreak(history, zonedDayKey(new Date("2026-09-15T05:00:00Z")));
+    const after = computeStreak(history, zonedDayKey(new Date("2026-09-15T05:00:00Z"), CHI));
     assert.equal(after.current, 3);
     assert.equal(after.playedToday, false);
   });
@@ -346,5 +427,99 @@ describe("nextDailyPuzzleId — the no-repeat cycle", () => {
 
   it("does not depend on catalogue order", () => {
     assert.equal(nextDailyPuzzleId([5, 4, 3, 2, 1], [], "2026-09-13"), nextDailyPuzzleId([1, 2, 3, 4, 5], [], "2026-09-13"));
+  });
+});
+
+/* The property that replaced the old "ignores the machine's own zone"
+   case. That one asserted the answer was the same everywhere, which is
+   no longer true and no longer desirable — the answer is now SUPPOSED to
+   differ per visitor. What must still hold is the reason the daily moved
+   server-side in the first place (shared/daily.js's module header): the
+   day key is never derived from anything the client can set. A client
+   that can name its own date replays the catalogue for score; a client
+   that can name its own ZONE does the same thing one day at a time.
+
+   This is a source-level check because it is a source-level property:
+   these functions take a zone, and the only thing any caller feeds them
+   is `request.cf`, which the Cloudflare edge sets and a client cannot
+   forge. */
+describe("the day key never comes from client input", () => {
+  const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
+  /* Comments talk about request.cf on purpose — scan the CODE. */
+  const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+  const CALLERS = [
+    "../functions/_shared/game.js",
+    "../functions/_shared/ssr.js",
+    "../functions/api/daily.js",
+    "../functions/api/session.js",
+    "../functions/api/admin/schedule.js",
+  ];
+
+  it("is computed by functions that take a zone, not a request", () => {
+    const src = read("./daily.js");
+    assert.match(src, /export function zonedDayKey\(date = new Date\(\), zone\)/);
+    assert.match(src, /export function zoneMidnightMs\(dayKey, zone\)/);
+    assert.match(src, /export function msUntilNextRollover\(now = new Date\(\), zone\)/);
+    /* Nothing in here can reach a request even if someone wanted it to. */
+    assert.doesNotMatch(code(src), /\brequest\b|searchParams|\bheaders\b|\bcookie\b/i);
+  });
+
+  it("reads the zone from request.cf and from nothing else", () => {
+    const util = read("../functions/_shared/util.js");
+    const body = util.slice(util.indexOf("export function visitorZone"));
+    const fn = code(body.slice(0, body.indexOf("\n}") + 2));
+    assert.match(fn, /request\)\?\.cf|\.cf\b/, "the zone must come off request.cf");
+    assert.doesNotMatch(fn, /searchParams|headers|readJson|\bbody\b|\bcookie\b/i,
+      "visitorZone must not read anything the client controls");
+  });
+
+  it("has no caller that sources a zone any other way", () => {
+    for (const rel of CALLERS) {
+      const src = code(read(rel));
+
+      /* Every zone handed to dailyStatus is visitorZone(request). */
+      const passed = [...src.matchAll(/\bzone:\s*([^,}\n]+)/g)].map(m => m[1].trim());
+      for (const expr of passed) {
+        assert.equal(expr, "visitorZone(request)", `${rel}: zone: ${expr}`);
+      }
+
+      /* And visitorZone is only ever given the request itself. */
+      const calls = [...src.matchAll(/visitorZone\(([^)]*)\)/g)].map(m => m[1].trim());
+      for (const arg of calls) {
+        assert.equal(arg, "request", `${rel}: visitorZone(${arg})`);
+      }
+
+      /* Nothing rebinds a zone from somewhere else on the way down. */
+      assert.doesNotMatch(src, /\bzone\s*=\s*(?!=)/, `${rel}: a zone is reassigned`);
+
+      assert.ok(passed.length + calls.length > 0, `${rel}: no zone is threaded at all`);
+    }
+  });
+
+  it("uses the fallback in dev rather than inventing a client-named zone", () => {
+    /* server/mock.js has no `cf` to read — Node's http server is not the
+       Cloudflare edge — so it says so and uses FALLBACK_ZONE. What it
+       must NOT do is accept a zone from the dev client instead: the mock
+       implements the same contract as the Functions, and a mock that
+       trusted a header is a Function that eventually does too. */
+    const src = code(read("../server/mock.js"));
+    assert.match(src, /FALLBACK_ZONE/);
+    assert.match(src, /zonedDayKey\(now, zone\)/);
+    for (const [, bound] of src.matchAll(/\bzone\s*=\s*(?!=)([^,)\n;]+)/g)) {
+      assert.equal(bound.trim(), "DEV_ZONE", "the dev zone is the fallback, nothing else");
+    }
+  });
+
+  it("never lets a query param, header or body name the day either", () => {
+    for (const rel of CALLERS) {
+      const src = code(read(rel));
+      assert.doesNotMatch(src, /searchParams\.get\(\s*["'`](?:day|date|tz|timezone|timeZone|zone)/i, rel);
+      assert.doesNotMatch(src, /headers\.get\(\s*["'`][^"'`]*(?:timezone|timeZone|date)/i, rel);
+      assert.doesNotMatch(src, /\bbody\.(?:tz|timezone|timeZone|zone|today)\b/i, rel);
+    }
+    const mock = code(read("../server/mock.js"));
+    assert.doesNotMatch(mock, /searchParams\.get\(\s*["'`](?:day|date|tz|timezone|timeZone|zone)/i);
+    assert.doesNotMatch(mock, /headers\[?["'`]?[a-z-]*(?:timezone|timeZone)/i);
   });
 });

@@ -57,8 +57,13 @@ describe("helpDialogHtml", () => {
   it("explains the daily/free-play split and where the streak comes from", () => {
     const html = helpDialogHtml();
     assert.match(html, /one daily puzzle per day/i);
-    assert.match(html, /same one for everyone/i);
-    assert.match(html, /midnight Central Time/);
+    /* The two true things, now that the day key is the visitor's own
+       local date: it rolls at THEIR midnight, and a shared calendar date
+       still means a shared phrase. Naming one zone was wrong for every
+       player outside it. */
+    assert.match(html, /midnight where you are/i);
+    assert.match(html, /everyone playing the same date plays the same phrase/i);
+    assert.doesNotMatch(html, /Central Time/);
     assert.match(html, /streak/i);
     assert.match(html, /never touches the streak/i);
   });

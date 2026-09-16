@@ -8,7 +8,7 @@
 
 import { createEngine } from "../../shared/engine.js";
 import { d1Puzzles, d1Sessions, d1Dailies, d1Schedule } from "./d1.js";
-import { playerIdentity } from "./util.js";
+import { playerIdentity, visitorZone } from "./util.js";
 import { computeStreak, nextDailyPuzzleId, pickDailyPuzzleId, zonedDayKey, msUntilNextRollover } from "../../shared/daily.js";
 
 /** Engine wired to D1, with the daily recorder attached. @param {any} env */
@@ -60,15 +60,21 @@ export async function scheduledPuzzleId(env, approvedIds, day) {
 }
 
 /**
- * Today's daily, from the server's point of view: which puzzle, whether
- * this player has already finished it, and their streak.
+ * Today's daily, from the visitor's point of view: which puzzle,
+ * whether this player has already finished it, and their streak.
+ *
+ * `zone` is the visitor's own IANA zone, read from `request.cf` by
+ * visitorZone() and passed down here — the day key, the streak walk and
+ * the countdown all take it, so all three agree about when this
+ * player's midnight is. Omitted (no `cf`, local dev, a background
+ * caller), shared/daily.js falls back rather than throwing.
  *
  * @param {any} env
  * @param {string} playerKey
- * @param {Date} [now]
+ * @param {{ zone?: string, now?: Date }} [opts]
  */
-export async function dailyStatus(env, playerKey, now = new Date()) {
-  const day = zonedDayKey(now);
+export async function dailyStatus(env, playerKey, { zone, now = new Date() } = {}) {
+  const day = zonedDayKey(now, zone);
   const puzzles = d1Puzzles(env.DB);
   const dailies = d1Dailies(env.DB);
 
@@ -81,6 +87,8 @@ export async function dailyStatus(env, playerKey, now = new Date()) {
   const puzzleId = await scheduledPuzzleId(env, ids, day);
   const meta = approved.find(p => Number(p.id) === puzzleId) || null;
   const today = history.find(r => r.day === day) || null;
+  /* Same `day`, therefore the same zone: a streak cannot break at a
+     foreign midnight. */
   const { current, best } = computeStreak(history, day);
 
   return {
@@ -94,7 +102,7 @@ export async function dailyStatus(env, playerKey, now = new Date()) {
     streak: current,
     bestStreak: best,
     daysPlayed: history.length,
-    msUntilNext: msUntilNextRollover(now),
+    msUntilNext: msUntilNextRollover(now, zone),
   };
 }
 
@@ -110,7 +118,7 @@ export async function withDaily(request, env, result) {
   if (!result.finished || result.mode !== "daily") return result;
   try {
     const who = await playerIdentity(request, env);
-    return { ...result, daily: await dailyStatus(env, who.key) };
+    return { ...result, daily: await dailyStatus(env, who.key, { zone: visitorZone(request) }) };
   } catch {
     return result;                       // never fail a finished round
   }

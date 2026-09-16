@@ -4,7 +4,7 @@
 import { createEngine } from "../shared/engine.js";
 import { validateSubmission } from "../shared/submission.js";
 import { memoryPuzzles, memorySessions, memorySubmissions, memoryUsers, memoryDailies } from "./stores-memory.js";
-import { computeStreak, pickDailyPuzzleId, zonedDayKey, msUntilNextRollover } from "../shared/daily.js";
+import { computeStreak, pickDailyPuzzleId, zonedDayKey, msUntilNextRollover, FALLBACK_ZONE } from "../shared/daily.js";
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
@@ -42,8 +42,18 @@ export function createMockApi() {
     },
   });
 
-  async function dailyStatus(playerKey, now = new Date()) {
-    const day = zonedDayKey(now);
+  /* In production the day key is the VISITOR's own local date, taken
+     from `request.cf.timezone` (functions/_shared/util.js visitorZone).
+     Node's http server has no `cf`, so dev has no visitor zone to read
+     and every caller here passes the fallback explicitly rather than
+     pretending otherwise. Note what is NOT done: the zone is not read
+     off a header or a query param here either, because the mock has to
+     implement the same contract as the Functions — if dev accepted a
+     client-named zone, a client-named zone is what would get written. */
+  const DEV_ZONE = FALLBACK_ZONE;
+
+  async function dailyStatus(playerKey, now = new Date(), zone = DEV_ZONE) {
+    const day = zonedDayKey(now, zone);
     const approved = await puzzles.listApproved();
     const history = await dailies.history(playerKey);
     const puzzleId = pickDailyPuzzleId(approved.map(p => Number(p.id)), day);
@@ -59,7 +69,7 @@ export function createMockApi() {
       score: today?.score ?? null,
       streak: current, bestStreak: best,
       daysPlayed: history.length,
-      msUntilNext: msUntilNextRollover(now),
+      msUntilNext: msUntilNextRollover(now, zone),
     };
   }
 

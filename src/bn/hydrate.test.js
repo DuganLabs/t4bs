@@ -204,7 +204,10 @@ describe("renderPage — emits a complete BaseNative-rendered HTML document for 
     assert.match(html, /data-bn-region="daily-done"/);
     assert.match(html, />Solved</);
     assert.match(html, /<strong>96<\/strong> points/);
-    assert.match(html, /Next puzzle at midnight Central Time/);
+    /* No zone is named: the daily rolls at the PLAYER's midnight, so the
+       old "midnight Central Time" was wrong for everyone outside it. */
+    assert.match(html, /Next puzzle at your midnight/);
+    assert.doesNotMatch(html, /Central Time/);
   });
 
   it("home says so when nothing is scheduled, rather than a blank", () => {

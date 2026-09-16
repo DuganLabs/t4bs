@@ -120,3 +120,28 @@ export async function playerIdentity(request, env) {
     user,
   };
 }
+
+/* The visitor's own IANA time zone, which is what decides their day key
+   (shared/daily.js). Cloudflare resolves it at the edge from the
+   connecting IP and hands it over on `request.cf.timezone`, e.g.
+   "America/Los_Angeles" — the same `cf` object functions/api/log.js
+   reads `country` from.
+
+   Read from `cf` and from NOWHERE ELSE. Never a query param, never a
+   header, never the request body: shared/daily.js's module header
+   explains that the daily moved server-side because a client which can
+   name its own date can replay the entire catalogue for score, and a
+   client which can name its own ZONE can do the same thing one day at a
+   time. `cf` is populated by the edge and is not client-settable, which
+   is what makes it safe to trust.
+
+   Undefined off Cloudflare — `wrangler pages dev` without --remote, the
+   Vite mock in server/mock.js, a unit test — and every consumer falls
+   back to shared/daily.js's FALLBACK_ZONE rather than failing. */
+
+/** @param {Request} request @returns {string | undefined} */
+export function visitorZone(request) {
+  const cf = /** @type {any} */ (request)?.cf;
+  const zone = cf && typeof cf.timezone === "string" ? cf.timezone.trim() : "";
+  return zone || undefined;       // shared/daily.js resolveZone() validates it
+}
