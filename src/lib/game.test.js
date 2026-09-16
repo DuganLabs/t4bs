@@ -23,6 +23,16 @@ describe("KEY_STATE_INFO — non-colour cues", () => {
     }
   });
 
+  it("every state's accessible name is a claim about THIS word", () => {
+    for (const [state, info] of Object.entries(KEY_STATE_INFO)) {
+      assert.match(
+        info.ariaSuffix, /this word/i,
+        `${state}'s aria suffix must scope itself to the active word — the keyboard makes no phrase-wide claim`,
+      );
+    }
+    assert.match(KEY_STATE_INFO.absent.ariaSuffix, /unavailable/i, "an absent key is disabled and must say so");
+  });
+
   it("is distinguishable without colour: no two states share a glyph or an aria suffix", () => {
     const glyphs = Object.values(KEY_STATE_INFO).map(v => v.glyph);
     const suffixes = Object.values(KEY_STATE_INFO).map(v => v.ariaSuffix);
@@ -151,7 +161,10 @@ describe("renderCatalogueShelf", () => {
   });
 });
 /* ── THE WORD BOARD — client helpers ───────────────────────────────── */
-import { openSlots, fullCount, computeKeyStatus, knowledgeSummary, historyFor } from "./game.js";
+import {
+  openSlots, fullCount, computeKeyStatus, knowledgeSummary, historyFor,
+  isKeyBlocked, KEY_BLOCKED_STATUS,
+} from "./game.js";
 
 describe("openSlots / fullCount", () => {
   it("lists the tiles a word still has open, and counts hidden tiles across the phrase", () => {
@@ -160,21 +173,96 @@ describe("openSlots / fullCount", () => {
   });
 });
 
-describe("computeKeyStatus", () => {
-  it("green anywhere locked, yellow when known in the phrase, absent only for the active word", () => {
-    const st = computeKeyStatus({
-      session: { words: [5, 5] }, active: 1,
-      locked: [{ 0: "H" }, { 0: "W" }],
-      presentGlobal: ["H", "E", "W"],
-      absentByWord: [["X"], ["Z"]],
-    });
-    assert.equal(st.H, "green");
-    assert.equal(st.E, "yellow");
+/* The keyboard may only say things that are true of the word being
+   guessed. It used to paint green for a letter locked ANYWHERE in the
+   phrase and yellow for a letter known anywhere in the phrase, which sent
+   players spending one of a word's 3-5 attempts on letters that could not
+   be in it (owner's decision, 2026-09-15). */
+describe("computeKeyStatus — scoped to the active word", () => {
+  /* Word 1 ("HELLO") is solved-ish: H locked, E and L seen in it, X ruled
+     out of it. Word 2 ("WORLD") knows only its own anchor W and that Z is
+     out. Active word is 1 (the second word) throughout unless stated. */
+  const round = {
+    session: { words: [5, 5] },
+    locked: [{ 0: "H" }, { 0: "W" }],
+    presentByWord: [["H", "E", "L"], ["W"]],
+    absentByWord: [["X"], ["Z"]],
+  };
+
+  it("greens only what is locked in the ACTIVE word", () => {
+    const st = computeKeyStatus({ ...round, active: 1 });
+    assert.equal(st.W, "green");
+    assert.equal(st.H, undefined, "H is locked in word 1 — that is no claim about word 2");
+  });
+
+  it("yellows only what has been seen in the ACTIVE word", () => {
+    const st = computeKeyStatus({ ...round, active: 1 });
+    assert.equal(st.E, undefined, "E is yellow in word 1 and must not be yellow on word 2's keyboard");
+    const w0 = computeKeyStatus({ ...round, active: 0 });
+    assert.equal(w0.E, "yellow");
+    assert.equal(w0.L, "yellow");
+    assert.equal(w0.H, "green", "locked beats seen, within the same word");
+  });
+
+  it("absents only what is ruled out of the ACTIVE word", () => {
+    const st = computeKeyStatus({ ...round, active: 1 });
     assert.equal(st.Z, "absent");
     assert.equal(st.X, undefined, "ruled out in another word says nothing about this one");
   });
-  it("is empty with no session", () => {
+
+  it("says nothing at all when no word is active, or with no session", () => {
+    assert.deepEqual(computeKeyStatus({ ...round, active: null }), {});
     assert.deepEqual(computeKeyStatus({ session: null }), {});
+  });
+
+  it("ALL IN paints nothing: the player is typing every word at once", () => {
+    const st = computeKeyStatus({ ...round, active: 1, allIn: true });
+    assert.deepEqual(st, {}, "no key may carry one word's knowledge while the whole phrase is being typed");
+  });
+
+  it("survives a session with no presentByWord at all (an old stored round)", () => {
+    const st = computeKeyStatus({
+      session: { words: [5, 5] }, active: 1,
+      locked: [{ 0: "H" }, { 0: "W" }],
+      absentByWord: [["X"], ["Z"]],
+    });
+    assert.equal(st.W, "green");
+    assert.equal(st.Z, "absent");
+  });
+});
+
+describe("isKeyBlocked — a ruled-out key is not pressable", () => {
+  it("blocks exactly the absent letters of the active word", () => {
+    const map = computeKeyStatus({
+      session: { words: [5, 5] }, active: 1,
+      locked: [{ 0: "H" }, { 0: "W" }],
+      presentByWord: [["H", "E"], ["W"]],
+      absentByWord: [["X"], ["Z"]],
+    });
+    assert.equal(isKeyBlocked(map, "Z"), true);
+    assert.equal(isKeyBlocked(map, "z"), true, "hardware keys arrive lower-case");
+    assert.equal(isKeyBlocked(map, "W"), false, "a green key still types");
+    assert.equal(isKeyBlocked(map, "Q"), false, "an untried key still types");
+    assert.equal(isKeyBlocked(map, "X"), false, "X is only out of the OTHER word");
+  });
+
+  it("blocks nothing in ALL IN — a letter out of word 3 may be right for word 1", () => {
+    const map = computeKeyStatus({
+      session: { words: [5, 5] }, active: 1,
+      locked: [{}, {}], presentByWord: [[], []], absentByWord: [["X"], ["Z"]],
+      allIn: true,
+    });
+    assert.equal(isKeyBlocked(map, "Z"), false);
+    assert.equal(isKeyBlocked(map, "X"), false);
+  });
+
+  it("is safe on an empty map", () => {
+    assert.equal(isKeyBlocked(undefined, "A"), false);
+    assert.equal(isKeyBlocked({}, "A"), false);
+  });
+
+  it("blocks the state the keyboard paints as absent, not a second opinion", () => {
+    assert.equal(KEY_BLOCKED_STATUS, "absent");
   });
 });
 

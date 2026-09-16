@@ -77,11 +77,20 @@ describe("helpDialogHtml", () => {
     assert.doesNotMatch(html, /data-bn="dialog-title"/);
   });
 
-  it("explains the three key states without relying on colour", () => {
+  /* The three states are per-ACTIVE-WORD (src/lib/game.js
+     computeKeyStatus). The help text used to promise "known to be in the
+     phrase" for ◆, which was the false claim being corrected — the
+     assertions below pin the per-word wording so it cannot drift back. */
+  it("explains the three key states per word, without relying on colour", () => {
     const html = helpDialogHtml();
-    assert.match(html, /confirmed here/i);
-    assert.match(html, /known to be in the phrase/i);
+    assert.match(html, /placed in this word/i);
+    assert.match(html, /in this word but not placed yet/i);
     assert.match(html, /ruled out of this word/i);
+    assert.doesNotMatch(
+      html,
+      /keyboard[^<]*known to be in the phrase/i,
+      "the keyboard never claims a letter is somewhere in the phrase — that is the letter bank's job",
+    );
     assert.match(html, /&check;|✓/);
     assert.match(html, /&#9670;|◆/);
     assert.match(html, /&#10005;|✕/);
