@@ -90,10 +90,16 @@ export function d1Sessions(DB) {
   };
 }
 
-/* Daily results — one row per (player, UTC day). The PRIMARY KEY is
-   what makes the daily un-replayable for score: `record()` uses
-   INSERT OR IGNORE, so a second finish on the same day is a no-op
-   rather than an overwrite. */
+/* Daily results — one row per (player, day). The day is a `YYYY-MM-DD`
+   key from shared/daily.js zonedDayKey(), i.e. a DAILY_ZONE
+   (America/Chicago) day; it used to be a UTC day. The column and the
+   stored values keep the same shape, so rows written under the old key
+   still read back and there is no migration — at worst one historical
+   row near a boundary now belongs to the neighbouring day.
+
+   The PRIMARY KEY is what makes the daily un-replayable for score:
+   `record()` uses INSERT OR IGNORE, so a second finish on the same day
+   is a no-op rather than an overwrite. */
 export function d1Dailies(DB) {
   return {
     async get(playerKey, day) {
@@ -127,7 +133,8 @@ export function d1Dailies(DB) {
   };
 }
 
-/* The daily schedule — one row per UTC day (migrations/0005). `set` is
+/* The daily schedule — one row per day (migrations/0005), keyed the
+   same way as daily_results: a DAILY_ZONE day key. `set` is
    INSERT OR IGNORE so two isolates filling the same day cannot disagree:
    the first write wins and the second reads it back. A pinned row is an
    admin's decision and `set` never touches one. */

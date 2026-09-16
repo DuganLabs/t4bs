@@ -58,7 +58,7 @@ describe("helpDialogHtml", () => {
     const html = helpDialogHtml();
     assert.match(html, /one daily puzzle per day/i);
     assert.match(html, /same one for everyone/i);
-    assert.match(html, /00:00 UTC/);
+    assert.match(html, /midnight Central Time/);
     assert.match(html, /streak/i);
     assert.match(html, /never touches the streak/i);
   });

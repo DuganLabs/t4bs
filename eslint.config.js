@@ -17,6 +17,15 @@ export default [
     rules: workerOverride.rules,
   },
   {
+    /* Unit tests under functions/, shared/ and server/ run in `node --test`,
+       not in workerd. Node globals really are available to them, so the
+       worker preset's "there is no `process`" rule is wrong here — it is a
+       rule about shipped code. */
+    files: ["functions/**/*.test.js", "shared/**/*.test.js", "server/**/*.test.js"],
+    languageOptions: { globals: { process: "readonly" } },
+    rules: { "no-restricted-globals": "off" },
+  },
+  {
     ignores: [
       "dist/",
       ".wrangler/",

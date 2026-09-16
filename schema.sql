@@ -66,9 +66,14 @@ CREATE TABLE IF NOT EXISTS submissions (
 );
 CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(status);
 
+-- `day` is the key shared/daily.js hands out: midnight in DAILY_ZONE
+-- (America/Chicago). It was a UTC day until the rollover moved; the shape
+-- is identical, so old rows are left exactly as they are and no migration
+-- rewrites them. At worst one historical row written near a boundary is
+-- now attributed to the neighbouring day.
 CREATE TABLE IF NOT EXISTS daily_results (
   player_key TEXT    NOT NULL,                       -- 'u:<user id>' or 'a:<anon uuid>'
-  day        TEXT    NOT NULL,                       -- UTC YYYY-MM-DD
+  day        TEXT    NOT NULL,                       -- YYYY-MM-DD, DAILY_ZONE day (shared/daily.js)
   puzzle_id  INTEGER NOT NULL,
   outcome    TEXT    NOT NULL,                       -- 'won' | 'lost'
   score      INTEGER NOT NULL DEFAULT 0,

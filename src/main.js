@@ -127,7 +127,7 @@ const SESSION_KEY = "t4bs:session";
 })();
 
 /* Local stats are a personal-best scratchpad; the streak is server-side
-   (daily_results, keyed by player + UTC day). See hydrate.js. */
+   (daily_results, keyed by player + day key). See hydrate.js. */
 async function recordResultPersist(won, finalScore, category, mode) {
   const s = (await loadPersisted(STATS_KEY)) || {};
   s.played = (s.played || 0) + 1;

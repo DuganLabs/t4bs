@@ -9,7 +9,7 @@
 import { createEngine } from "../../shared/engine.js";
 import { d1Puzzles, d1Sessions, d1Dailies, d1Schedule } from "./d1.js";
 import { playerIdentity } from "./util.js";
-import { computeStreak, nextDailyPuzzleId, pickDailyPuzzleId, utcDayKey, msUntilNextUtcDay } from "../../shared/daily.js";
+import { computeStreak, nextDailyPuzzleId, pickDailyPuzzleId, zonedDayKey, msUntilNextRollover } from "../../shared/daily.js";
 
 /** Engine wired to D1, with the daily recorder attached. @param {any} env */
 export function gameEngine(env) {
@@ -68,7 +68,7 @@ export async function scheduledPuzzleId(env, approvedIds, day) {
  * @param {Date} [now]
  */
 export async function dailyStatus(env, playerKey, now = new Date()) {
-  const day = utcDayKey(now);
+  const day = zonedDayKey(now);
   const puzzles = d1Puzzles(env.DB);
   const dailies = d1Dailies(env.DB);
 
@@ -94,7 +94,7 @@ export async function dailyStatus(env, playerKey, now = new Date()) {
     streak: current,
     bestStreak: best,
     daysPlayed: history.length,
-    msUntilNext: msUntilNextUtcDay(now),
+    msUntilNext: msUntilNextRollover(now),
   };
 }
 

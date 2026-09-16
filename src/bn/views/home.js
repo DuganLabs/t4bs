@@ -22,6 +22,7 @@
    (/moderate), not a player's. Nothing here lists it. */
 
 import { renderAlert } from "@basenative/components";
+import { DAILY_ZONE_LABEL } from "../../../shared/daily.js";
 import playBoardHtml from "./play-board.js";
 
 export default `<main aria-labelledby="home-title" data-bn-view="home">
@@ -50,7 +51,7 @@ export default `<main aria-labelledby="home-title" data-bn-view="home">
       <h2 id="home-done-title" data-bn-region="daily-result">{{ daily.resultLabel }}</h2>
       <p data-bn-region="daily-score"><strong>{{ daily.score }}</strong> points</p>
       <p data-bn-region="daily-cat">{{ daily.category }} · {{ daily.day }}</p>
-      <p data-bn-region="daily-next">Next puzzle at 00:00 UTC</p>
+      <p data-bn-region="daily-next">Next puzzle at midnight ${DAILY_ZONE_LABEL}</p>
     </section>
   </template>
 

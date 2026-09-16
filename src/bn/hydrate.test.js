@@ -204,7 +204,7 @@ describe("renderPage — emits a complete BaseNative-rendered HTML document for 
     assert.match(html, /data-bn-region="daily-done"/);
     assert.match(html, />Solved</);
     assert.match(html, /<strong>96<\/strong> points/);
-    assert.match(html, /Next puzzle at 00:00 UTC/);
+    assert.match(html, /Next puzzle at midnight Central Time/);
   });
 
   it("home says so when nothing is scheduled, rather than a blank", () => {

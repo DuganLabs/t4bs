@@ -4,7 +4,7 @@
 import { createEngine } from "../shared/engine.js";
 import { validateSubmission } from "../shared/submission.js";
 import { memoryPuzzles, memorySessions, memorySubmissions, memoryUsers, memoryDailies } from "./stores-memory.js";
-import { computeStreak, pickDailyPuzzleId, utcDayKey, msUntilNextUtcDay } from "../shared/daily.js";
+import { computeStreak, pickDailyPuzzleId, zonedDayKey, msUntilNextRollover } from "../shared/daily.js";
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
@@ -43,7 +43,7 @@ export function createMockApi() {
   });
 
   async function dailyStatus(playerKey, now = new Date()) {
-    const day = utcDayKey(now);
+    const day = zonedDayKey(now);
     const approved = await puzzles.listApproved();
     const history = await dailies.history(playerKey);
     const puzzleId = pickDailyPuzzleId(approved.map(p => Number(p.id)), day);
@@ -59,7 +59,7 @@ export function createMockApi() {
       score: today?.score ?? null,
       streak: current, bestStreak: best,
       daysPlayed: history.length,
-      msUntilNext: msUntilNextUtcDay(now),
+      msUntilNext: msUntilNextRollover(now),
     };
   }
 
