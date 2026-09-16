@@ -108,6 +108,7 @@ export function initialState(puzzle) {
     score:         0,
     locked,
     presentGlobal: [],
+    presentByWord: phraseWords.map(() => []),
     absentByWord:  phraseWords.map(() => []),
     wordSolved:    phraseWords.map(() => false),
     tokens:        0,
@@ -116,6 +117,67 @@ export function initialState(puzzle) {
        so it survives a reload (proposal §3.5). */
     guessLog:      [],
   };
+}
+
+/* ── Per-word knowledge ───────────────────────────────────────────────────
+   `presentByWord[wi]` is every letter the player has SEEN in word wi —
+   green or yellow — and it is what the keyboard colours from, because the
+   keyboard may only claim things about the word being guessed. A letter
+   yellow in word 1 says nothing about word 2, and painting it yellow there
+   invites the player to spend one of that word's 3–5 attempts on a letter
+   that cannot be in it (owner's decision, 2026-09-15).
+
+   `presentGlobal` survives alongside it, but it means exactly one thing:
+   somewhere in the phrase. Only the letter bank and knowledgeSummary use
+   it, and both label it as a phrase-level fact. */
+
+/** Rebuild per-word presence from a session's stored guess log + locked
+ *  tiles. The guess log holds every attempt in full (proposal §3.5), so a
+ *  round started before `presentByWord` existed loses nothing.
+ *  @param {number} wordCount @param {any[]} guessLog @param {any[]} locked */
+export function presentFromGuessLog(wordCount, guessLog, locked) {
+  const out = Array.from({ length: wordCount }, () => new Set());
+  (guessLog || []).forEach((g) => {
+    /* ALL IN rows carry wi = -1 and no per-tile feedback — nothing in them
+       can be attributed to one word. */
+    if (!g || !Array.isArray(g.feedback) || !Array.isArray(g.letters)) return;
+    const set = out[g.wi];
+    if (!set) return;
+    g.feedback.forEach((st, i) => {
+      if ((st === "green" || st === "yellow") && g.letters[i]) set.add(g.letters[i]);
+    });
+  });
+  /* Anchors, earlier greens and a busted word's reveal are all letters the
+     player can see sitting in that word. */
+  (locked || []).forEach((lm, wi) => {
+    const set = out[wi];
+    if (set) Object.values(lm || {}).forEach(L => { if (L) set.add(L); });
+  });
+  return out.map(s => [...s]);
+}
+
+/** Bring a stored session up to the current shape, in place.
+
+    Sessions live in D1 (`sessions.state`, a JSON blob — functions/_shared/d1.js)
+    and are read back by session id, so rounds started before a shape change
+    are still in flight days later. A stored session that crashes the play
+    screen is a worse bug than any it fixes, so every read goes through here:
+    a missing `presentByWord` is rebuilt from the guess log rather than
+    defaulted to empty, and the arrays are re-sized to the word count if a
+    session was ever written short.
+    @template T @param {T} sess @returns {T} */
+export function migrateState(sess) {
+  if (!sess || typeof sess !== "object") return sess;
+  const n = (sess.locked || sess.absentByWord || sess.attempts || []).length;
+  const fill = (v) => Array.from({ length: n }, (_, i) => (Array.isArray(v?.[i]) ? v[i] : []));
+  if (!Array.isArray(sess.presentGlobal)) sess.presentGlobal = [];
+  if (!Array.isArray(sess.absentByWord) || sess.absentByWord.length !== n) {
+    sess.absentByWord = fill(sess.absentByWord);
+  }
+  if (!Array.isArray(sess.presentByWord) || sess.presentByWord.length !== n) {
+    sess.presentByWord = presentFromGuessLog(n, sess.guessLog, sess.locked);
+  }
+  return sess;
 }
 
 /* "Par": what a strong player scores — a clean solve. Every tile that is

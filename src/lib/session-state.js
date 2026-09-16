@@ -14,7 +14,11 @@ export function createSessionState() {
   const session       = signal(null);
   /** Per word: { tileIndex: letter } — anchors, greens, revealed busts. */
   const locked        = signal([]);
+  /** Somewhere in the phrase. Phrase-level — the letter bank and the
+   *  knowledge read-out only, never the keyboard. */
   const presentGlobal = signal([]);
+  /** Per word: letters seen IN that word. What the keyboard colours from. */
+  const presentByWord = signal([]);
   const absentByWord  = signal([]);
   const wordSolved    = signal([]);
   const busted        = signal([]);
@@ -42,6 +46,11 @@ export function createSessionState() {
     });
     locked.set(lm);
     presentGlobal.set(view.presentGlobal || []);
+    /* A round started before presentByWord existed is backfilled server-side
+       (shared/pure.js migrateState), but an SSR seed or a cached response
+       could still arrive without it — one empty list per word keeps the play
+       screen rendering rather than throwing on undefined[active]. */
+    presentByWord.set(view.presentByWord || view.words.map(() => []));
     absentByWord.set(view.absentByWord || view.words.map(() => []));
     wordSolved.set(view.wordSolved || view.words.map(() => false));
     busted.set(view.busted || view.words.map(() => false));
@@ -56,14 +65,14 @@ export function createSessionState() {
 
   function clear() {
     session.set(null);
-    locked.set([]); presentGlobal.set([]); absentByWord.set([]);
+    locked.set([]); presentGlobal.set([]); presentByWord.set([]); absentByWord.set([]);
     wordSolved.set([]); busted.set([]); attempts.set([]); attemptsMax.set([]); guessLog.set([]);
     score.set(0); tokens.set(0); reveal.set(null);
     phase.set("lobby");
   }
 
   return {
-    session, locked, presentGlobal, absentByWord, wordSolved, busted,
+    session, locked, presentGlobal, presentByWord, absentByWord, wordSolved, busted,
     attempts, attemptsMax, guessLog, score, tokens, lives, phase, reveal,
     apply, clear,
   };

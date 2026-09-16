@@ -26,6 +26,7 @@ import { bindAttr, bindHidden, bindText } from "../lib/bind.js";
 import { api } from "../lib/api.js";
 import {
   openSlots, fullCount, computeKeyStatus, knowledgeSummary, historyFor, KEY_STATE_INFO,
+  isKeyBlocked,
 } from "../lib/game.js";
 import { PLAY_LAYOUT } from "../lib/keyboard-layout.js";
 import { confetti } from "../lib/confetti.js";
@@ -41,7 +42,7 @@ export function createPlay({
   retry,
 }) {
   const {
-    session, locked, presentGlobal, absentByWord, wordSolved, busted,
+    session, locked, presentGlobal, presentByWord, absentByWord, wordSolved, busted,
     attempts, attemptsMax, guessLog, score, tokens, phase, reveal, apply,
   } = round;
 
@@ -70,9 +71,14 @@ export function createPlay({
   const done    = (wi) => !!wordSolved()[wi] || !!busted()[wi];
 
   /* ── derived ───────────────────────────────────────────────────────── */
+  /* Per-word, always: the keyboard may only claim things about the word
+     being guessed (src/lib/game.js). ALL IN passes `allIn` and gets an
+     empty map — see the comment there for why blank is the honest
+     rendering when there is no single active word. */
   const keyStatus = computed(() => computeKeyStatus({
     session: session(), active: active(), locked: locked(),
-    presentGlobal: presentGlobal(), absentByWord: absentByWord(),
+    presentByWord: presentByWord(), absentByWord: absentByWord(),
+    allIn: allInMode(),
   }));
 
   const allInBonus = computed(() => {
@@ -144,6 +150,14 @@ export function createPlay({
   const typeLetter = (letter) => {
     if (!playing() || casc()) return;
     const L = String(letter).toUpperCase();
+    /* A letter ruled out for the active word cannot go into it. The guard
+       lives here, not only on the key button, because this page runs
+       @basenative/keyboard with bindHardware:false and binds hardware keys
+       itself further down — without this a physical keyboard would still
+       spend one of the word's 3-5 attempts on a letter the player has
+       already eliminated. keyStatus() is empty in ALL IN, so ALL IN blocks
+       nothing. */
+    if (isKeyBlocked(keyStatus(), L)) return;
     if (allInMode()) {
       const next = findGlobalNextSlot();
       if (!next) return;
@@ -537,9 +551,13 @@ export function createPlay({
   /* ── Letter bank ──────────────────────────────────────────────────── */
   const presentRow = h("p", { "data-bn-region": "bank-present" });
   effect(() => {
+    /* Phrase-level and labelled as such. This row is the ONLY place a
+       "somewhere in the phrase" letter is shown, now that the keyboard
+       speaks per word; the label has to carry that or the chips read as
+       another claim about the active word. */
     const pg = presentGlobal();
     presentRow.replaceChildren(
-      h("span", { "data-bn-role": "label" }, "in phrase:"),
+      h("span", { "data-bn-role": "label" }, "somewhere in the phrase:"),
       ...(pg.length ? pg.map(L => h("span", { "data-bn-chip": "yellow" }, L)) : [h("span", { "data-bn-role": "label" }, "—")]),
     );
   });
@@ -554,6 +572,12 @@ export function createPlay({
     );
   });
   const bank = h("section", { "aria-label": "Letter bank", "data-bn-region": "bank" }, presentRow, absentRow);
+  bindAttr(presentRow, "aria-label", () => {
+    const pg = presentGlobal();
+    return pg.length
+      ? `${pg.length} letter${pg.length === 1 ? "" : "s"} known to be somewhere in the phrase, not necessarily in this word: ${pg.join(", ")}`
+      : "No letters placed in the phrase yet";
+  });
   bindHidden(bank, () => !playing());
 
   /* ── Keyboard ─────────────────────────────────────────────────────── */
@@ -604,6 +628,13 @@ export function createPlay({
         const letter = btn.dataset.kbKey;
         const info = KEY_STATE_INFO[map[letter]];
         btn.setAttribute("aria-label", info ? `${letter} key, ${info.ariaSuffix}` : `${letter} key`);
+        /* Ruled out for this word = not pressable. @basenative/keyboard's
+           own click and touchend dispatch both bail on `btn.disabled`, and
+           its state effect only rewrites class names, so owning the
+           attribute here is safe. In ALL IN keyStatus() is empty, so every
+           key comes back enabled — a letter ruled out for word 3 may be the
+           right letter for word 1. */
+        btn.disabled = isKeyBlocked(map, letter);
       });
     });
   });

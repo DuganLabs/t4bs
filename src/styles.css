@@ -493,20 +493,25 @@ a[data-bn-variant="leave"]:hover { border-color: #E8920A; color: #E8920A; }
   --kb-key-fg: #F0EDE4;
   --kb-key-active: #5A5550;
 
-  /* green ("in this word") — #0A1F12 on #4EAF7C = 6.36:1. Reuses the
+  /* Every one of these three labels is scoped to the ACTIVE word — the
+     keyboard makes no claim about any other word (src/lib/game.js
+     computeKeyStatus). */
+
+  /* green ("placed in this word") — #0A1F12 on #4EAF7C = 6.36:1. Reuses the
      same dark-green-on-green pairing .bn-admin-btn--ok already uses,
      rather than inventing a new value. */
   --kb-key-green: #4EAF7C;
   --kb-key-green-fg: #0A1F12;
 
-  /* yellow ("elsewhere in the phrase, not this word") — package
+  /* yellow ("in this word, not placed yet") — package
      default fg #1F1700 already cleared AA against this bg (8.82:1);
      restated explicitly here so it's paired the same way as the other
      three states instead of relying on nobody re-overriding it later. */
   --kb-key-yellow: #D4B445;
   --kb-key-yellow-fg: #1F1700;
 
-  /* absent ("not in this word") — #988570 on #1E1C18 = 4.80:1. Reuses
+  /* absent ("not in this word", and the key is disabled) — #988570 on
+     #1E1C18 = 4.80:1. Reuses
      --bn-color-text-muted's value (theme.css) instead of a one-off. */
   --kb-key-absent: #1E1C18;
   --kb-key-absent-fg: #988570;
@@ -545,6 +550,19 @@ a[data-bn-variant="leave"]:hover { border-color: #E8920A; color: #E8920A; }
 .bn-kb-key--green::after  { content: "✓"; color: var(--kb-key-green-fg); }
 .bn-kb-key--yellow::after { content: "◆"; color: var(--kb-key-yellow-fg); }
 .bn-kb-key--absent::after { content: "✕"; color: var(--kb-key-absent-fg); }
+
+/* A key ruled out for the active word is disabled, not merely coloured
+   (src/lib/game.js KEY_BLOCKED_STATUS) — the owner's father spent
+   attempts re-typing letters he had already eliminated because the key
+   still took the press. @basenative/keyboard dims every disabled key to
+   --kb-key-disabled-opacity (0.55), which would drag the absent pairing
+   under its measured 4.80:1; the state already reads as unavailable
+   through its own background and ✕ badge, so hold it at full strength
+   and let the cursor carry the "can't press this". */
+.bn-kb [data-bn="kb-key"].bn-kb-key--absent:disabled {
+  opacity: 1;
+  cursor: not-allowed;
+}
 
 /* ENGINE-OWNED HIDE/SHOW (used by signal templates) */
 .is-hidden { display: none !important; }

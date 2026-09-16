@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createEngine } from "./engine.js";
-import { attemptsFor, evalWord, parFor, scoreGuess } from "./pure.js";
+import { attemptsFor, evalWord, migrateState, parFor, presentFromGuessLog, scoreGuess } from "./pure.js";
 
 /* In-memory stores. */
 const createMockStores = () => {
@@ -122,11 +122,30 @@ describe("submitGuess — the word-guessing loop", () => {
     assert.equal(r.finished, null);
   });
 
-  it("a yellow letter joins presentGlobal for every word", async () => {
+  /* Presence is recorded twice, on purpose, and the two ledgers mean
+     different things: presentByWord is what the KEYBOARD colours from and
+     is scoped to the word the letter was seen in; presentGlobal is the
+     phrase-level fact the letter bank and the knowledge read-out show. */
+  it("a yellow letter is recorded against the word it fell in, and nowhere else", async () => {
     const { engine, s } = await fresh();
     const r = await engine.submitGuess(s.sessionId, 0, open("HOXXX", s.locked[0]));
     assert.equal(r.feedback[1], "yellow");
-    assert.ok(r.presentGlobal.includes("O"));
+    assert.ok(r.presentByWord[0].includes("O"), "O was seen in word 1");
+    assert.ok(!r.presentByWord[1].includes("O"), "word 2 has learned nothing about O");
+  });
+
+  it("a green letter is recorded against its own word only", async () => {
+    const { engine, s } = await fresh();
+    const r = await engine.submitGuess(s.sessionId, 0, open("HELLO", s.locked[0]));
+    assert.ok(r.presentByWord[0].includes("E"));
+    assert.ok(!r.presentByWord[1].includes("E"), "solving word 1 says nothing about word 2's letters");
+    assert.equal(r.locked[1].E, undefined, "and nothing is locked in word 2");
+  });
+
+  it("presentGlobal stays phrase-wide — the letter bank's fact, not the keyboard's", async () => {
+    const { engine, s } = await fresh();
+    const r = await engine.submitGuess(s.sessionId, 0, open("HOXXX", s.locked[0]));
+    assert.ok(r.presentGlobal.includes("O"), "O is somewhere in the phrase, and that is true");
   });
 
   it("the next guess only fills the OPEN tiles — greens stay locked", async () => {
@@ -280,5 +299,88 @@ describe("mode + the finish hook", () => {
     const { engine, s } = await fresh({}, { onFinish: async () => { throw new Error("boom"); } });
     const r = await engine.allIn(s.sessionId, ["HELLO", "WORLD"]);
     assert.equal(r.finished, "won");
+  });
+});
+
+
+/* ── Per-word knowledge: ALL IN and stored sessions ─────────────────── */
+
+describe("ALL IN — feedback still belongs to one word at a time", () => {
+  it("a correct shove records every letter against the word it fell in", async () => {
+    const { engine, s } = await fresh();
+    const r = await engine.allIn(s.sessionId, ["HELLO", "WORLD"]);
+    assert.equal(r.correct, true);
+    assert.deepEqual(r.presentByWord[0].sort(), ["E", "H", "L", "O"]);
+    assert.deepEqual(r.presentByWord[1].sort(), ["D", "L", "O", "R", "W"]);
+    assert.ok(!r.presentByWord[0].includes("W"), "W belongs to word 2 and stays there");
+    assert.ok(!r.presentByWord[1].includes("H"), "H belongs to word 1 and stays there");
+  });
+
+  it("a wrong shove busts and reveals every word, and records each reveal per word", async () => {
+    const { engine, s } = await fresh();
+    const r = await engine.allIn(s.sessionId, ["HELLO", "WORLX"]);
+    assert.equal(r.correct, false);
+    assert.deepEqual(r.busted, [true, true]);
+    assert.ok(!r.presentByWord[0].includes("W"));
+    assert.ok(r.presentByWord[1].includes("D"), "word 2 is revealed, so its letters are known to be in it");
+  });
+
+  it("the ALL IN guess-log row carries no per-tile feedback, so nothing can be misattributed", async () => {
+    const { engine, s } = await fresh();
+    const r = await engine.allIn(s.sessionId, ["HELLO", "WORLD"]);
+    const row = r.guessLog.at(-1);
+    assert.equal(row.wi, -1);
+    assert.equal(row.feedback, undefined);
+    assert.deepEqual(presentFromGuessLog(2, [row], [{}, {}]), [[], []]);
+  });
+});
+
+describe("a session persisted before presentByWord existed", () => {
+  /* Rounds are a JSON blob in D1 (functions/_shared/d1.js) read back by
+     session id, so one started before this change can still be in flight.
+     It must load and play — a stored session that crashes the play screen
+     is a worse bug than the keyboard lying. */
+  async function legacySession() {
+    const { engine, stores, s } = await fresh();
+    await engine.submitGuess(s.sessionId, 0, open("HOXXX", s.locked[0]));
+    const raw = await stores.sessions.get(s.sessionId);
+    delete raw.presentByWord;                       // exactly the old shape
+    await stores.sessions.save(s.sessionId, raw);
+    return { engine, stores, sessionId: s.sessionId };
+  }
+
+  it("resumes, and rebuilds per-word presence from the stored guess log", async () => {
+    const { engine, sessionId } = await legacySession();
+    const r = await engine.resumeSession(sessionId);
+    assert.ok(Array.isArray(r.presentByWord));
+    assert.equal(r.presentByWord.length, 2);
+    assert.ok(r.presentByWord[0].includes("O"), "the yellow O is recovered from the guess log");
+    assert.ok(r.presentByWord[0].includes("H"), "and the anchor H, which is visibly in word 1");
+    assert.ok(!r.presentByWord[1].includes("O"), "word 2 learns nothing it was never told");
+  });
+
+  it("keeps playing from there — the next guess records against the right word", async () => {
+    const { engine, sessionId } = await legacySession();
+    const r = await engine.submitGuess(sessionId, 1, ["O", "R", "L", "D"]);
+    assert.equal(r.wordSolved[1], true);
+    assert.deepEqual(r.presentByWord[1].sort(), ["D", "L", "O", "R", "W"]);
+  });
+
+  it("migrateState leaves an already-migrated session alone", () => {
+    const sess = {
+      locked: [{}, {}], attempts: [4, 4], guessLog: [],
+      presentGlobal: ["Q"], presentByWord: [["Q"], []], absentByWord: [["X"], []],
+    };
+    const out = migrateState(sess);
+    assert.deepEqual(out.presentByWord, [["Q"], []]);
+    assert.deepEqual(out.absentByWord, [["X"], []]);
+  });
+
+  it("migrateState is safe on junk", () => {
+    assert.equal(migrateState(null), null);
+    const bare = migrateState({ locked: [{}, {}, {}] });
+    assert.deepEqual(bare.presentByWord, [[], [], []]);
+    assert.deepEqual(bare.absentByWord, [[], [], []]);
+    assert.deepEqual(bare.presentGlobal, []);
   });
 });
