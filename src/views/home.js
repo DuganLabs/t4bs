@@ -14,7 +14,10 @@ import { bnAlert, bnButton, bnSkeleton, h } from "../lib/dom.js";
 import { bindHidden, bindText } from "../lib/bind.js";
 import { errorMessage } from "../lib/api.js";
 
-/** "6h 21m" / "12m" — how long until the next UTC daily unlocks. */
+/** "6h 21m" / "12m" — how long until the next daily unlocks. The
+ *  server measures it (shared/daily.js msUntilNextRollover); this only
+ *  formats. Can read over 24h once a year, on the DST day that is 25
+ *  hours long. */
 export function formatCountdown(ms) {
   const total = Math.max(0, Math.floor(ms / 60000));
   const hrs = Math.floor(total / 60);
@@ -29,8 +32,9 @@ export function createHome({ daily, error, starting, onShareLast, onSubmit }) {
   const done   = computed(() => !!d()?.playedToday);
   const none   = computed(() => loaded() && !d()?.puzzleId);
 
-  /* Live countdown to the next UTC day: the server's number at fetch
-     time, ticked locally. */
+  /* Live countdown to the next rollover (midnight in DAILY_ZONE): the
+     server's number at fetch time, ticked locally. The client's own
+     clock is only ever used for the tick, never to decide the day. */
   const nowTick = signal(Date.now());
   effect(() => {
     if (!done()) return;

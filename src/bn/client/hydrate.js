@@ -195,7 +195,7 @@ const SESSION_KEY = "t4bs:session";
 })();
 
 /* Local stats are now a personal-best scratchpad only. The STREAK is
-   server-side (daily_results keyed by player + UTC day) — a streak a
+   server-side (daily_results keyed by player + day key) — a streak a
    player could reset by clearing localStorage, or inflate by replaying
    the same ten puzzles, was never worth coming back for.
    @param {boolean} won @param {number} finalScore
@@ -339,7 +339,7 @@ function hydrateSession(s) {
 }
 
 /* Today's puzzle, started in place on "/". The server picks the puzzle
-   and refuses a second run on the same UTC day — a 409 here means
+   and refuses a second run on the same day — a 409 here means
    "already played", which is the done card, not an error. */
 async function startDaily() {
   error.set(null);

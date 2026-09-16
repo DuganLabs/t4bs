@@ -10,26 +10,129 @@
    "how long is this player's streak?". It lives in shared/ because the
    Vite dev mock and the Cloudflare Functions both need the identical
    answer, and because pure functions are the only part of this worth
-   unit-testing. */
+   unit-testing.
 
-/** UTC day key, `YYYY-MM-DD`. UTC (not local time) so every player in
- *  the world is on the same puzzle at the same moment.
+   The day key used to be UTC, and UTC rolls at 7 PM CDT / 6 PM CST: a
+   player in US Central who sat down after dinner was handed TOMORROW's
+   puzzle, and the "next puzzle in Xh" line was wrong by the same
+   amount. The daily now rolls at midnight in one fixed zone,
+   DAILY_ZONE. That is still a single instant for the whole world —
+   everyone is on the same puzzle at the same moment — so the server
+   stays authoritative and the visitor's own clock and zone are still
+   never consulted. Do not reintroduce a client-local date.
+
+   Nothing stored changes. Day keys are still `YYYY-MM-DD` strings in
+   the same columns; only which calendar picks the key moved, so rows
+   written under the old UTC key read back fine and there is no
+   migration. At worst one historical row near a boundary is now
+   attributed to the neighbouring day, which is not worth rewriting a
+   table over. */
+
+/** The one zone the daily rolls over in. Not the player's zone and not
+ *  UTC: a fixed zone, so "today's puzzle" is one puzzle worldwide. */
+export const DAILY_ZONE = "America/Chicago";
+
+/** DAILY_ZONE for player-facing copy — keep the two in step. */
+export const DAILY_ZONE_LABEL = "Central Time";
+
+/* `en-CA` formats a date as `YYYY-MM-DD`, which is the key shape
+   exactly; the parts are still read out individually so the result is
+   not at the mercy of an ICU locale tweak. Formatters are built once —
+   constructing one is the expensive part of Intl. */
+const dayParts = new Intl.DateTimeFormat("en-CA", {
+  timeZone: DAILY_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
+});
+const wallParts = new Intl.DateTimeFormat("en-CA", {
+  timeZone: DAILY_ZONE, hourCycle: "h23",
+  year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit",
+});
+
+const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** @param {Intl.DateTimeFormat} fmt @param {Date} date */
+function numericParts(fmt, date) {
+  /** @type {Record<string, number>} */
+  const out = {};
+  for (const { type, value } of fmt.formatToParts(date)) {
+    if (type !== "literal") out[type] = Number(value);
+  }
+  return out;
+}
+
+/** @param {number} n @param {number} width */
+function pad(n, width) {
+  return String(n).padStart(width, "0");
+}
+
+/** Day key, `YYYY-MM-DD`, in DAILY_ZONE. DST-aware: Intl resolves the
+ *  offset actually in force at that instant rather than assuming one.
  *  @param {Date} [date] */
-export function utcDayKey(date = new Date()) {
-  return date.toISOString().slice(0, 10);
+export function zonedDayKey(date = new Date()) {
+  const { year, month, day } = numericParts(dayParts, date);
+  return `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}`;
 }
 
-/** Shift a `YYYY-MM-DD` key by whole days. @param {string} dayKey @param {number} days */
+/**
+ * Shift a `YYYY-MM-DD` key by whole days.
+ *
+ * Calendar arithmetic on the date PARTS, never `+ days * 86400000` on
+ * an instant: a DST day is 23 or 25 hours long, so a fixed 24h step
+ * across a transition repeats or skips a day. `Date.UTC` is used here
+ * purely as a calendar (month lengths, leap years) and read straight
+ * back out in UTC — no zone is involved, so no transition can reach it.
+ *
+ * @param {string} dayKey @param {number} days
+ */
 export function shiftDay(dayKey, days) {
-  const t = Date.parse(`${dayKey}T00:00:00Z`);
-  if (Number.isNaN(t)) return dayKey;
-  return utcDayKey(new Date(t + days * 86400000));
+  const m = DAY_KEY.exec(String(dayKey));
+  if (!m) return dayKey;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + Number(days)));
+  if (Number.isNaN(d.getTime())) return dayKey;
+  return `${pad(d.getUTCFullYear(), 4)}-${pad(d.getUTCMonth() + 1, 2)}-${pad(d.getUTCDate(), 2)}`;
 }
 
-/** Milliseconds until the next UTC midnight — drives the "next puzzle
- *  in 6h" line on the lobby. @param {Date} [now] */
-export function msUntilNextUtcDay(now = new Date()) {
-  const next = Date.parse(`${shiftDay(utcDayKey(now), 1)}T00:00:00Z`);
+/** DAILY_ZONE's offset from UTC at instant `ms`, in milliseconds.
+ *  @param {number} ms */
+function zoneOffsetMs(ms) {
+  const p = numericParts(wallParts, new Date(ms));
+  const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+  return asUtc - Math.floor(ms / 1000) * 1000;   // the parts dropped sub-second precision
+}
+
+/**
+ * The instant (ms since epoch) at which `dayKey` begins — midnight in
+ * DAILY_ZONE. This is the rollover: the moment the daily changes over.
+ *
+ * Two passes, because the offset needed to place the instant is the
+ * offset at the instant itself: guess with the offset in force at the
+ * same wall clock read as UTC, then re-read the offset at the guess and
+ * correct. One correction settles it — a transition moves the offset by
+ * an hour or two, never far enough to land on a different day.
+ *
+ * @param {string} dayKey
+ * @returns {number} NaN for a malformed key
+ */
+export function zoneMidnightMs(dayKey) {
+  const m = DAY_KEY.exec(String(dayKey));
+  if (!m) return NaN;
+  const wall = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return wall - zoneOffsetMs(wall - zoneOffsetMs(wall));
+}
+
+/**
+ * Milliseconds until the daily rolls over — the next midnight in
+ * DAILY_ZONE. Drives the "next puzzle in 6h" line on the lobby.
+ *
+ * On the two DST days a year this is 23h or 25h rather than 24h,
+ * because those days really are that long. Clamping it to 24h would
+ * put the countdown an hour out of step with the rollover it counts
+ * down to, which is the bug this whole change exists to fix.
+ *
+ * @param {Date} [now]
+ */
+export function msUntilNextRollover(now = new Date()) {
+  const next = zoneMidnightMs(shiftDay(zonedDayKey(now), 1));
   return Math.max(0, next - now.getTime());
 }
 
@@ -47,8 +150,10 @@ function fnv1a(str) {
 }
 
 /**
- * Deterministically pick one puzzle id for a UTC day. Same day + same
+ * Deterministically pick one puzzle id for a day key. Same day + same
  * catalogue ⇒ same answer on every machine, which is the whole point.
+ * The key itself is opaque here, so moving the calendar that produces
+ * it (UTC → DAILY_ZONE) left every day's pick untouched.
  *
  * @param {ReadonlyArray<number>} puzzleIds
  * @param {string} dayKey
@@ -87,9 +192,15 @@ export function nextDailyPuzzleId(puzzleIds, usedIds, dayKey) {
 /**
  * Current + best daily streak from a player's recorded results.
  *
- * A streak counts consecutive UTC days whose daily was SOLVED. Today
- * is allowed to be missing (the day isn't over — the streak survives
- * until tomorrow), but a *lost* daily today breaks it immediately.
+ * A streak counts consecutive DAILY_ZONE days whose daily was SOLVED —
+ * the same days the rollover uses, so an evening player in US Central
+ * cannot have a streak break at 7 PM. Today is allowed to be missing
+ * (the day isn't over — the streak survives until tomorrow), but a
+ * *lost* daily today breaks it immediately.
+ *
+ * `todayKey` comes from zonedDayKey() and the recorded days were
+ * written from it too, so the walk is calendar arithmetic on keys
+ * (shiftDay) and never touches a clock.
  *
  * @param {ReadonlyArray<{ day: string, outcome: string }>} results
  * @param {string} todayKey

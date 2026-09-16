@@ -1,6 +1,6 @@
 -- Server-authoritative daily + anchor content.
 --
--- 1. `daily_results` makes the daily real: one row per (player, UTC
+-- 1. `daily_results` makes the daily real: one row per (player,
 --    day). The old daily was a client-side date pick with nothing
 --    behind it, so "one puzzle a day" was a suggestion the client was
 --    free to ignore. The primary key is what stops a replay for score.
@@ -18,7 +18,7 @@
 
 CREATE TABLE IF NOT EXISTS daily_results (
   player_key TEXT    NOT NULL,
-  day        TEXT    NOT NULL,                      -- UTC YYYY-MM-DD
+  day        TEXT    NOT NULL,                      -- YYYY-MM-DD day key
   puzzle_id  INTEGER NOT NULL,
   outcome    TEXT    NOT NULL,                      -- 'won' | 'lost'
   score      INTEGER NOT NULL DEFAULT 0,
