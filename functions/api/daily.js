@@ -2,11 +2,13 @@
    where does this player stand?". The client no longer picks the daily;
    it renders this. */
 
-import { json, playerIdentity } from "../_shared/util.js";
+import { json, playerIdentity, visitorZone } from "../_shared/util.js";
 import { dailyStatus } from "../_shared/game.js";
 
 export const onRequestGet = async ({ request, env }) => {
   const who = await playerIdentity(request, env);
-  const status = await dailyStatus(env, who.key);
+  /* The zone comes off `request.cf` (the edge's read of the visitor's
+     location) and never off a param, header or body — see visitorZone(). */
+  const status = await dailyStatus(env, who.key, { zone: visitorZone(request) });
   return json(status, 200, who.setCookie ? { "Set-Cookie": who.setCookie } : {});
 };

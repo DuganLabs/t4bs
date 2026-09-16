@@ -91,11 +91,14 @@ export function d1Sessions(DB) {
 }
 
 /* Daily results — one row per (player, day). The day is a `YYYY-MM-DD`
-   key from shared/daily.js zonedDayKey(), i.e. a DAILY_ZONE
-   (America/Chicago) day; it used to be a UTC day. The column and the
-   stored values keep the same shape, so rows written under the old key
-   still read back and there is no migration — at worst one historical
-   row near a boundary now belongs to the neighbouring day.
+   key from shared/daily.js zonedDayKey(), i.e. the VISITOR's own local
+   day, resolved from `request.cf.timezone`. It was a UTC day first and
+   then an America/Chicago day; the column and the stored values keep
+   the same shape throughout, but the UTC rule did not merely shuffle a
+   row near a boundary — it filed an evening player's Monday round under
+   Tuesday, and because the write below is INSERT OR IGNORE that row
+   then BLOCKED Tuesday's real result. migrations/0007 re-files the
+   affected window from created_at.
 
    The PRIMARY KEY is what makes the daily un-replayable for score:
    `record()` uses INSERT OR IGNORE, so a second finish on the same day
@@ -134,7 +137,12 @@ export function d1Dailies(DB) {
 }
 
 /* The daily schedule — one row per day (migrations/0005), keyed the
-   same way as daily_results: a DAILY_ZONE day key. `set` is
+   same way as daily_results: a `YYYY-MM-DD` day key. One row per
+   calendar date for everybody — a date starts at a different instant
+   for each visitor now, but it is still the same date, and that is what
+   keeps "everyone playing 2026-09-15 plays the same phrase" true.
+   migrations/0007 deliberately does NOT re-key this table: it records
+   what was actually served on a date. `set` is
    INSERT OR IGNORE so two isolates filling the same day cannot disagree:
    the first write wins and the second reads it back. A pinned row is an
    admin's decision and `set` never touches one. */

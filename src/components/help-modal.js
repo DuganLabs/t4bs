@@ -10,7 +10,6 @@
 
 import { effect } from "@basenative/runtime";
 import { renderButton, renderCard, renderDialog } from "@basenative/components";
-import { DAILY_ZONE_LABEL } from "../../shared/daily.js";
 import { fromHTML } from "../lib/dom.js";
 
 const HELP_CONTENT = `
@@ -30,7 +29,7 @@ const HELP_CONTENT = `
     <p><b data-tone="yellow">5 &middot; Stake a tile. </b>Tap a tile you&rsquo;ve typed before submitting. Right pays double (+10). Wrong costs 5. No attempt is spent for the stake itself.</p>
     <p><b>6 &middot; Clean solves earn &#9889;. </b>Solve a word with no misses and you bank a reveal: tap any hidden tile in any open word for a free letter.</p>
     <p><b data-tone="red">7 &middot; ALL IN. </b>Type the whole rest of the phrase in one go. Right: +8 for every tile still hidden. Wrong: every open word is busted. The keyboard goes blank and every key works again &mdash; you&rsquo;re typing all the words at once, and a letter ruled out of one word may be the right letter for another.</p>
-    <p><b>8 &middot; Score. </b>+5 per new green, &minus;1 per wrong tile, +10 per word. Par is what a clean solve scores; beat it or don&rsquo;t. One daily puzzle per day, the same one for everyone, from midnight ${DAILY_ZONE_LABEL} &mdash; a Solved board (no busts) grows your streak. A preview from the catalogue never touches the streak.</p>
+    <p><b>8 &middot; Score. </b>+5 per new green, &minus;1 per wrong tile, +10 per word. Par is what a clean solve scores; beat it or don&rsquo;t. One daily puzzle per day: it rolls over at midnight where you are, and everyone playing the same date plays the same phrase &mdash; a Solved board (no busts) grows your streak. A preview from the catalogue never touches the streak.</p>
   </div>
   ${renderButton("Got it", { variant: "primary", attrs: 'data-bn-action="help-close"' })}
 `;
