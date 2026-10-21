@@ -22,7 +22,7 @@
     "seed:sql": "node scripts/gen-seed-sql.mjs"
   },
   "overrides": {
-    "@basenative/runtime": "^2.0.1"
+    "@basenative/runtime": "^2.3.0"
   },
   "imports": {
     "#og-wasm-init": {
@@ -32,23 +32,23 @@
     }
   },
   "dependencies": {
-    "@basenative/admin": "^2.0.1",
-    "@basenative/auth-webauthn": "^2.0.1",
-    "@basenative/combobox": "^2.0.1",
-    "@basenative/components": "^2.0.1",
-    "@basenative/keyboard": "^2.0.1",
-    "@basenative/middleware": "^2.0.1",
-    "@basenative/persist": "^2.0.1",
-    "@basenative/router": "^2.0.1",
-    "@basenative/runtime": "^2.0.1",
-    "@basenative/server": "^2.0.1",
-    "@basenative/share": "^2.0.1",
+    "@basenative/admin": "^2.3.0",
+    "@basenative/auth-webauthn": "^2.3.0",
+    "@basenative/combobox": "^2.3.0",
+    "@basenative/components": "^2.3.0",
+    "@basenative/keyboard": "^2.3.0",
+    "@basenative/middleware": "^2.3.0",
+    "@basenative/persist": "^2.3.0",
+    "@basenative/router": "^2.3.0",
+    "@basenative/runtime": "^2.3.0",
+    "@basenative/server": "^2.3.0",
+    "@basenative/share": "^2.3.0",
     "@resvg/resvg-wasm": "^2.6.2",
     "@simplewebauthn/server": "^14.0.1"
   },
   "devDependencies": {
-    "@basenative/eslint-config": "^2.0.1",
-    "@basenative/tsconfig": "^2.0.1",
+    "@basenative/eslint-config": "^2.3.0",
+    "@basenative/tsconfig": "^2.3.0",
     "@cloudflare/workers-types": "^5.20260911.1",
     "eslint": "^10.10.0",
     "typescript": "^7.0.2",
